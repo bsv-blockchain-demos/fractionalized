@@ -265,6 +265,11 @@ input:focus, textarea:focus, select:focus {
   opacity: 0.6;
 }
 
+/* Compact variant for tighter layouts (e.g., PageHeader) */
+.section-divider-compact {
+  margin: 1rem 0 !important;
+}
+
 /* Icon hover effects */
 .icon-hover {
   transition: all 0.3s ease;
@@ -321,6 +326,22 @@ input:focus, textarea:focus, select:focus {
 .nav-link:focus {
   color: var(--accent-primary);
   outline: none;
+}
+
+/* Active nav item */
+.nav-link.active {
+  color: var(--accent-primary);
+  position: relative;
+}
+.nav-link.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.4rem; /* a bit below the text baseline */
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-hover));
+  border-radius: 9999px;
 }
 
 .badge,

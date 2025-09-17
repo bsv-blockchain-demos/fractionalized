@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function Navbar() {
+    const pathname = usePathname();
+
+    const isActive = (href: string) => {
+        if (href === "/") return pathname === "/";
+        return pathname === href || pathname.startsWith(href + "/");
+    };
+
     return (
         <nav className="bg-bg-secondary border-b border-border-subtle shadow-sm px-4 py-4 mb-6">
             <div className="container mx-auto">
@@ -19,7 +27,7 @@ export function Navbar() {
                         <li>
                             <Link 
                                 href="/" 
-                                className="nav-link"
+                                className={isActive("/") ? "nav-link active" : "nav-link"}
                             >
                                 Home
                             </Link>
@@ -27,7 +35,7 @@ export function Navbar() {
                         <li>
                             <Link 
                                 href="/properties" 
-                                className="nav-link"
+                                className={isActive("/properties") ? "nav-link active" : "nav-link"}
                             >
                                 Properties
                             </Link>
@@ -35,7 +43,7 @@ export function Navbar() {
                         <li>
                             <Link 
                                 href="/dashboard" 
-                                className="nav-link"
+                                className={isActive("/dashboard") ? "nav-link active" : "nav-link"}
                             >
                                 Dashboard
                             </Link>

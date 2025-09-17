@@ -1,9 +1,14 @@
 import { Properties } from "../../components/properties";
+import { PageHeader } from "../../components/page-header";
 
 export default function PropertiesPage() {
-    return (
-        <div>
-            <Properties />
-        </div>
-    );
+  return (
+    <div>
+      <PageHeader
+        title="Properties"
+        subtitle="Browse and filter investment properties across prime Dubai locations."
+      />
+      <Properties />
+    </div>
+  );
 }
