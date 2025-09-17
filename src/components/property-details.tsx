@@ -35,7 +35,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             {formatCurrency(property.priceAED)}
                         </div>
                         <div className="flex items-center gap-4">
-                            <span className="px-3 py-1 rounded text-sm font-medium badge-success">FUNDED</span>
+                            <span className="px-3 py-1 rounded text-sm font-medium badge-success">{property.status.toUpperCase()}</span>
                             <span className="text-sm text-text-secondary">
                                 {property.investors} investors
                             </span>
@@ -142,25 +142,25 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4 text-text-primary">What's In</h2>
                 <div className="grid grid-cols-4 gap-6">
-                    <div className="flex items-center">
+                    <div className="card flex items-center">
                         <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
                             🛏️
                         </div>
                         <span className="text-sm text-text-primary">1 Bedroom</span>
                     </div>
-                    <div className="flex items-center">
+                    <div className="card flex items-center">
                         <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
                             🚿
                         </div>
                         <span className="text-sm text-text-primary">1 Bathroom</span>
                     </div>
-                    <div className="flex items-center">
+                    <div className="card flex items-center">
                         <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
                             🍳
                         </div>
                         <span className="text-sm text-text-primary">1 Kitchen</span>
                     </div>
-                    <div className="flex items-center">
+                    <div className="card flex items-center">
                         <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
                             🛋️
                         </div>

@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 type Status = 'all' | 'upcoming' | 'open' | 'funded' | 'sold';
 
 export function Properties() {
-    const [activeStatus, setActiveStatus] = useState<Status>('funded');
+    const [activeStatus, setActiveStatus] = useState<Status>('all');
 
     const filtered = useMemo(() => {
         if (activeStatus === 'all') return properties;
@@ -15,6 +15,7 @@ export function Properties() {
     }, [activeStatus]);
 
     const tabs: { key: Status; label: string }[] = [
+        { key: 'all', label: 'All' },
         { key: 'upcoming', label: 'Upcoming' },
         { key: 'open', label: 'Open' },
         { key: 'funded', label: 'Funded' },
@@ -88,9 +89,9 @@ export function Properties() {
                                         (property.status === 'funded'
                                             ? 'badge-success'
                                             : property.status === 'open'
-                                                ? 'badge'
+                                                ? 'badge-dark'
                                                 : property.status === 'upcoming'
-                                                    ? 'badge'
+                                                    ? 'badge-dark'
                                                     : 'badge-dark')
                                     }
                                 >
