@@ -206,6 +206,9 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             {/* Invest Modal */}
             <Modal isOpen={isInvestOpen} onClose={() => setInvestOpen(false)} title="Invest in this property">
                 <div className="space-y-5">
+                    <div className="text-xs md:text-sm text-red-500">
+                        This is a demo application. Investing actions shown here are not real.
+                    </div>
                     {/* Percent selection */}
                     <div>
                         <div className="text-sm text-text-secondary mb-2">Choose your share (%)</div>
