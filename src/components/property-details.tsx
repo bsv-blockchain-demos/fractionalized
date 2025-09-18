@@ -2,6 +2,9 @@
 
 import { properties } from '../lib/dummydata';
 import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import { Modal } from './modal';
+import { useFeatureDisplay } from '../hooks/useFeatureDisplay';
 
 export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const property = properties.find(p => p._id.toString() === propertyId);
@@ -14,14 +17,15 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
         return `AED ${amount.toLocaleString()}`;
     };
 
-    const getFeatureIcon = (name: string) => {
-        const key = name.toLowerCase();
-        if (key.includes('bedroom') || key.includes('studio')) return '🛏️';
-        if (key.includes('bath')) return '🚿';
-        if (key.includes('kitchen')) return '🍳';
-        if (key.includes('living')) return '🛋️';
-        return '🏷️';
-    };
+    // Feature display (icons + pluralized labels)
+    const displayFeatures = useFeatureDisplay(property.features);
+
+    // Invest modal state
+    const [isInvestOpen, setInvestOpen] = useState(false);
+    const presets = useMemo(() => [1, 5, 10, 25, 50], []);
+    const [selectedPercent, setSelectedPercent] = useState<number | 'custom'>(1);
+    const [customPercent, setCustomPercent] = useState<string>('');
+    const effectivePercent = selectedPercent === 'custom' ? Number(customPercent || 0) : selectedPercent;
 
     return (
         <div className="container mx-auto px-4 py-6">
@@ -43,11 +47,18 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                         <div className="text-3xl font-bold mb-2 text-text-primary">
                             {formatCurrency(property.priceAED)}
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 justify-end">
                             <span className="px-3 py-1 rounded text-sm font-medium badge-success">{property.status.toUpperCase()}</span>
                             <span className="text-sm text-text-secondary">
                                 {property.investors} investors
                             </span>
+                            <button
+                                type="button"
+                                onClick={() => setInvestOpen(true)}
+                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors text-sm"
+                            >
+                                Invest
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -157,17 +168,91 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             {/* What's In */}
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4 text-text-primary">What's In</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {Object.entries(property.features).map(([name, count]) => (
-                        <div key={name} className="card flex items-center">
-                            <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
-                                {getFeatureIcon(name)}
-                            </div>
-                            <span className="text-sm text-text-primary">{count} {name}</span>
-                        </div>
+                <div className="flex flex-wrap gap-2">
+                    {displayFeatures.map((f) => (
+                        <span
+                            key={f.key}
+                            className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border-subtle bg-bg-secondary text-sm text-text-primary"
+                        >
+                            <span>{f.icon}</span>
+                            <span>
+                                {f.count} {f.label}
+                            </span>
+                        </span>
                     ))}
                 </div>
             </div>
+
+            {/* Invest Modal */}
+            <Modal isOpen={isInvestOpen} onClose={() => setInvestOpen(false)} title="Invest in this property">
+                <div className="space-y-4">
+                    <div>
+                        <div className="text-sm text-text-secondary mb-2">Select a percentage to invest</div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {presets.map((p) => (
+                                <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => setSelectedPercent(p)}
+                                    className={[
+                                        'px-3 py-2 rounded border text-sm',
+                                        selectedPercent === p ? 'bg-accent-primary text-white border-transparent' : 'bg-bg-secondary text-text-primary border-border-subtle'
+                                    ].join(' ')}
+                                >
+                                    {p}%
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => setSelectedPercent('custom')}
+                                className={[
+                                    'px-3 py-2 rounded border text-sm',
+                                    selectedPercent === 'custom' ? 'bg-accent-primary text-white border-transparent' : 'bg-bg-secondary text-text-primary border-border-subtle'
+                                ].join(' ')}
+                            >
+                                Custom
+                            </button>
+                        </div>
+                    </div>
+
+                    {selectedPercent === 'custom' && (
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                value={customPercent}
+                                onChange={(e) => setCustomPercent(e.target.value)}
+                                placeholder="Enter %"
+                                className="flex-1 px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary"
+                            />
+                            <span className="text-text-secondary">%</span>
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2">
+                        <div className="text-sm text-text-secondary">
+                            Selected: <span className="font-medium text-text-primary">{effectivePercent}%</span>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setInvestOpen(false)}
+                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors text-sm"
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }
