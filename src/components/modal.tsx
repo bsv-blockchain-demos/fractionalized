@@ -17,7 +17,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm hover:cursor-pointer"
         onClick={onClose}
         aria-hidden
       />
@@ -38,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="p-2 rounded hover:bg-bg-secondary text-text-secondary hover:text-text-primary"
+            className="p-2 rounded hover:bg-bg-secondary text-text-secondary hover:text-text-primary hover:cursor-pointer"
           >
             ✕
           </button>

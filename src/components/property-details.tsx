@@ -13,6 +13,10 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
         return <div>Property not found</div>;
     }
 
+    const handleContinueInvest = () => {
+        // TODO: implement
+    };
+
     const formatCurrency = (amount: number) => {
         return `AED ${amount.toLocaleString()}`;
     };
@@ -20,12 +24,28 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     // Feature display (icons + pluralized labels)
     const displayFeatures = useFeatureDisplay(property.features);
 
-    // Invest modal state
+    // Invest modal state (percent-only)
     const [isInvestOpen, setInvestOpen] = useState(false);
     const presets = useMemo(() => [1, 5, 10, 25, 50], []);
     const [selectedPercent, setSelectedPercent] = useState<number | 'custom'>(1);
     const [customPercent, setCustomPercent] = useState<string>('');
-    const effectivePercent = selectedPercent === 'custom' ? Number(customPercent || 0) : selectedPercent;
+
+    // Derived numbers
+    const priceAED = property.priceAED;
+    // sanitize custom percent: integers only 1..100
+    const sanitizedCustom = (() => {
+        const n = Math.floor(Number(customPercent || 0));
+        if (!isFinite(n)) return 0;
+        return Math.max(1, Math.min(100, n));
+    })();
+    const percentFromState = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
+    const effectivePercent = percentFromState;
+    const investmentAmountAED = (priceAED * (effectivePercent || 0)) / 100;
+    const annualisedRate = (() => {
+        const n = parseFloat(String(property.annualisedReturn).replace('%', ''));
+        return isNaN(n) ? 0 : n / 100;
+    })();
+    const expectedAnnualReturnAED = investmentAmountAED * annualisedRate;
 
     return (
         <div className="container mx-auto px-4 py-6">
@@ -55,7 +75,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             <button
                                 type="button"
                                 onClick={() => setInvestOpen(true)}
-                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors text-sm"
+                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm"
                             >
                                 Invest
                             </button>
@@ -185,9 +205,10 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
 
             {/* Invest Modal */}
             <Modal isOpen={isInvestOpen} onClose={() => setInvestOpen(false)} title="Invest in this property">
-                <div className="space-y-4">
+                <div className="space-y-5">
+                    {/* Percent selection */}
                     <div>
-                        <div className="text-sm text-text-secondary mb-2">Select a percentage to invest</div>
+                        <div className="text-sm text-text-secondary mb-2">Choose your share (%)</div>
                         <div className="grid grid-cols-3 gap-2">
                             {presets.map((p) => (
                                 <button
@@ -195,57 +216,64 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                                     type="button"
                                     onClick={() => setSelectedPercent(p)}
                                     className={[
-                                        'px-3 py-2 rounded border text-sm',
+                                        'px-3 py-2 rounded border text-sm hover:cursor-pointer',
                                         selectedPercent === p ? 'bg-accent-primary text-white border-transparent' : 'bg-bg-secondary text-text-primary border-border-subtle'
                                     ].join(' ')}
                                 >
                                     {p}%
                                 </button>
                             ))}
-                            <button
-                                type="button"
-                                onClick={() => setSelectedPercent('custom')}
-                                className={[
-                                    'px-3 py-2 rounded border text-sm',
-                                    selectedPercent === 'custom' ? 'bg-accent-primary text-white border-transparent' : 'bg-bg-secondary text-text-primary border-border-subtle'
-                                ].join(' ')}
-                            >
-                                Custom
-                            </button>
+                            <div className="flex items-center gap-2 col-span-3">
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    step={1}
+                                    value={selectedPercent === 'custom' ? sanitizedCustom : ''}
+                                    onChange={(e) => {
+                                        // accept only integers 1..100
+                                        const raw = e.target.value.replace(/[^0-9]/g, '');
+                                        const n = Math.max(1, Math.min(100, Number(raw || 0)));
+                                        setCustomPercent(String(n));
+                                        setSelectedPercent('custom');
+                                    }}
+                                    placeholder="Custom % (1-100)"
+                                    className="flex-1 px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary"
+                                />
+                                <span className="text-text-secondary">%</span>
+                            </div>
                         </div>
                     </div>
 
-                    {selectedPercent === 'custom' && (
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step="0.01"
-                                value={customPercent}
-                                onChange={(e) => setCustomPercent(e.target.value)}
-                                placeholder="Enter %"
-                                className="flex-1 px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary"
-                            />
-                            <span className="text-text-secondary">%</span>
+                    {/* Preview */}
+                    <div className="p-3 rounded-lg bg-bg-tertiary border border-border-subtle text-sm">
+                        <div className="mb-1">
+                            You're investing <span className="font-semibold text-text-primary">{formatCurrency(investmentAmountAED)}</span>
+                            {` = `}
+                            <span className="font-semibold text-text-primary">{(effectivePercent || 0).toFixed(0)}%</span> ownership of this property.
                         </div>
-                    )}
+                        <div>
+                            Expected annualized return: <span className="font-semibold" style={{ color: 'var(--success)' }}>{formatCurrency(expectedAnnualReturnAED)}</span>
+                        </div>
+                    </div>
 
                     <div className="flex items-center justify-between pt-2">
                         <div className="text-sm text-text-secondary">
-                            Selected: <span className="font-medium text-text-primary">{effectivePercent}%</span>
+                            Price: <span className="font-medium text-text-primary">{formatCurrency(priceAED)}</span>
                         </div>
                         <div className="flex gap-2">
                             <button
                                 type="button"
                                 onClick={() => setInvestOpen(false)}
-                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm"
+                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm hover:cursor-pointer"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="button"
-                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors text-sm"
+                                disabled={(effectivePercent || 0) < 1 || (effectivePercent || 0) > 100}
+                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                                onClick={handleContinueInvest}
                             >
                                 Continue
                             </button>

@@ -48,6 +48,14 @@ export function Navbar() {
                                 Dashboard
                             </Link>
                         </li>
+                        <li>
+                            <Link 
+                                href="/admin" 
+                                className={isActive("/admin") ? "nav-link active" : "nav-link"}
+                            >
+                                Admin
+                            </Link>
+                        </li>
                     </ul>
                 </div>
             </div>
