@@ -1,9 +1,34 @@
-import { ObjectId } from "mongodb";
-import { Properties } from "./mongo";
+// Note: keep this file browser-safe. Do not import Node modules here.
+// Using plain string IDs to avoid bundling mongodb/ObjectId on the client.
 
-export const properties: Properties[] = [
+export type Property = {
+  _id: string;
+  title: string;
+  location: string;
+  priceAED: number;
+  investors: number;
+  status: string;
+  annualisedReturn: string;
+  currentValuationAED: number;
+  grossYield: string;
+  netYield: string;
+  investmentBreakdown: {
+    propertyPrice: number;
+    purchaseCost: number;
+    transactionCost: number;
+    runningCost: number;
+  };
+  description: {
+    details: string;
+    features: string[];
+  };
+  features: Record<string, number>;
+  images: string[];
+};
+
+export const properties: Property[] = [
   {
-    _id: new ObjectId("650000000000000000000001"),
+    _id: "650000000000000000000001",
     title: "One Bedroom Apartment in Skyview Tower",
     location: "Dubai Marina, Dubai | Apartment",
     priceAED: 1380000,
@@ -36,7 +61,7 @@ export const properties: Properties[] = [
     images: ["/images/skyview-apt.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000002"),
+    _id: "650000000000000000000002",
     title: "Two Bedroom Apartment in Pearl Residences",
     location: "Jumeirah Village Circle, Dubai | Apartment",
     priceAED: 1050000,
@@ -69,7 +94,7 @@ export const properties: Properties[] = [
     images: ["/images/pearl-residences.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000003"),
+    _id: "650000000000000000000003",
     title: "Studio Apartment in Marina Heights",
     location: "Dubai Marina, Dubai | Apartment",
     priceAED: 640000,
@@ -101,7 +126,7 @@ export const properties: Properties[] = [
     images: ["/images/marina-heights.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000004"),
+    _id: "650000000000000000000004",
     title: "One Bedroom Apartment in Creekside Views",
     location: "Dubai Creek Harbour, Dubai | Apartment",
     priceAED: 970000,
@@ -134,7 +159,7 @@ export const properties: Properties[] = [
     images: ["/images/creekside-views.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000005"),
+    _id: "650000000000000000000005",
     title: "Studio Apartment in Palm Jumeirah Residences",
     location: "Palm Jumeirah, Dubai | Apartment",
     priceAED: 715000,
@@ -166,7 +191,7 @@ export const properties: Properties[] = [
     images: ["/images/palm-residences.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000006"),
+    _id: "650000000000000000000006",
     title: "One Bedroom Apartment in Horizon Tower",
     location: "Business Bay, Dubai | Apartment",
     priceAED: 1280000,
@@ -199,7 +224,7 @@ export const properties: Properties[] = [
     images: ["/images/horizon-tower.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000007"),
+    _id: "650000000000000000000007",
     title: "Two Bedroom Apartment in Lakeside Tower",
     location: "Jumeirah Lake Towers, Dubai | Apartment",
     priceAED: 1190000,
@@ -232,7 +257,7 @@ export const properties: Properties[] = [
     images: ["/images/lakeside-tower.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000008"),
+    _id: "650000000000000000000008",
     title: "One Bedroom Apartment in Downtown Heights",
     location: "Downtown Dubai, Dubai | Apartment",
     priceAED: 1560000,
@@ -265,7 +290,7 @@ export const properties: Properties[] = [
     images: ["/images/downtown-heights.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000009"),
+    _id: "650000000000000000000009",
     title: "Studio Apartment in Green Oasis",
     location: "Al Furjan, Dubai | Apartment",
     priceAED: 585000,
@@ -297,7 +322,7 @@ export const properties: Properties[] = [
     images: ["/images/green-oasis.jpg"],
   },
   {
-    _id: new ObjectId("650000000000000000000010"),
+    _id: "650000000000000000000010",
     title: "One Bedroom Apartment in Seaview Residences",
     location: "JBR, Dubai | Apartment",
     priceAED: 1420000,

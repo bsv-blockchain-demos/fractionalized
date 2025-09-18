@@ -25,6 +25,7 @@ export interface Properties {
     },
     features: Record<string, number>,
     images: string[],
+    txid: string,
 }
 
 export interface Shares {
