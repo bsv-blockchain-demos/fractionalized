@@ -78,7 +78,7 @@ export function Properties() {
             {/* Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filtered.map((property) => (
-                    <Link key={property.id} href={`/properties/${property.id}`} className="block">
+                    <Link key={property._id.toString()} href={`/properties/${property._id.toString()}`} className="block">
                         <div className="card-glass overflow-hidden transition-all cursor-pointer group">
                             {/* Property Image */}
                             <div className="relative h-48 bg-gradient-to-br from-accent-primary to-accent-hover">
@@ -136,8 +136,8 @@ export function Properties() {
                                         <span className="font-medium text-text-primary">{formatCurrency(property.currentValuationAED)}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-text-secondary">Funded date</span>
-                                        <span className="font-medium text-text-primary">{formatDate(property.fundedDate)}</span>
+                                        <span className="text-text-secondary">Gross yield</span>
+                                        <span className="font-medium text-text-primary">{property.grossYield}</span>
                                     </div>
                                 </div>
                             </div>

@@ -23,7 +23,7 @@ export interface Properties {
         details: string;
         features: string[];
     },
-    features: string[],
+    features: Record<string, number>,
     images: string[],
 }
 

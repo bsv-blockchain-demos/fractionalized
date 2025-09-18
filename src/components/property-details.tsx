@@ -4,7 +4,7 @@ import { properties } from '../lib/dummydata';
 import Link from 'next/link';
 
 export function PropertyDetails({ propertyId }: { propertyId: string }) {
-    const property = properties.find(p => p.id === parseInt(propertyId));
+    const property = properties.find(p => p._id.toString() === propertyId);
     
     if (!property) {
         return <div>Property not found</div>;
@@ -12,6 +12,15 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
 
     const formatCurrency = (amount: number) => {
         return `AED ${amount.toLocaleString()}`;
+    };
+
+    const getFeatureIcon = (name: string) => {
+        const key = name.toLowerCase();
+        if (key.includes('bedroom') || key.includes('studio')) return '🛏️';
+        if (key.includes('bath')) return '🚿';
+        if (key.includes('kitchen')) return '🍳';
+        if (key.includes('living')) return '🛋️';
+        return '🏷️';
     };
 
     return (
@@ -133,39 +142,30 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4 text-text-primary">Description</h2>
                 <p className="leading-relaxed mb-4 text-text-secondary">
-                    {property.description}
+                    {property.description.details}
                 </p>
+                {property.description.features?.length ? (
+                    <ul className="list-disc pl-5 text-sm text-text-secondary mb-2">
+                        {property.description.features.map((f, i) => (
+                            <li key={i}>{f}</li>
+                        ))}
+                    </ul>
+                ) : null}
                 <button className="text-sm link-accent hover:cursor-pointer">Show More</button>
             </div>
 
             {/* What's In */}
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4 text-text-primary">What's In</h2>
-                <div className="grid grid-cols-4 gap-6">
-                    <div className="card flex items-center">
-                        <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
-                            🛏️
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {Object.entries(property.features).map(([name, count]) => (
+                        <div key={name} className="card flex items-center">
+                            <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
+                                {getFeatureIcon(name)}
+                            </div>
+                            <span className="text-sm text-text-primary">{count} {name}</span>
                         </div>
-                        <span className="text-sm text-text-primary">1 Bedroom</span>
-                    </div>
-                    <div className="card flex items-center">
-                        <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
-                            🚿
-                        </div>
-                        <span className="text-sm text-text-primary">1 Bathroom</span>
-                    </div>
-                    <div className="card flex items-center">
-                        <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
-                            🍳
-                        </div>
-                        <span className="text-sm text-text-primary">1 Kitchen</span>
-                    </div>
-                    <div className="card flex items-center">
-                        <div className="w-8 h-8 rounded mr-3 flex items-center justify-center bg-bg-secondary">
-                            🛋️
-                        </div>
-                        <span className="text-sm text-text-primary">1 Living Room</span>
-                    </div>
+                    ))}
                 </div>
             </div>
         </div>
