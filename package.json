@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@bsv/sdk": "^1.7.6",
+    "@bsv/wallet-toolbox-client": "^1.6.23",
     "dotenv": "^17.2.2",
     "mongodb": "^6.19.0",
     "next": "15.5.3",
