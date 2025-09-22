@@ -136,7 +136,7 @@ export function Dashboard() {
       <section className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-bold text-text-primary">Your Listings (Selling)</h2>
-          <button type="button" className="px-3 py-1.5 rounded-lg border border-border-subtle bg-bg-secondary text-sm text-text-primary">
+          <button type="button" className="px-3 py-1.5 rounded-lg border border-border-subtle bg-bg-secondary text-sm text-text-primary btn-glow">
             List a property
           </button>
         </div>

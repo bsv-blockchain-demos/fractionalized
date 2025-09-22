@@ -3,16 +3,106 @@
 import { properties } from '../lib/dummydata';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { FilterSortModal, type FilterState, type SortOption } from './filter-sort-modal';
 
 type Status = 'all' | 'upcoming' | 'open' | 'funded' | 'sold';
 
 export function Properties() {
     const [activeStatus, setActiveStatus] = useState<Status>('all');
+    const [isFilterOpen, setFilterOpen] = useState(false);
+
+    const defaultFilters: FilterState = {
+        priceMin: undefined,
+        priceMax: undefined,
+        investorsMin: undefined,
+        investorsMax: undefined,
+        grossYieldMin: undefined,
+        grossYieldMax: undefined,
+        netYieldMin: undefined,
+        netYieldMax: undefined,
+        annualisedReturnMin: undefined,
+        annualisedReturnMax: undefined,
+        statuses: ['upcoming', 'open', 'funded', 'sold'],
+        query: '',
+    };
+    const [filters, setFilters] = useState<FilterState>(defaultFilters);
+    const [sortBy, setSortBy] = useState<SortOption>('price_desc');
+
+    const parsePercent = (s: string) => {
+        const n = parseFloat(String(s).replace('%', ''));
+        return isNaN(n) ? 0 : n;
+    };
 
     const filtered = useMemo(() => {
-        if (activeStatus === 'all') return properties;
-        return properties.filter((p: any) => p.status === activeStatus);
-    }, [activeStatus]);
+        // Base filter by tab status
+        let list = (activeStatus === 'all') ? properties : properties.filter((p: any) => p.status === activeStatus);
+
+        // Apply filter modal criteria
+        list = list.filter((p) => {
+            // status set
+            if (!filters.statuses.includes(p.status as any)) return false;
+
+            // query search
+            const q = (filters.query || '').trim().toLowerCase();
+            if (q) {
+                const hay = `${p.title} ${p.location}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+
+            // numeric ranges
+            if (filters.priceMin != null && p.priceAED < filters.priceMin) return false;
+            if (filters.priceMax != null && p.priceAED > filters.priceMax) return false;
+            if (filters.investorsMin != null && p.investors < filters.investorsMin) return false;
+            if (filters.investorsMax != null && p.investors > filters.investorsMax) return false;
+
+            const gross = parsePercent(p.grossYield);
+            const net = parsePercent(p.netYield);
+            const ann = parsePercent(p.annualisedReturn);
+            if (filters.grossYieldMin != null && gross < filters.grossYieldMin) return false;
+            if (filters.grossYieldMax != null && gross > filters.grossYieldMax) return false;
+            if (filters.netYieldMin != null && net < filters.netYieldMin) return false;
+            if (filters.netYieldMax != null && net > filters.netYieldMax) return false;
+            if (filters.annualisedReturnMin != null && ann < filters.annualisedReturnMin) return false;
+            if (filters.annualisedReturnMax != null && ann > filters.annualisedReturnMax) return false;
+
+            return true;
+        });
+
+        // Sorting
+        const sorted = [...list];
+        sorted.sort((a, b) => {
+            switch (sortBy) {
+                case 'price_asc':
+                    return a.priceAED - b.priceAED;
+                case 'price_desc':
+                    return b.priceAED - a.priceAED;
+                case 'valuation_asc':
+                    return a.currentValuationAED - b.currentValuationAED;
+                case 'valuation_desc':
+                    return b.currentValuationAED - a.currentValuationAED;
+                case 'investors_asc':
+                    return a.investors - b.investors;
+                case 'investors_desc':
+                    return b.investors - a.investors;
+                case 'gross_yield_desc':
+                    return parsePercent(b.grossYield) - parsePercent(a.grossYield);
+                case 'gross_yield_asc':
+                    return parsePercent(a.grossYield) - parsePercent(b.grossYield);
+                case 'net_yield_desc':
+                    return parsePercent(b.netYield) - parsePercent(a.netYield);
+                case 'net_yield_asc':
+                    return parsePercent(a.netYield) - parsePercent(b.netYield);
+                case 'annualised_desc':
+                    return parsePercent(b.annualisedReturn) - parsePercent(a.annualisedReturn);
+                case 'annualised_asc':
+                    return parsePercent(a.annualisedReturn) - parsePercent(b.annualisedReturn);
+                default:
+                    return 0;
+            }
+        });
+
+        return sorted;
+    }, [activeStatus, filters, sortBy]);
 
     const tabs: { key: Status; label: string }[] = [
         { key: 'all', label: 'All' },
@@ -47,9 +137,9 @@ export function Properties() {
                                 key={t.key}
                                 onClick={() => setActiveStatus(t.key)}
                                 className={[
-                                    'px-4 py-2 text-sm transition-colors',
+                                    'px-4 py-2 text-sm transition-colors btn-glow',
                                     isActive
-                                        ? 'bg-accent-primary text-white'
+                                        ? 'bg-accent-primary text-white border border-transparent'
                                         : 'text-text-secondary hover:text-text-primary',
                                     idx !== tabs.length - 1 ? 'border-r border-border-subtle' : '',
                                 ].join(' ')}
@@ -62,8 +152,8 @@ export function Properties() {
                     })}
                 </div>
 
-                {/* Filter & sort button (non-functional placeholder) */}
-                <button type="button" className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary hover:text-accent-primary transition-colors text-sm inline-flex items-center gap-2">
+                {/* Filter & sort button (opens modal) */}
+                <button type="button" onClick={() => setFilterOpen(true)} className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary hover:text-accent-primary transition-colors text-sm inline-flex items-center gap-2 btn-glow">
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 6h18M7 12h10M11 18h2"/>
                     </svg>
@@ -145,6 +235,19 @@ export function Properties() {
                     </Link>
                 ))}
             </div>
+
+            {/* Modal */}
+            <FilterSortModal
+                isOpen={isFilterOpen}
+                onClose={() => setFilterOpen(false)}
+                initialFilters={filters}
+                initialSort={sortBy}
+                onApply={(f, s) => {
+                    setFilters(f);
+                    setSortBy(s);
+                    setFilterOpen(false);
+                }}
+            />
         </div>
     );
 }

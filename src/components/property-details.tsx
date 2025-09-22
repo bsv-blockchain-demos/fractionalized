@@ -75,7 +75,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             <button
                                 type="button"
                                 onClick={() => setInvestOpen(true)}
-                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm"
+                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent"
                             >
                                 Invest
                             </button>
@@ -268,14 +268,14 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             <button
                                 type="button"
                                 onClick={() => setInvestOpen(false)}
-                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm hover:cursor-pointer"
+                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm hover:cursor-pointer btn-glow"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="button"
                                 disabled={(effectivePercent || 0) < 1 || (effectivePercent || 0) > 100}
-                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm btn-glow border border-transparent"
                                 onClick={handleContinueInvest}
                             >
                                 Continue

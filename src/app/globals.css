@@ -140,6 +140,17 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Subtle blue glow for buttons (lighter than card glow) */
+.btn-glow {
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
+}
+.btn-glow:hover,
+.btn-glow:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.15), 0 2px 6px rgba(0, 0, 0, 0.15);
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
 /* Input base styles */
 input, textarea, select {
   background: var(--bg-secondary);
