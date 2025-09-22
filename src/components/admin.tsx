@@ -1,15 +1,53 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useMemo } from "react";
+import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
+type StepStatus = "idle" | "running" | "success" | "error";
 
 export function Admin() {
-    // TODO: Replace this with real submit implementation
-    const handleSubmit = async (data: any) => {
-        // For now, just log to the console. Replace with API call or DB write.
-        console.log("[Admin] New property payload:", data);
-        alert("Submitted (demo): check console for payload");
+    const [processing, setProcessing] = useState(false);
+    const [step1, setStep1] = useState<StepStatus>("idle");
+    const [step2, setStep2] = useState<StepStatus>("idle");
+    const [step3, setStep3] = useState<StepStatus>("idle");
+
+    const stepLabels = [
+        "Creating property token...",
+        "Minting shares for property token...",
+        "Initializing shares on the server...",
+    ];
+
+    const handleSubmit = async (_data: any) => {
+        // Create tokenized transaction from user wallet first
+        // Create the amount of shares the user filled in using the returned tokenized transaction
+        // Transfer the tokens to the server wallet
+        setProcessing(true);
+        setStep1("running");
+        setStep2("idle");
+        setStep3("idle");
+        try {
+            // Step 1: Creating property token...
+            await new Promise((res) => setTimeout(res, 1200));
+            setStep1("success");
+
+            // Step 2: Minting shares for property token...
+            setStep2("running");
+            await new Promise((res) => setTimeout(res, 1400));
+            setStep2("success");
+
+            // Step 3: Initializing shares on the server...
+            setStep3("running");
+            await new Promise((res) => setTimeout(res, 1000));
+            setStep3("success");
+        } catch (e) {
+            // If any error occurs, mark the current running step as error
+            if (step1 === "running") setStep1("error");
+            else if (step2 === "running") setStep2("error");
+            else if (step3 === "running") setStep3("error");
+        } finally {
+            setProcessing(false);
+        }
     };
 
     const [form, setForm] = useState({
@@ -43,6 +81,10 @@ export function Admin() {
         } as Record<string, number>,
         images: "", // comma-separated URLs
     });
+
+    // Shares modal state
+    const [isSellOpen, setSellOpen] = useState(false);
+    const [sellConfig, setSellConfig] = useState<SellSharesConfig>({ sharesCount: 10, percentPerShare: 5 });
 
     const updateField = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }));
     const updateIB = (key: keyof typeof form.investmentBreakdown, value: any) =>
@@ -81,6 +123,7 @@ export function Admin() {
                 .split(",")
                 .map((s) => s.trim())
                 .filter(Boolean),
+            sell: sellConfig, // include shares configuration from modal
         };
 
         await handleSubmit(payload);
@@ -89,6 +132,43 @@ export function Admin() {
     return (
         <div className="container mx-auto px-4 py-6">
             <h1 className="text-2xl font-bold mb-4 text-text-primary">Admin: Add Property</h1>
+
+            {/* Status bar */}
+            {useMemo(() => {
+                const val = ((step1 === "success" ? 1 : step1 === "running" ? 0.5 : 0)
+                  + (step2 === "success" ? 1 : step2 === "running" ? 0.5 : 0)
+                  + (step3 === "success" ? 1 : step3 === "running" ? 0.5 : 0)) / 3 * 100;
+                const show = processing || step1 !== "idle" || step2 !== "idle" || step3 !== "idle";
+                if (!show) return null;
+                const badge = (s: StepStatus) => (
+                  <span className={[
+                    "px-2 py-0.5 rounded text-xs font-medium",
+                    s === "success" ? "badge-success" : s === "running" ? "badge" : s === "error" ? "badge-dark" : "badge-dark"
+                  ].join(" ")}>{s.toUpperCase()}</span>
+                );
+                return (
+                  <div className="card-elevated mb-4">
+                    <div className="mb-3 text-sm text-text-secondary">Deployment status</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-text-primary">{stepLabels[0]}</span>
+                        {badge(step1)}
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-text-primary">{stepLabels[1]}</span>
+                        {badge(step2)}
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-text-primary">{stepLabels[2]}</span>
+                        {badge(step3)}
+                      </div>
+                    </div>
+                    <div className="h-2 rounded bg-bg-secondary overflow-hidden">
+                      <div className="h-full bg-accent-primary transition-all" style={{ width: `${val}%` }} />
+                    </div>
+                  </div>
+                );
+            }, [processing, step1, step2, step3])}
 
             <form onSubmit={onSubmit} className="space-y-6">
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
@@ -296,15 +376,47 @@ export function Admin() {
                     />
                 </div>
 
+                {/* Shares to sell configuration */}
+                <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
+                    <h2 className="text-lg font-semibold mb-3 text-text-primary">Tokenization / Shares</h2>
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm text-text-secondary">
+                            {sellConfig.sharesCount} shares × {sellConfig.percentPerShare}% each =
+                            {" "}
+                            <span className={sellConfig.sharesCount * sellConfig.percentPerShare > 99 ? "text-red-400 font-semibold" : "text-text-primary font-semibold"}>
+                                {(sellConfig.sharesCount * sellConfig.percentPerShare).toFixed(2)}%
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary text-sm btn-glow"
+                            onClick={() => setSellOpen(true)}
+                        >
+                            Configure shares to sell
+                        </button>
+                    </div>
+                </div>
+
                 <div className="flex items-center justify-end gap-2">
                     <button
                         type="submit"
-                        className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm"
+                        className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+                        disabled={processing}
                     >
                         Submit
                     </button>
                 </div>
             </form>
+
+            <SellSharesModal
+                isOpen={isSellOpen}
+                onClose={() => setSellOpen(false)}
+                initial={sellConfig}
+                onSubmit={(cfg) => {
+                    setSellConfig(cfg);
+                    setSellOpen(false);
+                }}
+            />
         </div>
     );
 }

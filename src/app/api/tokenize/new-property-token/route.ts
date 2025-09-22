@@ -1,6 +1,6 @@
-import { propertiesCollection } from "../../../lib/mongo";
+import { propertiesCollection } from "../../../../lib/mongo";
 import { Hash } from "@bsv/sdk";
-import { makeWallet } from "../../../lib/serverWallet";
+import { makeWallet } from "../../../../lib/serverWallet";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -31,9 +31,7 @@ export async function POST(request: Request) {
     }
 
     // Format and verify all inputs to satisfy Mongo interface
-    // Create tokenized transaction
-
-    const serverWallet = await makeWallet('main', process.env.STORAGE_URL as string, process.env.SERVER_PRIVATE_KEY as string);
+    // Validate and safe tokenized transaction UTXO
 
     const sellerKeyHash = Hash.hash160(seller.toString(), "hex");
 
