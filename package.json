@@ -12,6 +12,7 @@
     "@bsv/sdk": "^1.7.6",
     "@bsv/wallet-toolbox-client": "^1.6.23",
     "dotenv": "^17.2.2",
+    "js-1sat-ord": "^0.1.82",
     "mongodb": "^6.19.0",
     "next": "15.5.3",
     "react": "19.1.0",

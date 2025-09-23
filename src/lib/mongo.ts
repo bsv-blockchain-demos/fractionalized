@@ -33,6 +33,7 @@ export interface Shares {
     _id: ObjectId;
     propertyId: ObjectId;
     investorId: ObjectId;
+    parentTxid: string;
     amount: number;
     createdAt: Date;
     outpoint: string;

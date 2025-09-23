@@ -397,14 +397,19 @@ export function Admin() {
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2">
-                    <button
-                        type="submit"
-                        className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-                        disabled={processing}
-                    >
-                        Submit
-                    </button>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="text-xs md:text-sm text-red-400">
+                        Disclaimer: This is a demo app, please do not try to sell your actual real estate.
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="submit"
+                            className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+                            disabled={processing}
+                        >
+                            Submit
+                        </button>
+                    </div>
                 </div>
             </form>
 
