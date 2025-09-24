@@ -2,6 +2,10 @@
 
 import { useState, FormEvent, useMemo } from "react";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
+import { useAuthContext } from "../context/walletContext";
+import { toast } from "react-hot-toast";
+import { Hash, Utils, LockingScript, OP, Transaction, UnlockingScript, PublicKey, Signature, TransactionSignature } from "@bsv/sdk";
+import { Ordinals } from "../utils/ordinals";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -10,12 +14,12 @@ export function Admin() {
     const [processing, setProcessing] = useState(false);
     const [step1, setStep1] = useState<StepStatus>("idle");
     const [step2, setStep2] = useState<StepStatus>("idle");
-    const [step3, setStep3] = useState<StepStatus>("idle");
+
+    const { userWallet, userPubKey, initializeWallet, checkAuth } = useAuthContext();
 
     const stepLabels = [
         "Creating property token...",
         "Minting shares for property token...",
-        "Initializing shares on the server...",
     ];
 
     const handleSubmit = async (_data: any) => {
@@ -25,26 +29,163 @@ export function Admin() {
         setProcessing(true);
         setStep1("running");
         setStep2("idle");
-        setStep3("idle");
+
+        const authenticated = await checkAuth();
+        if (!authenticated) {
+            toast.error('Failed to authenticate', {
+                duration: 5000,
+                position: 'top-center',
+                id: 'authentication-error',
+            });
+            return;
+        }
+
+        if (!userWallet) {
+            try {
+                await initializeWallet();
+            } catch (e) {
+                console.error('Failed to initialize wallet:', e);
+                toast.error('Failed to connect wallet', {
+                    duration: 5000,
+                    position: 'top-center',
+                    id: 'wallet-connect-error',
+                });
+                return;
+            }
+        }
+
+        if (!userPubKey) {
+            toast.error('Failed to get public key', {
+                duration: 5000,
+                position: 'top-center',
+                id: 'public-key-error',
+            });
+            return;
+        }
+
         try {
             // Step 1: Creating property token...
-            await new Promise((res) => setTimeout(res, 1200));
+            const pubKeyHash = Hash.hash160(userPubKey, "hex");
+
+            const propertyDataHash = Hash.hash256(Utils.toArray(JSON.stringify(_data), "utf8"));
+
+            const script = new LockingScript();
+            script
+                // Unreachable if statement that contains the property data hash to verify
+                .writeOpCode(OP.OP_0)
+                .writeOpCode(OP.OP_IF)
+                .writeBin(propertyDataHash)
+                .writeOpCode(OP.OP_ENDIF)
+                // Single signature lockingScript (P2PKH)
+                .writeOpCode(OP.OP_DUP)
+                .writeOpCode(OP.OP_HASH160)
+                .writeBin(pubKeyHash)
+                .writeOpCode(OP.OP_EQUALVERIFY)
+                .writeOpCode(OP.OP_CHECKSIGVERIFY)
+
+            const response = await userWallet?.createAction({
+                description: "Create property token",
+                outputs: [
+                    {
+                        outputDescription: "Property token",
+                        satoshis: 1,
+                        lockingScript: script.toHex(),
+                    },
+                ],
+                options: {
+                    randomizeOutputs: false,
+                }
+            });
+            console.log({ response });
+            if (!response?.txid) {
+                throw new Error("Failed to create property token");
+            }
+            const sendToken = await fetch("/api/tokenize/new-property-token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    txid: response.txid,
+                    vout: 0,
+                }),
+            });
+            const sendTokenData = await sendToken.json();
+            console.log({ sendTokenData });
+            if (!sendTokenData?.txid) {
+                throw new Error("Failed to send property token");
+            }
             setStep1("success");
 
             // Step 2: Minting shares for property token...
             setStep2("running");
-            await new Promise((res) => setTimeout(res, 1400));
-            setStep2("success");
+            // Create the ordinal locking script with 1sat inscription
+            const ordinalLockingScript = new Ordinals().lock(userPubKey, response.txid, Number(_data.sharesCount), "deploy+mint", true);
 
-            // Step 3: Initializing shares on the server...
-            setStep3("running");
-            await new Promise((res) => setTimeout(res, 1000));
-            setStep3("success");
+            // Create signature to satisfy lockingScript
+            // @ts-expect-error
+            const { signature } = await userWallet?.createSignature({
+                hashToDirectlySign: propertyDataHash,
+                protocolID: [0, "ordinals"],
+                keyID: "0",
+                counterparty: 'self'
+            });
+            if (!signature) {
+                throw new Error("Failed to create signature");
+            }
+
+            const rawSignature = Signature.fromDER(signature, 'hex')
+            const sig = new TransactionSignature(
+                rawSignature.r,
+                rawSignature.s,
+                TransactionSignature.SIGHASH_SINGLE
+            );
+
+            // Create unlockingScript to unlock the initial token UTXO
+            const unlockingScript = new UnlockingScript();
+            unlockingScript
+                .writeOpCode(OP.OP_DROP)
+                .writeBin(sig.toChecksigFormat())
+                .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
+
+            // Create the mint transaction
+            const mintTx = new Transaction();
+
+            mintTx.addInput({
+                sourceTXID: sendTokenData.txid,
+                sourceOutputIndex: sendTokenData.vout,
+                unlockingScript: unlockingScript,
+            });
+
+            // Create the output with inscription
+            mintTx.addOutput({
+                satoshis: 1,
+                lockingScript: ordinalLockingScript,
+            });
+
+            mintTx.sign();
+
+            // Send the mint transaction to the server for storage
+            console.log({ mintTx });
+            const sendMintTx = await fetch("/api/tokenize/initialize-tokens", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    mintTx: mintTx.toHex(),
+                }),
+            });
+            const sendMintTxData = await sendMintTx.json();
+            console.log({ sendMintTxData });
+            if (!sendMintTxData?.ok) {
+                throw new Error("Failed to mint shares for property token");
+            }
+            setStep2("success");
         } catch (e) {
             // If any error occurs, mark the current running step as error
             if (step1 === "running") setStep1("error");
             else if (step2 === "running") setStep2("error");
-            else if (step3 === "running") setStep3("error");
         } finally {
             setProcessing(false);
         }
@@ -136,39 +277,34 @@ export function Admin() {
             {/* Status bar */}
             {useMemo(() => {
                 const val = ((step1 === "success" ? 1 : step1 === "running" ? 0.5 : 0)
-                  + (step2 === "success" ? 1 : step2 === "running" ? 0.5 : 0)
-                  + (step3 === "success" ? 1 : step3 === "running" ? 0.5 : 0)) / 3 * 100;
-                const show = processing || step1 !== "idle" || step2 !== "idle" || step3 !== "idle";
+                    + (step2 === "success" ? 1 : step2 === "running" ? 0.5 : 0)) / 2 * 100;
+                const show = processing || step1 !== "idle" || step2 !== "idle";
                 if (!show) return null;
                 const badge = (s: StepStatus) => (
-                  <span className={[
-                    "px-2 py-0.5 rounded text-xs font-medium",
-                    s === "success" ? "badge-success" : s === "running" ? "badge" : s === "error" ? "badge-dark" : "badge-dark"
-                  ].join(" ")}>{s.toUpperCase()}</span>
+                    <span className={[
+                        "px-2 py-0.5 rounded text-xs font-medium",
+                        s === "success" ? "badge-success" : s === "running" ? "badge" : s === "error" ? "badge-dark" : "badge-dark"
+                    ].join(" ")}>{s.toUpperCase()}</span>
                 );
                 return (
-                  <div className="card-elevated mb-4">
-                    <div className="mb-3 text-sm text-text-secondary">Deployment status</div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-text-primary">{stepLabels[0]}</span>
-                        {badge(step1)}
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-text-primary">{stepLabels[1]}</span>
-                        {badge(step2)}
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-text-primary">{stepLabels[2]}</span>
-                        {badge(step3)}
-                      </div>
+                    <div className="card-elevated mb-4">
+                        <div className="mb-3 text-sm text-text-secondary">Deployment status</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-sm text-text-primary">{stepLabels[0]}</span>
+                                {badge(step1)}
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-sm text-text-primary">{stepLabels[1]}</span>
+                                {badge(step2)}
+                            </div>
+                        </div>
+                        <div className="h-2 rounded bg-bg-secondary overflow-hidden">
+                            <div className="h-full bg-accent-primary transition-all" style={{ width: `${val}%` }} />
+                        </div>
                     </div>
-                    <div className="h-2 rounded bg-bg-secondary overflow-hidden">
-                      <div className="h-full bg-accent-primary transition-all" style={{ width: `${val}%` }} />
-                    </div>
-                  </div>
                 );
-            }, [processing, step1, step2, step3])}
+            }, [processing, step1, step2])}
 
             <form onSubmit={onSubmit} className="space-y-6">
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
