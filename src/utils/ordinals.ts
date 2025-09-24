@@ -17,7 +17,7 @@ const serverPubkey = process.env.NEXT_PUBLIC_SERVER_PUBKEY;
 
 export class Ordinals implements ScriptTemplate {
     lock(
-        address: string,
+        address: string, // Just pubkey of user to send token to
         assetId: string, // AssetID = txid_vout
         shares: number,
         type: "deploy+mint" | "transfer",
