@@ -10,6 +10,8 @@ import { Ordinals } from "../utils/ordinals";
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
 
+const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c6f244c294390d22d3f5bb81cb51dfc1eb165f6968e2455f18d39";
+
 export function Admin() {
     const [processing, setProcessing] = useState(false);
     const [step1, setStep1] = useState<StepStatus>("idle");
@@ -164,11 +166,28 @@ export function Admin() {
                 .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
 
             // Create payment UTXO
-            const paymentUTXO = new P2PKH();
-            const paymentLockingScript = paymentUTXO.lock(Hash.hash160(userPubKey, "hex"));
+            // Multisig 1 of 2 so server can use funds for transfer fees
+            const oneOfTwoHash = Hash.hash160(SERVER_PUBKEY + userPubKey, "hex");
+
+            const paymentLockingScript = new LockingScript();
+            paymentLockingScript
+                .writeOpCode(OP.OP_1)
+                .writeOpCode(OP.OP_2DUP)
+                .writeOpCode(OP.OP_CAT)
+                .writeOpCode(OP.OP_HASH160)
+                .writeBin(oneOfTwoHash)
+                .writeOpCode(OP.OP_EQUALVERIFY)
+                .writeOpCode(OP.OP_TOALTSTACK)
+                .writeOpCode(OP.OP_TOALTSTACK)
+                .writeOpCode(OP.OP_1)
+                .writeOpCode(OP.OP_FROMALTSTACK)
+                .writeOpCode(OP.OP_FROMALTSTACK)
+                .writeOpCode(OP.OP_2)
+                .writeOpCode(OP.OP_CHECKMULTISIG)
             const paymentUnlockingScript = new UnlockingScript();
             paymentUnlockingScript
                 .writeBin(sig.toChecksigFormat())
+                .writeBin(PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[])
                 .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
 
             const paymentTxAction = await userWallet?.createAction({
