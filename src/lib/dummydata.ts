@@ -26,7 +26,7 @@ export type Property = {
   images: string[];
 };
 
-export const properties: Property[] = [
+export const dummyProperties: Property[] = [
   {
     _id: "650000000000000000000001",
     title: "One Bedroom Apartment in Skyview Tower",

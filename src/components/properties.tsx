@@ -1,32 +1,99 @@
 "use client";
 
-import { properties } from '../lib/dummydata';
+import { dummyProperties } from '../lib/dummydata';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FilterSortModal, type FilterState, type SortOption } from './filter-sort-modal';
 
 type Status = 'all' | 'upcoming' | 'open' | 'funded' | 'sold';
 
+const defaultFilters: FilterState = {
+    priceMin: undefined,
+    priceMax: undefined,
+    investorsMin: undefined,
+    investorsMax: undefined,
+    grossYieldMin: undefined,
+    grossYieldMax: undefined,
+    netYieldMin: undefined,
+    netYieldMax: undefined,
+    annualisedReturnMin: undefined,
+    annualisedReturnMax: undefined,
+    statuses: ['upcoming', 'open', 'funded', 'sold'],
+    query: '',
+};
+
 export function Properties() {
     const [activeStatus, setActiveStatus] = useState<Status>('all');
     const [isFilterOpen, setFilterOpen] = useState(false);
-
-    const defaultFilters: FilterState = {
-        priceMin: undefined,
-        priceMax: undefined,
-        investorsMin: undefined,
-        investorsMax: undefined,
-        grossYieldMin: undefined,
-        grossYieldMax: undefined,
-        netYieldMin: undefined,
-        netYieldMax: undefined,
-        annualisedReturnMin: undefined,
-        annualisedReturnMax: undefined,
-        statuses: ['upcoming', 'open', 'funded', 'sold'],
-        query: '',
-    };
     const [filters, setFilters] = useState<FilterState>(defaultFilters);
     const [sortBy, setSortBy] = useState<SortOption>('price_desc');
+    const [properties, setProperties] = useState<any[]>([]);
+    const [page, setPage] = useState<number>(1);
+    const PAGE_SIZE = 20;
+    const [total, setTotal] = useState<number>(0);
+    const [loading, setLoading] = useState<boolean>(false);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Initialize state from URL on mount
+    useEffect(() => {
+        const sp = new URLSearchParams(searchParams?.toString());
+        const p = Number(sp.get('page') || '1');
+        const sb = (sp.get('sortBy') as SortOption) || 'price_desc';
+        const as = (sp.get('status') as Status) || 'all';
+        const fParam = sp.get('filters');
+        try {
+            if (p && p > 0) setPage(p);
+            if (sb) setSortBy(sb);
+            if (as) setActiveStatus(as);
+            if (fParam) {
+                const parsed = JSON.parse(fParam);
+                if (parsed && typeof parsed === 'object') setFilters(parsed);
+            }
+        } catch {}
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const fetchProperties = async () => {
+            try {
+                setLoading(true);
+                // Build query string for GET and update URL so back/forward works
+                const qs = new URLSearchParams();
+                qs.set('page', String(page));
+                qs.set('limit', String(PAGE_SIZE));
+                qs.set('sortBy', sortBy);
+                qs.set('activeStatus', activeStatus);
+                if (filters) qs.set('filters', JSON.stringify(filters));
+
+                const url = `/api/properties?${qs.toString()}`;
+                // Reflect same params in browser URL (without navigating away)
+                const viewQS = new URLSearchParams();
+                viewQS.set('page', String(page));
+                viewQS.set('sortBy', sortBy);
+                viewQS.set('status', activeStatus);
+                viewQS.set('filters', JSON.stringify(filters));
+                router.push(`?${viewQS.toString()}`);
+
+                const response = await fetch(url, { method: 'GET' });
+                if (!response.ok) {
+                    setProperties(dummyProperties);
+                    setTotal(dummyProperties.length);
+                    return;
+                }
+                const data = await response.json();
+                setProperties(data.items || []);
+                setTotal(data.total || 0);
+            } catch (e) {
+                setProperties(dummyProperties);
+                setTotal(dummyProperties.length);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchProperties();
+    }, [filters, sortBy, activeStatus, page]);
 
     const parsePercent = (s: string) => {
         const n = parseFloat(String(s).replace('%', ''));
@@ -34,75 +101,11 @@ export function Properties() {
     };
 
     const filtered = useMemo(() => {
-        // Base filter by tab status
-        let list = (activeStatus === 'all') ? properties : properties.filter((p: any) => p.status === activeStatus);
+        // Server already handled filtering and sorting; just return the page of results
+        return properties;
+    }, [properties]);
 
-        // Apply filter modal criteria
-        list = list.filter((p) => {
-            // status set
-            if (!filters.statuses.includes(p.status as any)) return false;
-
-            // query search
-            const q = (filters.query || '').trim().toLowerCase();
-            if (q) {
-                const hay = `${p.title} ${p.location}`.toLowerCase();
-                if (!hay.includes(q)) return false;
-            }
-
-            // numeric ranges
-            if (filters.priceMin != null && p.priceAED < filters.priceMin) return false;
-            if (filters.priceMax != null && p.priceAED > filters.priceMax) return false;
-            if (filters.investorsMin != null && p.investors < filters.investorsMin) return false;
-            if (filters.investorsMax != null && p.investors > filters.investorsMax) return false;
-
-            const gross = parsePercent(p.grossYield);
-            const net = parsePercent(p.netYield);
-            const ann = parsePercent(p.annualisedReturn);
-            if (filters.grossYieldMin != null && gross < filters.grossYieldMin) return false;
-            if (filters.grossYieldMax != null && gross > filters.grossYieldMax) return false;
-            if (filters.netYieldMin != null && net < filters.netYieldMin) return false;
-            if (filters.netYieldMax != null && net > filters.netYieldMax) return false;
-            if (filters.annualisedReturnMin != null && ann < filters.annualisedReturnMin) return false;
-            if (filters.annualisedReturnMax != null && ann > filters.annualisedReturnMax) return false;
-
-            return true;
-        });
-
-        // Sorting
-        const sorted = [...list];
-        sorted.sort((a, b) => {
-            switch (sortBy) {
-                case 'price_asc':
-                    return a.priceAED - b.priceAED;
-                case 'price_desc':
-                    return b.priceAED - a.priceAED;
-                case 'valuation_asc':
-                    return a.currentValuationAED - b.currentValuationAED;
-                case 'valuation_desc':
-                    return b.currentValuationAED - a.currentValuationAED;
-                case 'investors_asc':
-                    return a.investors - b.investors;
-                case 'investors_desc':
-                    return b.investors - a.investors;
-                case 'gross_yield_desc':
-                    return parsePercent(b.grossYield) - parsePercent(a.grossYield);
-                case 'gross_yield_asc':
-                    return parsePercent(a.grossYield) - parsePercent(b.grossYield);
-                case 'net_yield_desc':
-                    return parsePercent(b.netYield) - parsePercent(a.netYield);
-                case 'net_yield_asc':
-                    return parsePercent(a.netYield) - parsePercent(b.netYield);
-                case 'annualised_desc':
-                    return parsePercent(b.annualisedReturn) - parsePercent(a.annualisedReturn);
-                case 'annualised_asc':
-                    return parsePercent(a.annualisedReturn) - parsePercent(b.annualisedReturn);
-                default:
-                    return 0;
-            }
-        });
-
-        return sorted;
-    }, [activeStatus, filters, sortBy]);
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     const tabs: { key: Status; label: string }[] = [
         { key: 'all', label: 'All' },
@@ -135,7 +138,7 @@ export function Properties() {
                         return (
                             <button
                                 key={t.key}
-                                onClick={() => setActiveStatus(t.key)}
+                                onClick={() => { setActiveStatus(t.key); setPage(1); }}
                                 className={[
                                     'px-4 py-2 text-sm transition-colors btn-glow',
                                     isActive
@@ -162,8 +165,19 @@ export function Properties() {
             </div>
 
             {/* Count and divider */}
-            <div className="mb-2 text-sm text-text-primary">{filtered.length} properties</div>
+            <div className="mb-2 text-sm text-text-primary">{total} properties</div>
             <div className="section-divider"></div>
+
+            {/* Loading state */}
+            {loading && (
+                <div className="flex items-center justify-center py-10">
+                    <svg className="animate-spin h-6 w-6 text-accent-primary mr-3" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <span className="text-sm text-text-secondary">Loading properties...</span>
+                </div>
+            )}
 
             {/* Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -236,6 +250,27 @@ export function Properties() {
                 ))}
             </div>
 
+            {/* Pagination Controls */}
+            <div className="mt-6 flex items-center justify-center gap-4">
+                <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1 || loading}
+                >
+                    ← Previous
+                </button>
+                <div className="text-sm text-text-secondary">Page {page} of {totalPages}</div>
+                <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page >= totalPages || loading}
+                >
+                    Next →
+                </button>
+            </div>
+
             {/* Modal */}
             <FilterSortModal
                 isOpen={isFilterOpen}
@@ -245,6 +280,7 @@ export function Properties() {
                 onApply={(f, s) => {
                     setFilters(f);
                     setSortBy(s);
+                    setPage(1);
                     setFilterOpen(false);
                 }}
             />
