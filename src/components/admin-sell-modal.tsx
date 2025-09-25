@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { Modal } from "./modal";
 
 export type SellSharesConfig = {
-  sharesCount: number;
-  percentPerShare: number; // 0..100
+  percentToSell: number; // 0..100
 };
 
 export function SellSharesModal({
@@ -19,12 +18,11 @@ export function SellSharesModal({
   onSubmit: (config: SellSharesConfig) => void;
   initial?: Partial<SellSharesConfig>;
 }) {
-  const [sharesCount, setSharesCount] = useState<number>(initial?.sharesCount ?? 10);
-  const [percentPerShare, setPercentPerShare] = useState<number>(initial?.percentPerShare ?? 5);
+  const [percentToSell, setPercentToSell] = useState<number>(initial?.percentToSell ?? 80);
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState<null | "soft" | "hard">(null);
 
-  const totalPercent = useMemo(() => (sharesCount || 0) * (percentPerShare || 0), [sharesCount, percentPerShare]);
+  const totalPercent = useMemo(() => Number(percentToSell || 0), [percentToSell]);
   const isOver100 = totalPercent > 100;
   const isSoftWarning = totalPercent > 99 && totalPercent <= 100;
 
@@ -41,39 +39,30 @@ export function SellSharesModal({
       setShowWarning(true);
       return;
     }
-    onSubmit({ sharesCount: Math.max(0, Math.floor(sharesCount || 0)), percentPerShare: Math.max(0, Number(percentPerShare || 0)) });
+    onSubmit({ percentToSell: Math.max(0, Number(totalPercent || 0)) });
   };
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} title="Configure Shares to Sell">
+      <Modal isOpen={isOpen} onClose={onClose} title="Configure Ownership to Sell (%)">
         <div className="space-y-5">
           <div className="text-sm text-red-400">
             This is a demo app, please do not try to sell your actual real estate.
           </div>
           <div className="text-xs md:text-sm text-text-secondary">
-            Define how many shares you want to sell and what percent ownership each share represents.
+            Define what percent of the property you want to tokenize and offer (each token represents 1%).
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
-              <label className="block text-sm mb-1 text-text-secondary">Number of shares</label>
+              <label className="block text-sm mb-1 text-text-secondary">Percent to sell (%)</label>
               <input
                 type="number"
                 min={0}
-                value={sharesCount}
-                onChange={(e) => setSharesCount(Math.max(0, Math.floor(Number(e.target.value || 0))))}
-                className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1 text-text-secondary">Percent per share (%)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={percentPerShare}
-                onChange={(e) => setPercentPerShare(Math.max(0, Number(e.target.value || 0)))}
+                max={100}
+                step={1}
+                value={percentToSell}
+                onChange={(e) => setPercentToSell(Math.max(0, Math.min(100, Math.floor(Number(e.target.value || 0)))))}
                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary"
               />
             </div>
@@ -105,7 +94,7 @@ export function SellSharesModal({
               type="button"
               className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors text-sm btn-glow border border-transparent"
               onClick={handleApply}
-              disabled={sharesCount <= 0 || percentPerShare <= 0}
+              disabled={totalPercent <= 0}
             >
               Apply
             </button>
@@ -142,7 +131,7 @@ export function SellSharesModal({
                 type="button"
                 className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors text-sm btn-glow border border-transparent"
                 onClick={() => {
-                  onSubmit({ sharesCount: Math.max(0, Math.floor(sharesCount || 0)), percentPerShare: Math.max(0, Number(percentPerShare || 0)) });
+                  onSubmit({ percentToSell: Math.max(0, Number(totalPercent || 0)) });
                   setShowWarning(false);
                 }}
               >

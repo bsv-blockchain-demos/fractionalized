@@ -129,7 +129,14 @@ export function Admin() {
             // Step 2: Minting shares for property token...
             setStep2("running");
             // Create the ordinal locking script with 1sat inscription
-            const ordinalLockingScript = new Ordinals().lock(userPubKey, response.txid, Number(_data.sharesCount), "deploy+mint", true);
+            // Each token represents 1% ownership; mint the requested percentToSell amount
+            const tokensToMint = Number(_data?.sell?.percentToSell || 0);
+            if (tokensToMint <= 0) {
+                throw new Error("Invalid percentToSell");
+            } else if (tokensToMint > 100) {
+                throw new Error("Percent to sell must be less than or equal to 100");
+            }
+            const ordinalLockingScript = new Ordinals().lock(userPubKey, response.txid, tokensToMint, "deploy+mint", true);
 
             // Create signature to satisfy lockingScript
             // @ts-expect-error
@@ -271,7 +278,7 @@ export function Admin() {
 
     // Shares modal state
     const [isSellOpen, setSellOpen] = useState(false);
-    const [sellConfig, setSellConfig] = useState<SellSharesConfig>({ sharesCount: 10, percentPerShare: 5 });
+    const [sellConfig, setSellConfig] = useState<SellSharesConfig>({ percentToSell: 80 });
 
     const updateField = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }));
     const updateIB = (key: keyof typeof form.investmentBreakdown, value: any) =>
@@ -563,18 +570,14 @@ export function Admin() {
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Tokenization / Shares</h2>
                     <div className="flex items-center justify-between gap-4">
                         <div className="text-sm text-text-secondary">
-                            {sellConfig.sharesCount} shares × {sellConfig.percentPerShare}% each =
-                            {" "}
-                            <span className={sellConfig.sharesCount * sellConfig.percentPerShare > 99 ? "text-red-400 font-semibold" : "text-text-primary font-semibold"}>
-                                {(sellConfig.sharesCount * sellConfig.percentPerShare).toFixed(2)}%
-                            </span>
+                            Offering {Number(sellConfig.percentToSell || 0).toFixed(0)}% ownership (1 token = 1%).
                         </div>
                         <button
                             type="button"
                             className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary text-sm btn-glow"
                             onClick={() => setSellOpen(true)}
                         >
-                            Configure shares to sell
+                            Configure percent to sell
                         </button>
                     </div>
                 </div>

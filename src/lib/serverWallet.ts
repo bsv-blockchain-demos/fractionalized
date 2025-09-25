@@ -1,6 +1,7 @@
 import {
     PrivateKey,
     KeyDeriver,
+    WalletInterface
 } from '@bsv/sdk'
 import { WalletStorageManager, Services, Wallet, StorageClient, WalletSigner } from '@bsv/wallet-toolbox-client'
 
@@ -16,5 +17,5 @@ export async function makeWallet(chain: 'test' | 'main', storageURL: string, pri
     );
     await client.makeAvailable();
     await storageManager.addWalletStorageProvider(client);
-    return wallet;
+    return wallet as WalletInterface;
 }

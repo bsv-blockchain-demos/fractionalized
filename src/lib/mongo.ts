@@ -29,11 +29,19 @@ export interface Properties {
     seller: string,
 }
 
+export interface ShareLock {
+    _id: ObjectId;
+    propertyId: ObjectId;
+    investorId: ObjectId;
+    createdAt: Date;
+}
+
 export interface Shares {
     _id: ObjectId;
     propertyId: ObjectId;
     investorId: ObjectId;
     parentTxid: string;
+    transferTxid: string;
     amount: number;
     createdAt: Date;
     outpoint: string;
@@ -56,6 +64,7 @@ const client = new MongoClient(uri, {
 let db: Db;
 let propertiesCollection: Collection<Properties>;
 let sharesCollection: Collection<Shares>;
+let locksCollection: Collection<ShareLock>;
 
 // Connect to MongoDB
 async function connectToMongo() {
@@ -69,12 +78,18 @@ async function connectToMongo() {
       db = client.db(clusterName);
       propertiesCollection = db.collection("properties");
       sharesCollection = db.collection("shares");
+      locksCollection = db.collection("share_locks");
       
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
       await propertiesCollection.createIndex({ "txids.TokenTxid": 1 }, { unique: true });
 
       await sharesCollection.createIndex({ "_id": 1 });
+      // For quick lookup of latest share for a property and per investor
+      await sharesCollection.createIndex({ propertyId: 1, createdAt: -1 });
+      await sharesCollection.createIndex({ propertyId: 1, investorId: 1, createdAt: -1 });
+      // Concurrency lock unique per (propertyId, investorId)
+      await locksCollection.createIndex({ propertyId: 1, investorId: 1 }, { unique: true });
       
       // Note: _id is automatically unique in MongoDB, no need for custom id field
       
@@ -84,7 +99,7 @@ async function connectToMongo() {
       throw error;
     }
   }
-  return { db, propertiesCollection, sharesCollection };
+  return { db, propertiesCollection, sharesCollection, locksCollection };
 }
 
 // Connect immediately when this module is imported
@@ -102,4 +117,4 @@ process.on('SIGINT', async () => {
   }
 });
 
-export { connectToMongo, propertiesCollection, sharesCollection };
+export { connectToMongo, propertiesCollection, sharesCollection, locksCollection };
