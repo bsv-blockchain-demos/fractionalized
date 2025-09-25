@@ -2,8 +2,9 @@ import { propertiesCollection, Shares, sharesCollection, locksCollection } from 
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
-import { Signature, TransactionSignature, UnlockingScript, PublicKey } from "@bsv/sdk";
+import { Signature, TransactionSignature, UnlockingScript, PublicKey, Transaction } from "@bsv/sdk";
 import { Ordinals } from "../../../utils/ordinals";
+import { broadcastTX } from "../../../hooks/broadcastTX";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -129,6 +130,14 @@ export async function POST(request: Request) {
 
         if (!transferTx) {
             throw new Error("Failed to create transfer transaction");
+        }
+
+        // Broadcast the transfer transaction to the Overlay for later lookup
+        const tx = Transaction.fromBEEF(transferTx.tx as number[]);
+        const overlayResponse = await broadcastTX(tx);
+
+        if (overlayResponse.status !== "success") {
+            console.log(`Failed to broadcast transaction for ${transferTx.txid}`);
         }
 
         // Build share record, chaining parent/transfer txids to form a lineage
