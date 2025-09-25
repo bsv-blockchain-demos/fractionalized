@@ -2,9 +2,10 @@ import { propertiesCollection, Shares, sharesCollection, locksCollection } from 
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
-import { Signature, TransactionSignature, UnlockingScript, PublicKey, Transaction } from "@bsv/sdk";
+import { Signature, TransactionSignature, UnlockingScript, PublicKey, Transaction, LockingScript } from "@bsv/sdk";
 import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
+import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -102,11 +103,42 @@ export async function POST(request: Request) {
         const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, isFirstForInvestor, property.seller);
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(fullParentTx, parentVout);
 
-        const assetId = property.txids.mintTxid.replace(".", "_");
+        const assetId = currentOrdinalOutpoint.replace(".", "_");
         const ordinalTransferScript = new Ordinals().lock(investorId, assetId, amount, "transfer");
 
         // Also get the amount of tokens left from the actual ordinalTxLockingscript
         // Then calculate the token change to send back to the original mintTx
+        const changeAmount = await calcTokenTransfer(fullParentTx, amount);
+
+        let changeScript: LockingScript | null = null;
+        if (parentTxID === property.txids.mintTxid) {
+            changeScript = new Ordinals().lock(
+                property.seller,
+                property.txids.mintTxid.replace(".", "_"),
+                changeAmount,
+                "deploy+mint",
+                true
+            );
+        } else {
+            if (changeAmount > 0) {
+                throw new Error("You cannot purchase a share from a transfer");
+            }
+        }
+
+        const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
+            {
+                outputDescription: "Ordinal transfer",
+                satoshis: 1,
+                lockingScript: ordinalTransferScript.toHex(),
+            },
+        ];
+        if (changeScript) {
+            outputs.push({
+                outputDescription: "Ordinal token change",
+                satoshis: 1,
+                lockingScript: changeScript.toHex(),
+            });
+        }
 
         // Create the transfer transaction
         const transferTx = await wallet.createAction({
@@ -123,13 +155,10 @@ export async function POST(request: Request) {
                     unlockingScript: paymentUnlockingScript.toHex(),
                 }
             ],
-            outputs: [
-                {
-                    outputDescription: "Ordinal transfer",
-                    satoshis: 1,
-                    lockingScript: ordinalTransferScript.toHex(),
-                }
-            ],
+            outputs,
+            options: {
+                randomizeOutputs: false,
+            }
         })
 
         if (!transferTx) {
