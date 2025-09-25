@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { propertiesCollection } from "../../../../lib/mongo";
 import { Transaction } from "@bsv/sdk";
-import { broadcastTX } from "../../../../hooks/broadcastTX";
+import { broadcastTX } from "../../../../hooks/overlayFunctions";
 
 export async function POST(request: Request) {
     const body = await request.json();

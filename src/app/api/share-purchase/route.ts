@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
 import { Signature, TransactionSignature, UnlockingScript, PublicKey, Transaction } from "@bsv/sdk";
 import { Ordinals } from "../../../utils/ordinals";
-import { broadcastTX } from "../../../hooks/broadcastTX";
+import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -89,14 +89,18 @@ export async function POST(request: Request) {
         const parentVout = Number(parentVoutStr || '0');
 
         // Use overlay query with parentTxID to get full TX
-        // fullTx is a dummy which mimics an overlay response so it's easier to edit in later
-        const fullTx = {
-            tx: parentTxID, // tx will be the actual full tx beef
+        const response = await getTransactionByTxID(parentTxID);
+        const txbeef = response?.outputs[0].beef;
+
+        if (!response || !txbeef) {
+            throw new Error("Failed to get transaction by txid");
         }
+
+        const fullParentTx = Transaction.fromBEEF(txbeef as number[]);
 
         // Create the ordinal unlocking and locking script for transfer
         const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, isFirstForInvestor, property.seller);
-        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(fullTx.tx, parentVout); // TODO: Get the full tx from Overlay using the Txid
+        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(fullParentTx, parentVout);
 
         const assetId = property.txids.mintTxid.replace(".", "_");
         const ordinalTransferScript = new Ordinals().lock(investorId, assetId, amount, "transfer");

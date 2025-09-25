@@ -18,3 +18,18 @@ export const broadcastTX = async (tx: Transaction) => {
     console.log("Overlay response: ", overlayResponse);
     return overlayResponse;
 }
+
+export async function getTransactionByTxID(txid: string) {
+    try {
+        // get transaction from overlay
+        const response = await overlay.query({
+            service: 'ls_fractionalize', query: {
+                txid: txid
+            }
+        }, 10000);
+
+        return response;
+    } catch (error) {
+        console.error("Error getting transaction:", error);
+    }
+}
