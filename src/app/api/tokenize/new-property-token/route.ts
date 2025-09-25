@@ -1,28 +1,11 @@
 import { propertiesCollection } from "../../../../lib/mongo";
-import { Hash } from "@bsv/sdk";
-import { makeWallet } from "../../../../lib/serverWallet";
 import { NextResponse } from "next/server";
+import { Properties } from "../../../../lib/mongo";
 
 export async function POST(request: Request) {
-    const { title, location, priceAED, investors, status, annualisedReturn, currentValuationAED, grossYield, netYield, investmentBreakdown, description, features, images, seller } = await request.json();
-    const fields = {
-        title,
-        location,
-        priceAED,
-        investors,
-        status,
-        annualisedReturn,
-        currentValuationAED,
-        grossYield,
-        netYield,
-        investmentBreakdown,
-        description,
-        features,
-        images,
-        seller,
-    };
+    const { data, tx, seller } = await request.json();
 
-    const nullFields = Object.entries(fields)
+    const nullFields = Object.entries(data)
         .filter(([_, value]) => value === null)
         .map(([key]) => key);
 
@@ -31,10 +14,16 @@ export async function POST(request: Request) {
     }
 
     // Format and verify all inputs to satisfy Mongo interface
-    // Validate and safe tokenized transaction UTXO
-
-    const sellerKeyHash = Hash.hash160(seller.toString(), "hex");
-
-    //const property = await propertiesCollection.insertOne({ formattedProperty });
-    return NextResponse.json({});
+    // Follow properties interface but skip _id
+    const formattedPropertyData: Properties = {
+        ...data,
+        TokenTxid: `${tx.txid}.0`,
+        seller,
+    };
+    // Validate and save tokenized transaction UTXO
+    const property = await propertiesCollection.insertOne(formattedPropertyData);
+    if (!property.acknowledged) {
+        return NextResponse.json({ error: "Failed to save property, please try again" }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, status: 200, data: property });
 }

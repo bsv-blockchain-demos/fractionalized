@@ -25,7 +25,7 @@ export interface Properties {
     },
     features: Record<string, number>,
     images: string[],
-    txid: string,
+    txids: Record<string, string>,
     seller: string,
 }
 
@@ -72,6 +72,7 @@ async function connectToMongo() {
       
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
+      await propertiesCollection.createIndex({ "txids.TokenTxid": 1 }, { unique: true });
 
       await sharesCollection.createIndex({ "_id": 1 });
       

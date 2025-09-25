@@ -4,7 +4,7 @@ import { useState, FormEvent, useMemo } from "react";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
-import { Hash, Utils, LockingScript, OP, Transaction, UnlockingScript, PublicKey, Signature, TransactionSignature } from "@bsv/sdk";
+import { Hash, Utils, LockingScript, OP, Transaction, UnlockingScript, PublicKey, Signature, TransactionSignature, P2PKH } from "@bsv/sdk";
 import { Ordinals } from "../utils/ordinals";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
@@ -23,6 +23,14 @@ export function Admin() {
     ];
 
     const handleSubmit = async (_data: any) => {
+        const nullFields = Object.entries(_data)
+            .filter(([_, value]) => value === null)
+            .map(([key]) => key);
+
+        if (nullFields.length > 0) {
+            toast.error(`Missing required fields: ${nullFields.join(', ')}`);
+            return;
+        }
         // Create tokenized transaction from user wallet first
         // Create the amount of shares the user filled in using the returned tokenized transaction
         // Transfer the tokens to the server wallet
@@ -106,8 +114,9 @@ export function Admin() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    txid: response.txid,
-                    vout: 0,
+                    tx: response,
+                    data: _data,
+                    seller: userPubKey,
                 }),
             });
             const sendTokenData = await sendToken.json();
@@ -144,36 +153,73 @@ export function Admin() {
             // Create unlockingScript to unlock the initial token UTXO
             const unlockingScript = new UnlockingScript();
             unlockingScript
-                .writeOpCode(OP.OP_DROP)
                 .writeBin(sig.toChecksigFormat())
                 .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
 
+            // Create payment UTXO
+            const paymentUTXO = new P2PKH();
+            const paymentLockingScript = paymentUTXO.lock(Hash.hash160(userPubKey, "hex"));
+            const paymentUnlockingScript = new UnlockingScript();
+            paymentUnlockingScript
+                .writeBin(sig.toChecksigFormat())
+                .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
+
+            const paymentTxAction = await userWallet?.createAction({
+                description: "Payment UTXO",
+                outputs: [
+                    {
+                        outputDescription: "Payment outpoint",
+                        satoshis: 200,
+                        lockingScript: paymentLockingScript.toHex(),
+                    },
+                ],
+                options: {
+                    randomizeOutputs: false,
+                }
+            });
+
             // Create the mint transaction
-            const mintTx = new Transaction();
-
-            mintTx.addInput({
-                sourceTXID: sendTokenData.txid,
-                sourceOutputIndex: sendTokenData.vout,
-                unlockingScript: unlockingScript,
+            const actionRes = await userWallet?.createAction({
+                description: "Mint shares for property token",
+                inputs: [
+                    {
+                        inputDescription: "Property token",
+                        outpoint: `${response.txid}.0`,
+                        unlockingScript: unlockingScript.toHex(),
+                    },
+                    {
+                        inputDescription: "Payment",
+                        outpoint: `${paymentTxAction?.txid}.0`,
+                        unlockingScript: paymentUnlockingScript.toHex(),
+                    },
+                ],
+                outputs: [
+                    {
+                        outputDescription: "Share tokens",
+                        satoshis: 1,
+                        lockingScript: ordinalLockingScript.toHex(),
+                    },
+                ],
+                options: {
+                    randomizeOutputs: false,
+                }
             });
-
-            // Create the output with inscription
-            mintTx.addOutput({
-                satoshis: 1,
-                lockingScript: ordinalLockingScript,
-            });
-
-            mintTx.sign();
+            console.log({ actionRes });
+            if (!actionRes?.txid) {
+                throw new Error("Failed to mint shares for property token");
+            }
 
             // Send the mint transaction to the server for storage
-            console.log({ mintTx });
+            console.log({ actionRes });
             const sendMintTx = await fetch("/api/tokenize/initialize-tokens", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    mintTx: mintTx.toHex(),
+                    mintTx: actionRes,
+                    paymentTx: paymentTxAction,
+                    propertyTokenTxid: response.txid,
                 }),
             });
             const sendMintTxData = await sendMintTx.json();

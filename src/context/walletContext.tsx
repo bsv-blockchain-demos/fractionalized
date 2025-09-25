@@ -54,7 +54,10 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
                 return;
             }
 
-            const { publicKey } = await newWallet.getPublicKey({ identityKey: true });
+            const { publicKey } = await newWallet.getPublicKey({ 
+                protocolID: [0, "ordinals"],
+                keyID: "0", 
+            });
 
             // Only update state once everything is fetched
             setUserWallet(newWallet);
