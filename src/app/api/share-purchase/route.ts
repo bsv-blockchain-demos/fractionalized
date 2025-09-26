@@ -110,15 +110,19 @@ export async function POST(request: Request) {
         // Then calculate the token change to send back to the original mintTx
         const changeAmount = await calcTokenTransfer(fullParentTx, amount);
 
+        let changedOriginalTx: boolean = false;
+
         let changeScript: LockingScript | null = null;
         if (parentTxID === property.txids.mintTxid) {
             changeScript = new Ordinals().lock(
                 property.seller,
                 property.txids.mintTxid.replace(".", "_"),
                 changeAmount,
-                "deploy+mint",
+                "transfer",
+                false,
                 true
             );
+            changedOriginalTx = true;
         } else {
             if (changeAmount > 0) {
                 throw new Error("You cannot purchase a share from a transfer");
@@ -171,6 +175,18 @@ export async function POST(request: Request) {
 
         if (overlayResponse.status !== "success") {
             console.log(`Failed to broadcast transaction for ${transferTx.txid}`);
+        }
+
+        if (changedOriginalTx) {
+            // The original token tx has changed because tokens have been spent
+            // Update the original token tx
+            const updateRes = await propertiesCollection.updateOne(
+                { _id: propertyObjectId },
+                { $set: { "txids.mintTxid": `${transferTx.txid}.1` } }
+            );
+            if (!updateRes.modifiedCount) {
+                throw new Error("Failed to update original token tx");
+            }
         }
 
         // Build share record, chaining parent/transfer txids to form a lineage

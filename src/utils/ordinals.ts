@@ -21,7 +21,8 @@ export class Ordinals implements ScriptTemplate {
         assetId: string, // AssetID = txid_vout
         shares: number,
         type: "deploy+mint" | "transfer",
-        isFirst?: boolean
+        isFirst?: boolean,
+        serverChange?: boolean
     ): LockingScript {
         const pubKeyHash = Hash.hash160(address, "hex");
         let inscription: any;
@@ -69,7 +70,35 @@ export class Ordinals implements ScriptTemplate {
                 .writeOpCode(OP.OP_FROMALTSTACK)
                 .writeOpCode(OP.OP_2)
                 .writeOpCode(OP.OP_CHECKMULTISIG)
-        } else {
+        } else if (serverChange) {
+            const oneOfTwoHash = Hash.hash160(serverPubkey + address, "hex");
+
+            lockingScript
+                // Write inscription
+                .writeOpCode(OP.OP_0)
+                .writeOpCode(OP.OP_IF)
+                .writeBin(Utils.toArray('ord', 'utf8'))
+                .writeOpCode(OP.OP_1)
+                .writeBin(Utils.toArray('application/bsv-20', 'utf8'))
+                .writeOpCode(OP.OP_0)
+                .writeBin(Utils.toArray(jsonString, 'utf8'))
+                .writeOpCode(OP.OP_ENDIF)
+                // Write 1 of 2 multisig lockingScript
+                .writeOpCode(OP.OP_1)
+                .writeOpCode(OP.OP_2DUP)
+                .writeOpCode(OP.OP_CAT)
+                .writeOpCode(OP.OP_HASH160)
+                .writeBin(oneOfTwoHash)
+                .writeOpCode(OP.OP_EQUALVERIFY)
+                .writeOpCode(OP.OP_TOALTSTACK)
+                .writeOpCode(OP.OP_TOALTSTACK)
+                .writeOpCode(OP.OP_1)
+                .writeOpCode(OP.OP_FROMALTSTACK)
+                .writeOpCode(OP.OP_FROMALTSTACK)
+                .writeOpCode(OP.OP_2)
+                .writeOpCode(OP.OP_CHECKMULTISIG)
+        }
+        else {
             lockingScript
                 // Write inscription
                 .writeOpCode(OP.OP_0)

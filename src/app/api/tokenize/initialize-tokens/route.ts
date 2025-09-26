@@ -30,8 +30,8 @@ export async function POST(request: Request) {
             { _id: property._id },
             {
                 $set: {
-                    "txids.mintTxid": mintTx.txid,
-                    "txids.paymentTxid": paymentTx.txid,
+                    "txids.mintTxid": `${mintTx.txid}.0`,
+                    "txids.paymentTxid": `${paymentTx.txid}.0`,
                 },
             }
         );
