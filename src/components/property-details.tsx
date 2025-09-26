@@ -1,13 +1,13 @@
 "use client";
 
-import { properties } from '../lib/dummydata';
+import { dummyProperties } from '../lib/dummydata';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Modal } from './modal';
 import { useFeatureDisplay } from '../hooks/useFeatureDisplay';
 
 export function PropertyDetails({ propertyId }: { propertyId: string }) {
-    const property = properties.find(p => p._id.toString() === propertyId);
+    const property = dummyProperties.find(p => p._id.toString() === propertyId);
     
     if (!property) {
         return <div>Property not found</div>;
@@ -114,36 +114,51 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             {/* Why invest section */}
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-6 text-text-primary">Why invest in this property?</h2>
-                <div className="grid grid-cols-2 gap-8">
-                    <div>
-                        <h3 className="font-semibold mb-2 text-text-primary">Modern Urban Living</h3>
-                        <p className="text-sm mb-4 text-text-secondary">
-                            J One Tower in Business Bay offers stylish, fully furnished apartments with smart layouts and premium finishes, ideal for young professionals.
-                        </p>
-                        <h3 className="font-semibold mb-2 text-text-primary">Excellent Facilities</h3>
-                        <p className="text-sm mb-4 text-text-secondary">
-                            Residents enjoy access to a rooftop infinity pool, a fully equipped gym, spa with sauna and steam rooms, children's play areas, and 24/7 security coverage.
-                        </p>
-                        <h3 className="font-semibold mb-2 text-text-primary">Below Market Price</h3>
-                        <p className="text-sm text-text-secondary">
-                            Priced at AED 1,450,000 approximately 22.8% below the estimated AED 1,874,563 valuation by third party company, offering a strong entry point.
-                        </p>
+                {property.whyInvest && property.whyInvest.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {property.whyInvest.map((w, i) => (
+                            <div key={i}>
+                                {w.title ? (
+                                    <h3 className="font-semibold mb-2 text-text-primary">{w.title}</h3>
+                                ) : null}
+                                {w.text ? (
+                                    <p className="text-sm mb-4 text-text-secondary">{w.text}</p>
+                                ) : null}
+                            </div>
+                        ))}
                     </div>
-                    <div>
-                        <h3 className="font-semibold mb-2 text-text-primary">Strong Rental Appeal</h3>
-                        <p className="text-sm mb-4 text-text-secondary">
-                            This flat-floor unit with excellent community and partial lake views is well-positioned for immediate occupancy, appealing to long-term tenants.
-                        </p>
-                        <h3 className="font-semibold mb-2 text-text-primary">Attractive Investment Returns</h3>
-                        <p className="text-sm mb-4 text-text-secondary">
-                            With a projected rental yield of 8.07% and an estimated average annual net rental returns of 5.22%, and an annualised ROI of 13.86% over five years.
-                        </p>
-                        <h3 className="font-semibold mb-2 text-text-primary">Prime Location</h3>
-                        <p className="text-sm text-text-secondary">
-                            Strategically located in Business Bay with easy access to Downtown Dubai, Dubai Mall, and metro stations, ensuring high rental demand and capital appreciation.
-                        </p>
+                ) : (
+                    <div className="grid grid-cols-2 gap-8">
+                        <div>
+                            <h3 className="font-semibold mb-2 text-text-primary">Modern Urban Living</h3>
+                            <p className="text-sm mb-4 text-text-secondary">
+                                J One Tower in Business Bay offers stylish, fully furnished apartments with smart layouts and premium finishes, ideal for young professionals.
+                            </p>
+                            <h3 className="font-semibold mb-2 text-text-primary">Excellent Facilities</h3>
+                            <p className="text-sm mb-4 text-text-secondary">
+                                Residents enjoy access to a rooftop infinity pool, a fully equipped gym, spa with sauna and steam rooms, children's play areas, and 24/7 security coverage.
+                            </p>
+                            <h3 className="font-semibold mb-2 text-text-primary">Below Market Price</h3>
+                            <p className="text-sm text-text-secondary">
+                                Priced at AED 1,450,000 approximately 22.8% below the estimated AED 1,874,563 valuation by third party company, offering a strong entry point.
+                            </p>
+                        </div>
+                        <div>
+                            <h3 className="font-semibold mb-2 text-text-primary">Strong Rental Appeal</h3>
+                            <p className="text-sm mb-4 text-text-secondary">
+                                This flat-floor unit with excellent community and partial lake views is well-positioned for immediate occupancy, appealing to long-term tenants.
+                            </p>
+                            <h3 className="font-semibold mb-2 text-text-primary">Attractive Investment Returns</h3>
+                            <p className="text-sm mb-4 text-text-secondary">
+                                With a projected rental yield of 8.07% and an estimated average annual net rental returns of 5.22%, and an annualised ROI of 13.86% over five years.
+                            </p>
+                            <h3 className="font-semibold mb-2 text-text-primary">Prime Location</h3>
+                            <p className="text-sm text-text-secondary">
+                                Strategically located in Business Bay with easy access to Downtown Dubai, Dubai Mall, and metro stations, ensuring high rental demand and capital appreciation.
+                            </p>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Investment Breakdown */}
@@ -152,7 +167,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 <div className="grid grid-cols-4 gap-6">
                     <div>
                         <div className="text-sm mb-1 text-text-secondary">Property price</div>
-                        <div className="font-bold text-text-primary">{formatCurrency(property.investmentBreakdown.propertyPrice)}</div>
+                        <div className="font-bold text-text-primary">{formatCurrency(property.priceAED)}</div>
                     </div>
                     <div>
                         <div className="text-sm mb-1 text-text-secondary">Purchase cost</div>

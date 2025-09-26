@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useMemo } from "react";
+import { InfoTip } from "./info-tip";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
@@ -274,11 +275,11 @@ export function Admin() {
         grossYield: "",
         netYield: "",
         investmentBreakdown: {
-            propertyPrice: "",
             purchaseCost: "",
             transactionCost: "",
             runningCost: "",
         },
+        whyInvest: [{ title: "", text: "" }],
         descriptionDetails: "",
         descriptionFeatures: "", // comma-separated
         // Basic set of features; extend as needed
@@ -302,6 +303,11 @@ export function Admin() {
     const updateField = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }));
     const updateIB = (key: keyof typeof form.investmentBreakdown, value: any) =>
         setForm((f) => ({ ...f, investmentBreakdown: { ...f.investmentBreakdown, [key]: value } }));
+    const updateWhy = (idx: number, key: 'title' | 'text', value: string) =>
+        setForm((f) => ({
+            ...f,
+            whyInvest: f.whyInvest.map((w, i) => (i === idx ? { ...w, [key]: value } : w)),
+        }));
     const updateFeature = (key: string, value: number) =>
         setForm((f) => ({ ...f, features: { ...f.features, [key]: value } }));
 
@@ -319,11 +325,13 @@ export function Admin() {
             grossYield: form.grossYield.trim(),
             netYield: form.netYield.trim(),
             investmentBreakdown: {
-                propertyPrice: Number(form.investmentBreakdown.propertyPrice || 0),
                 purchaseCost: Number(form.investmentBreakdown.purchaseCost || 0),
                 transactionCost: Number(form.investmentBreakdown.transactionCost || 0),
                 runningCost: Number(form.investmentBreakdown.runningCost || 0),
             },
+            whyInvest: (form.whyInvest || [])
+                .map((w) => ({ title: w.title.trim(), text: w.text.trim() }))
+                .filter((w) => w.title || w.text),
             description: {
                 details: form.descriptionDetails.trim(),
                 features: form.descriptionFeatures
@@ -488,46 +496,96 @@ export function Admin() {
 
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Investment Breakdown (AED)</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Property Price</label>
-                            <input
-                                type="number"
-                                min={0}
-                                className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
-                                value={form.investmentBreakdown.propertyPrice}
-                                onChange={(e) => updateIB("propertyPrice", e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Purchase Cost</label>
+                            <label className="block text-sm mb-1 text-text-secondary flex items-center">
+                                <span>Purchase Cost</span>
+                                <InfoTip text="One-time acquisition fees such as government transfer fee, land registry, DLD, etc." />
+                            </label>
                             <input
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.investmentBreakdown.purchaseCost}
                                 onChange={(e) => updateIB("purchaseCost", e.target.value)}
+                                placeholder="e.g. Government fees, transfer fees"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Transaction Cost</label>
+                            <label className="block text-sm mb-1 text-text-secondary flex items-center">
+                                <span>Transaction Cost</span>
+                                <InfoTip text="Brokerage, legal fees, due diligence, registration, bank charges." />
+                            </label>
                             <input
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.investmentBreakdown.transactionCost}
                                 onChange={(e) => updateIB("transactionCost", e.target.value)}
+                                placeholder="e.g. Brokerage, legal, registration"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Running Cost</label>
+                            <label className="block text-sm mb-1 text-text-secondary flex items-center">
+                                <span>Running Cost</span>
+                                <InfoTip text="Recurring costs such as maintenance, service charges, utilities, property management." />
+                            </label>
                             <input
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.investmentBreakdown.runningCost}
                                 onChange={(e) => updateIB("runningCost", e.target.value)}
+                                placeholder="e.g. Maintenance, service charges"
                             />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Why invest? editor */}
+                <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
+                    <h2 className="text-lg font-semibold mb-3 text-text-primary">Why invest in this property?</h2>
+                    <div className="space-y-4">
+                        {(form.whyInvest || []).map((w, idx) => (
+                            <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm mb-1 text-text-secondary">Title</label>
+                                    <input
+                                        className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
+                                        value={w.title}
+                                        onChange={(e) => updateWhy(idx, 'title', e.target.value)}
+                                        placeholder="e.g. Strong rental appeal"
+                                    />
+                                </div>
+                                <div className="md:col-span-3">
+                                    <label className="block text-sm mb-1 text-text-secondary">Text</label>
+                                    <textarea
+                                        className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary h-24"
+                                        value={w.text}
+                                        onChange={(e) => updateWhy(idx, 'text', e.target.value)}
+                                        placeholder="Explain the key benefit for investors"
+                                    />
+                                </div>
+                                <div className="md:col-span-5 flex justify-end">
+                                    <button
+                                        type="button"
+                                        className="px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary text-sm hover:cursor-pointer"
+                                        onClick={() => setForm(f => ({ ...f, whyInvest: f.whyInvest.filter((_, i) => i !== idx) }))}
+                                        disabled={(form.whyInvest || []).length <= 1}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        <div>
+                            <button
+                                type="button"
+                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary text-sm btn-glow"
+                                onClick={() => setForm(f => ({ ...f, whyInvest: [...(f.whyInvest || []), { title: "", text: "" }] }))}
+                            >
+                                Add reason
+                            </button>
                         </div>
                     </div>
                 </div>

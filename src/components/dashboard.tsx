@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { properties, type Property } from "../lib/dummydata";
+import { dummyProperties, type Property } from "../lib/dummydata";
 
 type Investment = {
   propertyId: string;
@@ -39,7 +39,7 @@ export function Dashboard() {
 
   const investedProperties = useMemo(() => {
     const map = new Map(myInvestments.map((i) => [i.propertyId, i.percent]));
-    return properties
+    return dummyProperties
       .filter((p) => map.has(p._id))
       .map((p) => ({ property: p, percent: map.get(p._id)! }));
   }, [myInvestments]);

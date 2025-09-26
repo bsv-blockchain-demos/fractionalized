@@ -27,6 +27,18 @@ export const propertiesValidator = {
       seller: {
         bsonType: 'string',
       },
+      whyInvest: {
+        bsonType: 'array',
+        items: {
+          bsonType: 'object',
+          required: [],
+          properties: {
+            title: { bsonType: 'string' },
+            text: { bsonType: 'string' },
+          },
+          additionalProperties: false,
+        },
+      },
     },
     additionalProperties: true,
   },

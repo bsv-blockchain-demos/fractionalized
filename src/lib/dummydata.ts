@@ -13,7 +13,6 @@ export type Property = {
   grossYield: string;
   netYield: string;
   investmentBreakdown: {
-    propertyPrice: number;
     purchaseCost: number;
     transactionCost: number;
     runningCost: number;
@@ -22,6 +21,7 @@ export type Property = {
     details: string;
     features: string[];
   };
+  whyInvest?: { title: string; text: string }[];
   features: Record<string, number>;
   images: string[];
 };
@@ -39,7 +39,6 @@ export const dummyProperties: Property[] = [
     grossYield: "7.85%",
     netYield: "5.22%",
     investmentBreakdown: {
-      propertyPrice: 1380000,
       purchaseCost: 118300,
       transactionCost: 26900,
       runningCost: 37200,
@@ -72,7 +71,6 @@ export const dummyProperties: Property[] = [
     grossYield: "6.90%",
     netYield: "4.88%",
     investmentBreakdown: {
-      propertyPrice: 1050000,
       purchaseCost: 92100,
       transactionCost: 24400,
       runningCost: 35100,
@@ -105,7 +103,6 @@ export const dummyProperties: Property[] = [
     grossYield: "8.10%",
     netYield: "5.44%",
     investmentBreakdown: {
-      propertyPrice: 640000,
       purchaseCost: 58500,
       transactionCost: 16800,
       runningCost: 24300,
@@ -137,7 +134,6 @@ export const dummyProperties: Property[] = [
     grossYield: "7.20%",
     netYield: "4.95%",
     investmentBreakdown: {
-      propertyPrice: 970000,
       purchaseCost: 89200,
       transactionCost: 21400,
       runningCost: 33200,
@@ -170,7 +166,6 @@ export const dummyProperties: Property[] = [
     grossYield: "8.50%",
     netYield: "5.70%",
     investmentBreakdown: {
-      propertyPrice: 715000,
       purchaseCost: 63900,
       transactionCost: 17500,
       runningCost: 25700,
@@ -202,7 +197,6 @@ export const dummyProperties: Property[] = [
     grossYield: "8.20%",
     netYield: "5.40%",
     investmentBreakdown: {
-      propertyPrice: 1280000,
       purchaseCost: 110900,
       transactionCost: 26200,
       runningCost: 36400,
@@ -235,7 +229,6 @@ export const dummyProperties: Property[] = [
     grossYield: "7.00%",
     netYield: "4.78%",
     investmentBreakdown: {
-      propertyPrice: 1190000,
       purchaseCost: 101300,
       transactionCost: 24100,
       runningCost: 34900,
@@ -268,7 +261,6 @@ export const dummyProperties: Property[] = [
     grossYield: "8.40%",
     netYield: "5.60%",
     investmentBreakdown: {
-      propertyPrice: 1560000,
       purchaseCost: 134800,
       transactionCost: 28100,
       runningCost: 38800,
@@ -301,7 +293,6 @@ export const dummyProperties: Property[] = [
     grossYield: "7.60%",
     netYield: "5.05%",
     investmentBreakdown: {
-      propertyPrice: 585000,
       purchaseCost: 51200,
       transactionCost: 14900,
       runningCost: 23100,
@@ -333,7 +324,6 @@ export const dummyProperties: Property[] = [
     grossYield: "8.60%",
     netYield: "5.75%",
     investmentBreakdown: {
-      propertyPrice: 1420000,
       purchaseCost: 123600,
       transactionCost: 27100,
       runningCost: 37900,

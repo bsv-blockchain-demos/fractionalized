@@ -15,7 +15,6 @@ export interface Properties {
     grossYield: string;
     netYield: string;
     investmentBreakdown: {
-        propertyPrice: number;
         purchaseCost: number;
         transactionCost: number;
         runningCost: number;
@@ -24,6 +23,7 @@ export interface Properties {
         details: string;
         features: string[];
     },
+    whyInvest?: { title: string; text: string }[];
     features: Record<string, number>,
     images: string[],
     txids: Record<string, string>,
