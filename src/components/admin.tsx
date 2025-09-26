@@ -138,7 +138,7 @@ export function Admin() {
             } else if (tokensToMint > 100) {
                 throw new Error("Percent to sell must be less than or equal to 100");
             }
-            const ordinalLockingScript = new Ordinals().lock(userPubKey, response.txid, tokensToMint, "deploy+mint", true);
+            const ordinalLockingScript = new Ordinals().lock(userPubKey, `${response.txid}_0`, tokensToMint, "deploy+mint", true);
 
             // Create signature to satisfy lockingScript
             // @ts-expect-error
@@ -245,7 +245,7 @@ export function Admin() {
                 body: JSON.stringify({
                     mintTx: actionRes,
                     paymentTx: paymentTxAction,
-                    propertyTokenTxid: response.txid,
+                    propertyTokenTxid: `${response.txid}.0`,
                 }),
             });
             const sendMintTxData = await sendMintTx.json();

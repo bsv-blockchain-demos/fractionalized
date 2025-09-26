@@ -17,7 +17,9 @@ export async function POST(request: Request) {
     // Follow properties interface but skip _id
     const formattedPropertyData: Properties = {
         ...data,
-        TokenTxid: `${tx.txid}.0`,
+        txids: {
+            TokenTxid: `${tx.txid}.0`,
+        },
         seller,
     };
     // Validate and save tokenized transaction UTXO

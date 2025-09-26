@@ -1,12 +1,12 @@
 import { Transaction, OP, Utils } from "@bsv/sdk";
 
-export async function calcTokenTransfer(parentTx: Transaction, amount: number) {
-    const script = parentTx.outputs[0].lockingScript;
+export async function calcTokenTransfer(parentTx: Transaction, vout: number, amount: number) {
+    const script = parentTx.outputs[vout].lockingScript;
     const chunks = script.chunks;
     let parentAmount: number | undefined = undefined;
     
     if (chunks.length < 7) {
-        throw new Error("Failed to get parent amount");
+        throw new Error("Invalid script");
     }
     const inscription = Utils.toUTF8(chunks[6].data as number[]);
     const inscriptionJSON = JSON.parse(inscription);

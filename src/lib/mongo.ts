@@ -1,6 +1,7 @@
 import { MongoClient, ServerApiVersion, Db, Collection, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 dotenv.config();
+import { propertiesValidator, sharesValidator } from "./validators";
 
 export interface Properties {
     _id: ObjectId;
@@ -44,7 +45,6 @@ export interface Shares {
     transferTxid: string;
     amount: number;
     createdAt: Date;
-    outpoint: string;
 }
 
 // Use environment variable for MongoDB URI or fallback to hardcoded value
@@ -76,6 +76,51 @@ async function connectToMongo() {
       
       // Initialize database and collections
       db = client.db(clusterName);
+      // Ensure collections exist with validators applied
+      const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name));
+
+      // properties collection
+      if (!existing.has("properties")) {
+        await db.createCollection("properties", {
+          validator: propertiesValidator as any,
+          validationLevel: "strict",
+        });
+      } else {
+        try {
+          await db.command({
+            collMod: "properties",
+            validator: propertiesValidator,
+            validationLevel: "strict",
+          });
+        } catch (e) {
+          console.warn("collMod properties failed (will continue):", e);
+        }
+      }
+
+      // shares collection
+      if (!existing.has("shares")) {
+        await db.createCollection("shares", {
+          validator: sharesValidator as any,
+          validationLevel: "strict",
+        });
+      } else {
+        try {
+          await db.command({
+            collMod: "shares",
+            validator: sharesValidator,
+            validationLevel: "strict",
+          });
+        } catch (e) {
+          console.warn("collMod shares failed (will continue):", e);
+        }
+      }
+
+      // share locks (no validator needed)
+      if (!existing.has("share_locks")) {
+        await db.createCollection("share_locks");
+      }
+
+      // Get typed collection handles
       propertiesCollection = db.collection("properties");
       sharesCollection = db.collection("shares");
       locksCollection = db.collection("share_locks");

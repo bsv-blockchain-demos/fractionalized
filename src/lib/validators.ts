@@ -1,0 +1,56 @@
+export const outpointPattern = '^[0-9a-fA-F]{64}([._])\\d+$';
+
+export const propertiesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['txids', 'seller'],
+    properties: {
+      txids: {
+        bsonType: 'object',
+        required: ['TokenTxid'],
+        properties: {
+          TokenTxid: {
+            bsonType: 'string',
+            pattern: outpointPattern,
+          },
+          mintTxid: {
+            bsonType: 'string',
+            pattern: outpointPattern,
+          },
+          paymentTxid: {
+            bsonType: 'string',
+            pattern: outpointPattern,
+          },
+        },
+        additionalProperties: true,
+      },
+      seller: {
+        bsonType: 'string',
+      },
+    },
+    additionalProperties: true,
+  },
+} as const;
+
+export const sharesValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'propertyId',
+      'investorId',
+      'parentTxid',
+      'transferTxid',
+      'amount',
+      'createdAt',
+    ],
+    properties: {
+      propertyId: { bsonType: 'objectId' },
+      investorId: { bsonType: 'objectId' },
+      parentTxid: { bsonType: 'string', pattern: outpointPattern },
+      transferTxid: { bsonType: 'string', pattern: outpointPattern },
+      amount: { bsonType: 'number' },
+      createdAt: { bsonType: 'date' },
+    },
+    additionalProperties: true,
+  },
+} as const;

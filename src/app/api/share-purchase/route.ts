@@ -85,7 +85,7 @@ export async function POST(request: Request) {
             .toArray();
         const isFirstForInvestor = lastShareForInvestor.length === 0;
         // Current ordinal outpoint to spend: either the original mint outpoint, or the last transfer outpoint for this investor
-        const currentOrdinalOutpoint = isFirstForInvestor ? property.txids.mintTxid : `${lastShareForInvestor[0].transferTxid}.0`;
+        const currentOrdinalOutpoint = isFirstForInvestor ? property.txids.mintTxid : lastShareForInvestor[0].transferTxid;
         const [parentTxID, parentVoutStr] = String(currentOrdinalOutpoint).split('.');
         const parentVout = Number(parentVoutStr || '0');
 
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 
         // Also get the amount of tokens left from the actual ordinalTxLockingscript
         // Then calculate the token change to send back to the original mintTx
-        const changeAmount = await calcTokenTransfer(fullParentTx, amount);
+        const changeAmount = await calcTokenTransfer(fullParentTx, parentVout, amount);
 
         let changedOriginalTx: boolean = false;
 
@@ -196,9 +196,8 @@ export async function POST(request: Request) {
             investorId: investorObjectId,
             amount,
             parentTxid: isFirstForInvestor ? property.txids.mintTxid : (lastShareForInvestor[0].transferTxid as string),
-            transferTxid: transferTx.txid as string,
+            transferTxid: `${transferTx.txid}.0`,
             createdAt: new Date(),
-            outpoint: `${transferTx.txid}.0`,
         }
         const share = await sharesCollection.insertOne(formattedShare);
         return NextResponse.json({ share });
