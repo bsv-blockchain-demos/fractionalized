@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, useMemo } from "react";
+import { useState, FormEvent, useMemo, useRef } from "react";
 import { InfoTip } from "./info-tip";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
@@ -14,6 +14,12 @@ type StepStatus = "idle" | "running" | "success" | "error";
 const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c6f244c294390d22d3f5bb81cb51dfc1eb165f6968e2455f18d39";
 
 export function Admin() {
+    // Character limits (must match server validators in validators.ts)
+    const MAX_DETAILS = 1500;
+    const MAX_WHY_TITLE = 80;
+    const MAX_WHY_TEXT = 400;
+    const MAX_TITLE = 80;
+    const MAX_LOCATION = 80;
     const [processing, setProcessing] = useState(false);
     const [step1, setStep1] = useState<StepStatus>("idle");
     const [step2, setStep2] = useState<StepStatus>("idle");
@@ -24,6 +30,83 @@ export function Admin() {
         "Creating property token...",
         "Minting shares for property token...",
     ];
+
+    // Refs for focusing fields on validation errors
+    const detailsRef = useRef<HTMLTextAreaElement | null>(null);
+    const titleRef = useRef<HTMLInputElement | null>(null);
+    const locationRef = useRef<HTMLInputElement | null>(null);
+    const priceRef = useRef<HTMLInputElement | null>(null);
+    const valuationRef = useRef<HTMLInputElement | null>(null);
+    const purchaseRef = useRef<HTMLInputElement | null>(null);
+    const transactionRef = useRef<HTMLInputElement | null>(null);
+    const runningRef = useRef<HTMLInputElement | null>(null);
+    const investorsRef = useRef<HTMLInputElement | null>(null);
+    const whyTitleRefs = useRef<Array<HTMLInputElement | null>>([]);
+    const whyTextRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
+
+    const focusErrorField = (messages: string[]) => {
+        // Prefer first message
+        const msg = messages[0] || "";
+        // whyInvest[n].title/text
+        const m = msg.match(/whyInvest\[(\d+)\]\.(title|text)/);
+        if (m) {
+            const idx = Number(m[1]);
+            const field = m[2];
+            const ref = field === 'title' ? whyTitleRefs.current[idx] : whyTextRefs.current[idx];
+            if (ref) {
+                ref.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                ref.focus();
+                return;
+            }
+        }
+        // Title / Location
+        if ((/title too long/i.test(msg) || /title is required/i.test(msg)) && titleRef.current) {
+            titleRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            titleRef.current.focus();
+            return;
+        }
+        if ((/location too long/i.test(msg) || /location is required/i.test(msg)) && locationRef.current) {
+            locationRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            locationRef.current.focus();
+            return;
+        }
+        // Description details
+        if (/Description details too long/i.test(msg) && detailsRef.current) {
+            detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            detailsRef.current.focus();
+            return;
+        }
+        // Currency fields
+        if (/priceAED/i.test(msg) && priceRef.current) {
+            priceRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            priceRef.current.focus();
+            return;
+        }
+        if (/currentValuationAED/i.test(msg) && valuationRef.current) {
+            valuationRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            valuationRef.current.focus();
+            return;
+        }
+        if (/investmentBreakdown\.purchaseCost/i.test(msg) && purchaseRef.current) {
+            purchaseRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            purchaseRef.current.focus();
+            return;
+        }
+        if (/investmentBreakdown\.transactionCost/i.test(msg) && transactionRef.current) {
+            transactionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            transactionRef.current.focus();
+            return;
+        }
+        if (/investmentBreakdown\.runningCost/i.test(msg) && runningRef.current) {
+            runningRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            runningRef.current.focus();
+            return;
+        }
+        if (/investors/i.test(msg) && investorsRef.current) {
+            investorsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            investorsRef.current.focus();
+        }
+    };
 
     const handleSubmit = async (_data: any) => {
         const nullFields = Object.entries(_data)
@@ -124,7 +207,16 @@ export function Admin() {
             });
             const sendTokenData = await sendToken.json();
             console.log({ sendTokenData });
-            if (!sendTokenData?.txid) {
+            if (!sendToken.ok && sendTokenData?.error === "Validation failed") {
+                const arr = Array.isArray(sendTokenData?.details) ? sendTokenData.details : [];
+                const details = arr.join("; ");
+                toast.error(`Validation failed. Please fix: ${details}`, { duration: 6000, position: 'top-center', id: 'validation-failed' });
+                if (arr.length > 0) focusErrorField(arr);
+                setStep1("error");
+                setProcessing(false);
+                return;
+            }
+            if (!sendToken.ok) {
                 throw new Error("Failed to send property token");
             }
             setStep1("success");
@@ -311,6 +403,9 @@ export function Admin() {
     const updateFeature = (key: string, value: number) =>
         setForm((f) => ({ ...f, features: { ...f.features, [key]: value } }));
 
+    const detailsLen = useMemo(() => form.descriptionDetails.length, [form.descriptionDetails]);
+    const titleLen = useMemo(() => form.title.length, [form.title]);
+    const locationLen = useMemo(() => form.location.length, [form.location]);
     const onSubmit = async (e: FormEvent) => {
         e.preventDefault();
         // Build payload matching the Properties interface (except _id which DB creates)
@@ -391,23 +486,33 @@ export function Admin() {
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Basic Info</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Title</label>
+                            <label className="block text-sm mb-1 text-text-secondary flex items-center justify-between">
+                                <span>Title</span>
+                                <span className="text-xs text-text-secondary">{titleLen}/{MAX_TITLE}</span>
+                            </label>
                             <input
+                                ref={titleRef}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.title}
-                                onChange={(e) => updateField("title", e.target.value)}
+                                onChange={(e) => updateField("title", e.target.value.slice(0, MAX_TITLE))}
                                 placeholder="One Bedroom Apartment in ..."
                                 required
+                                maxLength={MAX_TITLE}
                             />
                         </div>
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Location</label>
+                            <label className="block text-sm mb-1 text-text-secondary flex items-center justify-between">
+                                <span>Location</span>
+                                <span className="text-xs text-text-secondary">{locationLen}/{MAX_LOCATION}</span>
+                            </label>
                             <input
+                                ref={locationRef}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.location}
-                                onChange={(e) => updateField("location", e.target.value)}
+                                onChange={(e) => updateField("location", e.target.value.slice(0, MAX_LOCATION))}
                                 placeholder="Dubai Marina, Dubai | Apartment"
                                 required
+                                maxLength={MAX_LOCATION}
                             />
                         </div>
                         <div>
@@ -428,7 +533,9 @@ export function Admin() {
                             <input
                                 type="number"
                                 min={0}
+                                max={100}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
+                                ref={investorsRef}
                                 value={form.investors}
                                 onChange={(e) => updateField("investors", e.target.value)}
                             />
@@ -445,6 +552,7 @@ export function Admin() {
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
+                                ref={priceRef}
                                 value={form.priceAED}
                                 onChange={(e) => updateField("priceAED", e.target.value)}
                                 required
@@ -456,6 +564,7 @@ export function Admin() {
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
+                                ref={valuationRef}
                                 value={form.currentValuationAED}
                                 onChange={(e) => updateField("currentValuationAED", e.target.value)}
                                 required
@@ -507,6 +616,7 @@ export function Admin() {
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.investmentBreakdown.purchaseCost}
+                                ref={purchaseRef}
                                 onChange={(e) => updateIB("purchaseCost", e.target.value)}
                                 placeholder="e.g. Government fees, transfer fees"
                             />
@@ -521,6 +631,7 @@ export function Admin() {
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.investmentBreakdown.transactionCost}
+                                ref={transactionRef}
                                 onChange={(e) => updateIB("transactionCost", e.target.value)}
                                 placeholder="e.g. Brokerage, legal, registration"
                             />
@@ -535,6 +646,7 @@ export function Admin() {
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.investmentBreakdown.runningCost}
+                                ref={runningRef}
                                 onChange={(e) => updateIB("runningCost", e.target.value)}
                                 placeholder="e.g. Maintenance, service charges"
                             />
@@ -549,20 +661,28 @@ export function Admin() {
                         {(form.whyInvest || []).map((w, idx) => (
                             <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm mb-1 text-text-secondary">Title</label>
+                                    <label className="block text-sm mb-1 text-text-secondary flex items-center justify-between">
+                                        <span>Title</span>
+                                        <span className="text-xs text-text-secondary">{(w.title || '').length}/{MAX_WHY_TITLE}</span>
+                                    </label>
                                     <input
                                         className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
+                                        ref={(el) => { whyTitleRefs.current[idx] = el; }}
                                         value={w.title}
-                                        onChange={(e) => updateWhy(idx, 'title', e.target.value)}
+                                        onChange={(e) => updateWhy(idx, 'title', e.target.value.slice(0, MAX_WHY_TITLE))}
                                         placeholder="e.g. Strong rental appeal"
                                     />
                                 </div>
                                 <div className="md:col-span-3">
-                                    <label className="block text-sm mb-1 text-text-secondary">Text</label>
+                                    <label className="block text-sm mb-1 text-text-secondary flex items-center justify-between">
+                                        <span>Text</span>
+                                        <span className="text-xs text-text-secondary">{(w.text || '').length}/{MAX_WHY_TEXT}</span>
+                                    </label>
                                     <textarea
                                         className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary h-24"
+                                        ref={(el) => { whyTextRefs.current[idx] = el; }}
                                         value={w.text}
-                                        onChange={(e) => updateWhy(idx, 'text', e.target.value)}
+                                        onChange={(e) => updateWhy(idx, 'text', e.target.value.slice(0, MAX_WHY_TEXT))}
                                         placeholder="Explain the key benefit for investors"
                                     />
                                 </div>
@@ -594,11 +714,15 @@ export function Admin() {
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Description</h2>
                     <div className="grid grid-cols-1 gap-4">
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Details</label>
+                            <label className="block text-sm mb-1 text-text-secondary flex items-center justify-between">
+                                <span>Details</span>
+                                <span className="text-xs text-text-secondary">{detailsLen}/{MAX_DETAILS}</span>
+                            </label>
                             <textarea
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary h-28"
+                                ref={detailsRef}
                                 value={form.descriptionDetails}
-                                onChange={(e) => updateField("descriptionDetails", e.target.value)}
+                                onChange={(e) => updateField("descriptionDetails", e.target.value.slice(0, MAX_DETAILS))}
                             />
                         </div>
                         <div>

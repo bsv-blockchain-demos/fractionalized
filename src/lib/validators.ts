@@ -27,6 +27,19 @@ export const propertiesValidator = {
       seller: {
         bsonType: 'string',
       },
+      title: { bsonType: 'string', maxLength: 80 },
+      location: { bsonType: 'string', maxLength: 80 },
+      priceAED: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
+      currentValuationAED: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
+      investors: { bsonType: ['int','long'], minimum: 0, maximum: 100 },
+      investmentBreakdown: {
+        bsonType: 'object',
+        properties: {
+          purchaseCost: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
+          transactionCost: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
+          runningCost: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
+        },
+      },
     },
     additionalProperties: true,
   },
@@ -42,10 +55,11 @@ export const propertyDescriptionsValidator = {
         bsonType: 'object',
         required: ['details'],
         properties: {
-          details: { bsonType: 'string' },
+          details: { bsonType: 'string', maxLength: 1500 },
           features: {
             bsonType: 'array',
-            items: { bsonType: 'string' },
+            items: { bsonType: 'string', maxLength: 80 },
+            maxItems: 20,
           },
         },
         additionalProperties: false,
@@ -55,8 +69,8 @@ export const propertyDescriptionsValidator = {
         items: {
           bsonType: 'object',
           properties: {
-            title: { bsonType: 'string' },
-            text: { bsonType: 'string' },
+            title: { bsonType: 'string', maxLength: 80 },
+            text: { bsonType: 'string', maxLength: 400 },
           },
           additionalProperties: false,
         },
