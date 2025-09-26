@@ -27,11 +27,33 @@ export const propertiesValidator = {
       seller: {
         bsonType: 'string',
       },
+    },
+    additionalProperties: true,
+  },
+} as const;
+
+export const propertyDescriptionsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['propertyId', 'description'],
+    properties: {
+      propertyId: { bsonType: 'objectId' },
+      description: {
+        bsonType: 'object',
+        required: ['details'],
+        properties: {
+          details: { bsonType: 'string' },
+          features: {
+            bsonType: 'array',
+            items: { bsonType: 'string' },
+          },
+        },
+        additionalProperties: false,
+      },
       whyInvest: {
         bsonType: 'array',
         items: {
           bsonType: 'object',
-          required: [],
           properties: {
             title: { bsonType: 'string' },
             text: { bsonType: 'string' },

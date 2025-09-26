@@ -2,15 +2,44 @@
 
 import { dummyProperties } from '../lib/dummydata';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal } from './modal';
 import { useFeatureDisplay } from '../hooks/useFeatureDisplay';
 
 export function PropertyDetails({ propertyId }: { propertyId: string }) {
-    const property = dummyProperties.find(p => p._id.toString() === propertyId);
-    
+    const [property, setProperty] = useState<any | null>(() => dummyProperties.find(p => p._id.toString() === propertyId) || null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        async function fetchProperty() {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(`/api/properties/${propertyId}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+              
+                const item = data?.item;
+                if (item) {
+                    setProperty(item);
+                } else {
+                    setError("Property not found");
+                }
+            } catch (e: any) {
+                setError("Failed to load property details");
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchProperty();
+    }, [propertyId]);
+
+    if (loading && !property) {
+        return <div className="container mx-auto px-4 py-6 text-text-secondary">Loading property...</div>;
+    }
     if (!property) {
-        return <div>Property not found</div>;
+        return <div className="container mx-auto px-4 py-6 text-text-secondary">Property not found</div>;
     }
 
     const handleContinueInvest = () => {
@@ -116,7 +145,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 <h2 className="text-xl font-bold mb-6 text-text-primary">Why invest in this property?</h2>
                 {property.whyInvest && property.whyInvest.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {property.whyInvest.map((w, i) => (
+                        {property.whyInvest.map((w: { title?: string; text?: string }, i: number) => (
                             <div key={i}>
                                 {w.title ? (
                                     <h3 className="font-semibold mb-2 text-text-primary">{w.title}</h3>
@@ -192,8 +221,8 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 </p>
                 {property.description.features?.length ? (
                     <ul className="list-disc pl-5 text-sm text-text-secondary mb-2">
-                        {property.description.features.map((f, i) => (
-                            <li key={i}>{f}</li>
+                        {property.description.features.map((feature: string, index: number) => (
+                            <li key={index}>{feature}</li>
                         ))}
                     </ul>
                 ) : null}
@@ -204,7 +233,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4 text-text-primary">What's In</h2>
                 <div className="flex flex-wrap gap-2">
-                    {displayFeatures.map((f) => (
+                    {displayFeatures.map((f: { key: string; icon: any; count: number; label: string }) => (
                         <span
                             key={f.key}
                             className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border-subtle bg-bg-secondary text-sm text-text-primary"

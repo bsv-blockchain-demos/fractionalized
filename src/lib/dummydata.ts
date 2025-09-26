@@ -48,6 +48,23 @@ export const dummyProperties: Property[] = [
         "Skyview Tower in Dubai Marina offers luxurious waterfront living with modern layouts and breathtaking views of the skyline. Includes fitness facilities, swimming pools, and 24/7 concierge services. Prime location near Marina Walk and JBR ensures consistent rental demand and capital growth potential.",
       features: ["Fitness facilities", "Swimming pool", "Concierge services"],
     },
+    whyInvest: [
+      {
+        title: "Prime Waterfront Location",
+        text:
+          "Sought-after Dubai Marina address near Marina Walk & JBR drives strong tenant demand and long-term capital appreciation.",
+      },
+      {
+        title: "Attractive Yield",
+        text:
+          "Historical gross yields around 7–8% with stable occupancy from professionals seeking premium amenities.",
+      },
+      {
+        title: "Amenities & Services",
+        text:
+          "Full-service building with fitness, pools, and concierge reduces vacancy and enhances rental appeal.",
+      },
+    ],
     features: {
       Bedroom: 1,
       Bathroom: 1,
@@ -80,6 +97,23 @@ export const dummyProperties: Property[] = [
         "Pearl Residences in JVC offers spacious two-bedroom apartments with elegant interiors and community views. Residents enjoy landscaped gardens, fitness centers, and swimming pools with close proximity to main highways.",
       features: ["Landscaped gardens", "Fitness center", "Swimming pool"],
     },
+    whyInvest: [
+      {
+        title: "Growing Community",
+        text:
+          "JVC continues to see infrastructure growth and demand from families, supporting rental stability and returns.",
+      },
+      {
+        title: "Value Entry Point",
+        text:
+          "Competitive pricing versus central districts provides scope for value appreciation as connectivity improves.",
+      },
+      {
+        title: "Family-Friendly Amenities",
+        text:
+          "Parks, fitness centers, and pools broaden tenant appeal and reduce turnover risk.",
+      },
+    ],
     features: {
       Bedroom: 2,
       Bathroom: 2,
@@ -206,6 +240,23 @@ export const dummyProperties: Property[] = [
         "Horizon Tower is in the heart of Business Bay near Downtown Dubai. Spacious layouts, premium finishes, and metro access ensure strong rental appeal.",
       features: ["Metro access", "Premium finishes"],
     },
+    whyInvest: [
+      {
+        title: "Business Hub Proximity",
+        text:
+          "Minutes from Downtown and Business Bay offices—consistent demand from working professionals.",
+      },
+      {
+        title: "Transport Connectivity",
+        text:
+          "Easy metro and road links improve lettability and reduce vacancy periods.",
+      },
+      {
+        title: "Balanced Risk/Return",
+        text:
+          "Blend of strong rental yields and blue-chip location supports long-term performance.",
+      },
+    ],
     features: {
       Bedroom: 1,
       Bathroom: 1,

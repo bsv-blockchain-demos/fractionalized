@@ -1,4 +1,4 @@
-import { propertiesCollection } from "../../../../lib/mongo";
+import { propertiesCollection, propertyDescriptionsCollection } from "../../../../lib/mongo";
 import { NextResponse } from "next/server";
 import { Properties } from "../../../../lib/mongo";
 
@@ -14,18 +14,42 @@ export async function POST(request: Request) {
     }
 
     // Format and verify all inputs to satisfy Mongo interface
+    // Split fields destined for property_descriptions
+    const { description, whyInvest, ...rest } = data || {};
+
     // Follow properties interface but skip _id
     const formattedPropertyData: Properties = {
-        ...data,
+        ...rest,
         txids: {
             TokenTxid: `${tx.txid}.0`,
         },
         seller,
     };
-    // Validate and save tokenized transaction UTXO
-    const property = await propertiesCollection.insertOne(formattedPropertyData);
-    if (!property.acknowledged) {
+
+    // Save property core document
+    const propertyInsert = await propertiesCollection.insertOne(formattedPropertyData);
+    if (!propertyInsert.acknowledged) {
         return NextResponse.json({ error: "Failed to save property, please try again" }, { status: 500 });
     }
-    return NextResponse.json({ success: true, status: 200, data: property });
+
+    // Save extended description in separate collection (optional, only if provided)
+    try {
+        if (description || (whyInvest && Array.isArray(whyInvest))) {
+            await propertyDescriptionsCollection.insertOne({
+                propertyId: propertyInsert.insertedId,
+                description: {
+                    details: description?.details || "",
+                    features: Array.isArray(description?.features) ? description.features : [],
+                },
+                whyInvest: Array.isArray(whyInvest)
+                    ? whyInvest.map((w: any) => ({ title: String(w?.title || ""), text: String(w?.text || "") }))
+                    : undefined,
+            });
+        }
+    } catch (e) {
+        // If the description insert fails, we won't fail the whole operation; log and proceed
+        console.warn("Failed to insert property description:", e);
+    }
+
+    return NextResponse.json({ success: true, status: 200, data: propertyInsert });
 }

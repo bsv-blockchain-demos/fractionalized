@@ -1,7 +1,7 @@
 import { MongoClient, ServerApiVersion, Db, Collection, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 dotenv.config();
-import { propertiesValidator, sharesValidator } from "./validators";
+import { propertiesValidator, sharesValidator, propertyDescriptionsValidator } from "./validators";
 
 export interface Properties {
     _id: ObjectId;
@@ -19,15 +19,20 @@ export interface Properties {
         transactionCost: number;
         runningCost: number;
     },
-    description: {
-        details: string;
-        features: string[];
-    },
-    whyInvest?: { title: string; text: string }[];
     features: Record<string, number>,
     images: string[],
     txids: Record<string, string>,
     seller: string,
+}
+
+export interface PropertyDescription {
+    _id?: ObjectId;
+    propertyId: ObjectId;
+    description: {
+        details: string;
+        features: string[];
+    };
+    whyInvest?: { title: string; text: string }[];
 }
 
 export interface ShareLock {
@@ -65,6 +70,7 @@ let db: Db;
 let propertiesCollection: Collection<Properties>;
 let sharesCollection: Collection<Shares>;
 let locksCollection: Collection<ShareLock>;
+let propertyDescriptionsCollection: Collection<PropertyDescription>;
 
 // Connect to MongoDB
 async function connectToMongo() {
@@ -115,6 +121,24 @@ async function connectToMongo() {
         }
       }
 
+      // property_descriptions collection
+      if (!existing.has("property_descriptions")) {
+        await db.createCollection("property_descriptions", {
+          validator: propertyDescriptionsValidator as any,
+          validationLevel: "strict",
+        });
+      } else {
+        try {
+          await db.command({
+            collMod: "property_descriptions",
+            validator: propertyDescriptionsValidator,
+            validationLevel: "strict",
+          });
+        } catch (e) {
+          console.warn("collMod property_descriptions failed (will continue):", e);
+        }
+      }
+
       // share locks (no validator needed)
       if (!existing.has("share_locks")) {
         await db.createCollection("share_locks");
@@ -124,6 +148,7 @@ async function connectToMongo() {
       propertiesCollection = db.collection("properties");
       sharesCollection = db.collection("shares");
       locksCollection = db.collection("share_locks");
+      propertyDescriptionsCollection = db.collection("property_descriptions");
       
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
@@ -133,6 +158,8 @@ async function connectToMongo() {
       // For quick lookup of latest share for a property and per investor
       await sharesCollection.createIndex({ propertyId: 1, createdAt: -1 });
       await sharesCollection.createIndex({ propertyId: 1, investorId: 1, createdAt: -1 });
+      // Join index for property descriptions
+      await propertyDescriptionsCollection.createIndex({ propertyId: 1 }, { unique: true });
       // Concurrency lock unique per (propertyId, investorId)
       await locksCollection.createIndex({ propertyId: 1, investorId: 1 }, { unique: true });
       
@@ -144,7 +171,7 @@ async function connectToMongo() {
       throw error;
     }
   }
-  return { db, propertiesCollection, sharesCollection, locksCollection };
+  return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection };
 }
 
 // Connect immediately when this module is imported
@@ -162,4 +189,4 @@ process.on('SIGINT', async () => {
   }
 });
 
-export { connectToMongo, propertiesCollection, sharesCollection, locksCollection };
+export { connectToMongo, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection };
