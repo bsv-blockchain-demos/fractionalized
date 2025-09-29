@@ -5,8 +5,9 @@ import { InfoTip } from "./info-tip";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
-import { Hash, Utils, LockingScript, OP, Transaction, UnlockingScript, PublicKey, Signature, TransactionSignature, P2PKH } from "@bsv/sdk";
+import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature } from "@bsv/sdk";
 import { Ordinals } from "../utils/ordinals";
+import { PaymentUTXO } from "../utils/paymentUtxo";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -161,7 +162,11 @@ export function Admin() {
             // Step 1: Creating property token...
             const pubKeyHash = Hash.hash160(userPubKey, "hex");
 
-            const propertyDataHash = Hash.hash256(Utils.toArray(JSON.stringify(_data), "utf8"));
+            const title = _data.title.trim().toLowerCase();
+            const location = _data.location.trim().toLowerCase();
+            const propertyDataHash = Hash.hash256(
+                Utils.toArray(`${title}-${location}`, "utf8")
+            );
 
             const script = new LockingScript();
             script
@@ -231,7 +236,7 @@ export function Admin() {
             } else if (tokensToMint > 100) {
                 throw new Error("Percent to sell must be less than or equal to 100");
             }
-            const ordinalLockingScript = new Ordinals().lock(userPubKey, `${response.txid}_0`, tokensToMint, "deploy+mint", true);
+            const ordinalLockingScript = new Ordinals().lock(userPubKey, `${response.txid}_0`, `${response.txid}.0`, tokensToMint, "deploy+mint", true);
 
             // Create signature to satisfy lockingScript
             // @ts-expect-error
@@ -262,26 +267,8 @@ export function Admin() {
             // Multisig 1 of 2 so server can use funds for transfer fees
             const oneOfTwoHash = Hash.hash160(SERVER_PUBKEY + userPubKey, "hex");
 
-            const paymentLockingScript = new LockingScript();
-            paymentLockingScript
-                .writeOpCode(OP.OP_1)
-                .writeOpCode(OP.OP_2DUP)
-                .writeOpCode(OP.OP_CAT)
-                .writeOpCode(OP.OP_HASH160)
-                .writeBin(oneOfTwoHash)
-                .writeOpCode(OP.OP_EQUALVERIFY)
-                .writeOpCode(OP.OP_TOALTSTACK)
-                .writeOpCode(OP.OP_TOALTSTACK)
-                .writeOpCode(OP.OP_1)
-                .writeOpCode(OP.OP_FROMALTSTACK)
-                .writeOpCode(OP.OP_FROMALTSTACK)
-                .writeOpCode(OP.OP_2)
-                .writeOpCode(OP.OP_CHECKMULTISIG)
-            const paymentUnlockingScript = new UnlockingScript();
-            paymentUnlockingScript
-                .writeBin(sig.toChecksigFormat())
-                .writeBin(PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[])
-                .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
+            const paymentLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
+            const paymentUnlockingScript = new PaymentUTXO().unlock(sig, userPubKey, SERVER_PUBKEY);
 
             // Calculate required sats for payment UTXO
             // Estimated at 4 sats in fees per share sold
@@ -301,15 +288,15 @@ export function Admin() {
                 }
             });
 
+            if (!paymentTxAction?.txid) {
+                throw new Error("Failed to create payment UTXO");
+            }
+
             // Create the mint transaction
             const actionRes = await userWallet?.createAction({
-                description: "Mint shares for property token",
+                description: "Mint shares for property token", 
+                inputBEEF: paymentTxAction?.tx,
                 inputs: [
-                    {
-                        inputDescription: "Property token",
-                        outpoint: `${response.txid}.0`,
-                        unlockingScript: unlockingScript.toHex(),
-                    },
                     {
                         inputDescription: "Payment",
                         outpoint: `${paymentTxAction?.txid}.0`,
@@ -322,7 +309,7 @@ export function Admin() {
                         satoshis: 1,
                         lockingScript: ordinalLockingScript.toHex(),
                     },
-                ],
+                ], // TODO add change output which takes all remaining satoshis
                 options: {
                     randomizeOutputs: false,
                 }
@@ -341,7 +328,6 @@ export function Admin() {
                 },
                 body: JSON.stringify({
                     mintTx: actionRes,
-                    paymentTx: paymentTxAction,
                     propertyTokenTxid: `${response.txid}.0`,
                 }),
             });

@@ -7,12 +7,12 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // Save the created mint transaction on our backend
-    const { mintTx, paymentTx, propertyTokenTxid } = body;
+    const { mintTx, propertyTokenTxid } = body;
 
     try {
         // Validate and save mint transaction UTXO
         const property = await propertiesCollection.findOne({
-            "txids.TokenTxid": propertyTokenTxid
+            "txids.tokenTxid": propertyTokenTxid
         });
         if (!property) {
             return NextResponse.json({ error: "Failed to find property, please try again" }, { status: 500 });
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
             {
                 $set: {
                     "txids.mintTxid": `${mintTx.txid}.0`,
-                    "txids.paymentTxid": `${paymentTx.txid}.0`,
+                    "txids.paymentTxid": `${mintTx.txid}.1`,
                 },
             }
         );

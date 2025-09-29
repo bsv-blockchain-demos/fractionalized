@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const formattedPropertyData: Properties = {
         ...rest,
         txids: {
-            TokenTxid: `${tx.txid}.0`,
+            tokenTxid: `${tx.txid}.0`,
         },
         seller,
     };

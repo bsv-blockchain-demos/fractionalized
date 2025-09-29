@@ -2,10 +2,11 @@ import { propertiesCollection, Shares, sharesCollection, locksCollection } from 
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
-import { Signature, TransactionSignature, UnlockingScript, PublicKey, Transaction, LockingScript } from "@bsv/sdk";
+import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash } from "@bsv/sdk";
 import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
+import { PaymentUTXO } from "../../../utils/paymentUtxo";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
             }
             throw e;
         }
+
         const property = await propertiesCollection.findOne({ _id: propertyObjectId });
         if (!property) {
             throw new Error("Property not found");
@@ -55,6 +57,9 @@ export async function POST(request: Request) {
         if (!property?.txids?.mintTxid || !property?.txids?.paymentTxid) {
             throw new Error("Property token UTXOs not initialized");
         }
+
+        // Get property token txid to put in the inscribed token (for indentification)
+        const propertyTokenTxid = property.txids.tokenTxid;
 
         const { signature } = await wallet.createSignature({
             protocolID: [0, "ordinals"],
@@ -71,19 +76,18 @@ export async function POST(request: Request) {
             rawSignature.s,
             TransactionSignature.SIGHASH_SINGLE
         );
+
         // Unlock the payment UTXO for the transaction fees
-        const paymentUnlockingScript = new UnlockingScript();
-        paymentUnlockingScript
-            .writeBin(sig.toChecksigFormat())
-            .writeBin(PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[])
-            .writeBin(PublicKey.fromString(property.seller).encode(true) as number[]);
+        const paymentUnlockingScript = new PaymentUTXO().unlock(sig, property.seller, SERVER_PUB_KEY);
 
         // Determine if this is the first transfer for this specific investor (lineage per investor)
         const lastShareForInvestor = await sharesCollection.find({ propertyId: propertyObjectId, investorId: investorObjectId })
             .sort({ createdAt: -1 })
             .limit(1)
             .toArray();
+
         const isFirstForInvestor = lastShareForInvestor.length === 0;
+
         // Current ordinal outpoint to spend: either the original mint outpoint, or the last transfer outpoint for this investor
         const currentOrdinalOutpoint = isFirstForInvestor ? property.txids.mintTxid : lastShareForInvestor[0].transferTxid;
         const [parentTxID, parentVoutStr] = String(currentOrdinalOutpoint).split('.');
@@ -104,7 +108,7 @@ export async function POST(request: Request) {
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(fullParentTx, parentVout);
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
-        const ordinalTransferScript = new Ordinals().lock(investorId, assetId, amount, "transfer");
+        const ordinalTransferScript = new Ordinals().lock(investorId, assetId, propertyTokenTxid, amount, "transfer");
 
         // Also get the amount of tokens left from the actual ordinalTxLockingscript
         // Then calculate the token change to send back to the original mintTx
@@ -112,11 +116,13 @@ export async function POST(request: Request) {
 
         let changedOriginalTx: boolean = false;
 
+        // Only allow change if it's from the original mintTx
         let changeScript: LockingScript | null = null;
         if (parentTxID === property.txids.mintTxid) {
             changeScript = new Ordinals().lock(
                 property.seller,
                 property.txids.mintTxid.replace(".", "_"),
+                propertyTokenTxid,
                 changeAmount,
                 "transfer",
                 false,
@@ -129,13 +135,17 @@ export async function POST(request: Request) {
             }
         }
 
+        // Create new multiSig lockingScript for the payment change UTXO
+        const oneOfTwoHash = Hash.hash160(SERVER_PUB_KEY + property.seller, "hex");
+        const paymentChangeLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
+
         const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
             {
                 outputDescription: "Ordinal transfer",
                 satoshis: 1,
                 lockingScript: ordinalTransferScript.toHex(),
             },
-        ];
+        ]; // TODO add change output which takes all remaining satoshis
         if (changeScript) {
             outputs.push({
                 outputDescription: "Ordinal token change",
@@ -144,9 +154,25 @@ export async function POST(request: Request) {
             });
         }
 
+        // Query to overlay to get the TX beefs
+        const ordParentTx = await getTransactionByTxID(parentTxID);
+        if (!ordParentTx) {
+            throw new Error("Failed to get transaction by txid");
+        }
+        const paymentTx = await getTransactionByTxID(property.txids.paymentTxid.split('.')[0]);
+        if (!paymentTx) {
+            throw new Error("Failed to get transaction by txid");
+        }
+
+        // Merge the two input beefs required for the inputBEEF
+        const beef = new Beef();
+        beef.mergeBeef(ordParentTx.outputs[0].beef);
+        beef.mergeBeef(paymentTx.outputs[0].beef);
+
         // Create the transfer transaction
         const transferTx = await wallet.createAction({
             description: "Transfer share",
+            inputBEEF: beef.toBinary(),
             inputs: [
                 {
                     inputDescription: "Ordinal transfer",
@@ -188,6 +214,8 @@ export async function POST(request: Request) {
                 throw new Error("Failed to update original token tx");
             }
         }
+
+        // TODO always update the payment utxo to the new payment change output
 
         // Build share record, chaining parent/transfer txids to form a lineage
         const formattedShare: Shares = {

@@ -19,6 +19,7 @@ export class Ordinals implements ScriptTemplate {
     lock(
         address: string, // Just pubkey of user to send token to
         assetId: string, // AssetID = txid_vout
+        tokenTxid: string, // Txid where the property token was created
         shares: number,
         type: "deploy+mint" | "transfer",
         isFirst?: boolean,
@@ -70,6 +71,8 @@ export class Ordinals implements ScriptTemplate {
                 .writeOpCode(OP.OP_FROMALTSTACK)
                 .writeOpCode(OP.OP_2)
                 .writeOpCode(OP.OP_CHECKMULTISIG)
+                .writeOpCode(OP.OP_RETURN)
+                .writeBin(Utils.toArray(tokenTxid, "hex"));
         } else if (serverChange) {
             const oneOfTwoHash = Hash.hash160(serverPubkey + address, "hex");
 
@@ -97,6 +100,8 @@ export class Ordinals implements ScriptTemplate {
                 .writeOpCode(OP.OP_FROMALTSTACK)
                 .writeOpCode(OP.OP_2)
                 .writeOpCode(OP.OP_CHECKMULTISIG)
+                .writeOpCode(OP.OP_RETURN)
+                .writeBin(Utils.toArray(tokenTxid, "hex"));
         }
         else {
             lockingScript
@@ -114,7 +119,9 @@ export class Ordinals implements ScriptTemplate {
                 .writeOpCode(OP.OP_HASH160)
                 .writeBin(pubKeyHash)
                 .writeOpCode(OP.OP_EQUALVERIFY)
-                .writeOpCode(OP.OP_CHECKSIG);
+                .writeOpCode(OP.OP_CHECKSIG)
+                .writeOpCode(OP.OP_RETURN)
+                .writeBin(Utils.toArray(tokenTxid, "hex"));
         }
 
         return lockingScript;
@@ -235,10 +242,10 @@ export class Ordinals implements ScriptTemplate {
                 return unlockScript;
             },
             estimateLength: async () => {
-                // public key (1+33) + signature (1+73) + approver signature (1+73)
+                // public key (1+33) + signature (1+73)
                 // Note: We add 1 to each element's length because of the associated OP_PUSH
-                if (isFirst) return 216;
-                return 182;
+                if (isFirst) return 142;
+                return 108;
             },
         }
     }
