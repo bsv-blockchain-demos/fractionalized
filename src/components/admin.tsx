@@ -283,12 +283,16 @@ export function Admin() {
                 .writeBin(PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[])
                 .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
 
+            // Calculate required sats for payment UTXO
+            // Estimated at 4 sats in fees per share sold
+            const requiredSats = Math.max(0, Math.ceil(Number(_data.sell.percentToSell) * 4));
+
             const paymentTxAction = await userWallet?.createAction({
                 description: "Payment UTXO",
                 outputs: [
                     {
                         outputDescription: "Payment outpoint",
-                        satoshis: 200,
+                        satoshis: requiredSats,
                         lockingScript: paymentLockingScript.toHex(),
                     },
                 ],

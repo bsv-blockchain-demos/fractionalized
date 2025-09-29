@@ -7,12 +7,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const propertyId = params?.id;
-    if (!propertyId || !ObjectId.isValid(propertyId)) {
+    const { id } = await params;
+    if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
 
-    const _id = new ObjectId(propertyId);
+    const _id = new ObjectId(id);
     const property = await propertiesCollection.findOne({ _id });
     if (!property) {
       return NextResponse.json({ error: "Property not found" }, { status: 404 });

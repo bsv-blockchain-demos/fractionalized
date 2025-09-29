@@ -190,6 +190,8 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 )}
             </div>
 
+            <div className="section-divider" />
+
             {/* Investment Breakdown */}
             <div className="mb-8">
                 <h2 className="text-xl font-bold mb-4 text-text-primary">Investment Breakdown</h2>
@@ -212,6 +214,8 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                     </div>
                 </div>
             </div>
+
+            <div className="section-divider" />
 
             {/* Description */}
             <div className="mb-8">
