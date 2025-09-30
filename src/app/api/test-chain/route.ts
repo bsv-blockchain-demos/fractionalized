@@ -1,0 +1,46 @@
+import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
+import { sharesCollection } from "../../../lib/mongo";
+import { traceShareChain } from "../../../utils/shareChain";
+
+export async function POST(request: Request) {
+    const { propertyId, leafTransferTxid, investorId, verifyOnChain = false } = await request.json();
+
+    try {
+        if (!propertyId) {
+            return NextResponse.json({ error: "propertyId is required" }, { status: 400 });
+        }
+        if (investorId && !ObjectId.isValid(investorId)) {
+            return NextResponse.json({ error: "Invalid investorId" }, { status: 400 });
+        }
+
+        let leaf = leafTransferTxid as string | undefined;
+
+        // If no leaf given, resolve from latest share for investor
+        if (!leaf) {
+            if (!investorId) {
+                return NextResponse.json({ error: "Provide leafTransferTxid or investorId" }, { status: 400 });
+            }
+            const propertyObjectId = new ObjectId(propertyId);
+            const investorObjectId = new ObjectId(investorId);
+            const lastShare = await sharesCollection
+                .find({ propertyId: propertyObjectId, investorId: investorObjectId })
+                .sort({ createdAt: -1 })
+                .limit(1)
+                .toArray();
+            if (!lastShare.length) {
+                return NextResponse.json({ error: "No shares found for investor on this property" }, { status: 404 });
+            }
+            leaf = lastShare[0].transferTxid as string;
+        }
+
+        const result = await traceShareChain({
+            propertyId,
+            leafTransferTxid: leaf!,
+        });
+        return NextResponse.json(result);
+    } catch (e) {
+        console.error(e);
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+}

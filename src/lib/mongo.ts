@@ -158,6 +158,9 @@ async function connectToMongo() {
       // For quick lookup of latest share for a property and per investor
       await sharesCollection.createIndex({ propertyId: 1, createdAt: -1 });
       await sharesCollection.createIndex({ propertyId: 1, investorId: 1, createdAt: -1 });
+      // Ensure each transfer outpoint is unique per property and speed up parent lookups for chain tracing
+      await sharesCollection.createIndex({ propertyId: 1, transferTxid: 1 }, { unique: true });
+      await sharesCollection.createIndex({ propertyId: 1, parentTxid: 1 });
       // Join index for property descriptions
       await propertyDescriptionsCollection.createIndex({ propertyId: 1 }, { unique: true });
       // Concurrency lock unique per (propertyId, investorId)
