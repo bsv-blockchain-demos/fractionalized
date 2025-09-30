@@ -126,7 +126,10 @@ export async function POST(request: Request) {
         if (!ordParentTx) {
             throw new Error("Failed to get transaction by txid");
         }
-        const paymentTx = await getTransactionByTxID(property.txids.paymentTxid.split('.')[0]);
+
+        const [paymentTxID, paymentVoutStr] = String(property.txids.paymentTxid).split('.');
+        const paymentVout = Number(paymentVoutStr || '0');
+        const paymentTx = await getTransactionByTxID(paymentTxID);
         if (!paymentTx) {
             throw new Error("Failed to get transaction by txid");
         }
@@ -136,7 +139,7 @@ export async function POST(request: Request) {
         const paymentChangeLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
-        const paymentChangeSats = paymentSourceTX.outputs[1].satoshis;
+        const paymentChangeSats = paymentSourceTX.outputs[paymentVout].satoshis;
 
         const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
             {
@@ -194,7 +197,7 @@ export async function POST(request: Request) {
         // Update the original token tx
         const updateRes = await propertiesCollection.updateOne(
             { _id: propertyObjectId },
-            { $set: { "txids.mintTxid": `${transferTx.txid}.1` } }
+            { $set: { "txids.mintTxid": `${transferTx.txid}.1`, "txids.paymentTxid": `${transferTx.txid}.2` } }
         );
         if (!updateRes.modifiedCount) {
             throw new Error("Failed to update original token tx");

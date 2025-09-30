@@ -170,17 +170,15 @@ export function Admin() {
 
             const script = new LockingScript();
             script
-                // Unreachable if statement that contains the property data hash to verify
-                .writeOpCode(OP.OP_0)
-                .writeOpCode(OP.OP_IF)
-                .writeBin(propertyDataHash)
-                .writeOpCode(OP.OP_ENDIF)
                 // Single signature lockingScript (P2PKH)
                 .writeOpCode(OP.OP_DUP)
                 .writeOpCode(OP.OP_HASH160)
                 .writeBin(pubKeyHash)
                 .writeOpCode(OP.OP_EQUALVERIFY)
                 .writeOpCode(OP.OP_CHECKSIGVERIFY)
+                // Unreachable if statement that contains the property data hash to verify
+                .writeOpCode(OP.OP_RETURN)
+                .writeBin(propertyDataHash)
 
             const response = await userWallet?.createAction({
                 description: "Create property token",
@@ -272,7 +270,7 @@ export function Admin() {
 
             // Calculate required sats for payment UTXO
             // Estimated at 4 sats in fees per share sold
-            const requiredSats = Math.max(0, Math.ceil(Number(_data.sell.percentToSell) * 4));
+            const requiredSats = Math.max(0, Math.ceil(Number(_data.sell.percentToSell) * 2));
 
             const paymentTxAction = await userWallet?.createAction({
                 description: "Payment UTXO",

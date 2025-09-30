@@ -58,7 +58,6 @@ export class Ordinals implements ScriptTemplate {
                 .writeBin(Utils.toArray(jsonString, 'utf8'))
                 .writeOpCode(OP.OP_ENDIF)
                 // Write 1 of 2 multisig lockingScript
-                .writeOpCode(OP.OP_1)
                 .writeOpCode(OP.OP_2DUP)
                 .writeOpCode(OP.OP_CAT)
                 .writeOpCode(OP.OP_HASH160)
@@ -87,7 +86,6 @@ export class Ordinals implements ScriptTemplate {
                 .writeBin(Utils.toArray(jsonString, 'utf8'))
                 .writeOpCode(OP.OP_ENDIF)
                 // Write 1 of 2 multisig lockingScript
-                .writeOpCode(OP.OP_1)
                 .writeOpCode(OP.OP_2DUP)
                 .writeOpCode(OP.OP_CAT)
                 .writeOpCode(OP.OP_HASH160)
@@ -224,6 +222,7 @@ export class Ordinals implements ScriptTemplate {
                 const unlockScript = new UnlockingScript();
                 if (isFirst && sellerPubkey) {
                     // If first ordinal child connect with serverWallet (multisig script)
+                    unlockScript.writeOpCode(OP.OP_0)
                     unlockScript.writeBin(sig.toChecksigFormat());
                     unlockScript.writeBin(
                         PublicKey.fromString(publicKey).encode(true) as number[]

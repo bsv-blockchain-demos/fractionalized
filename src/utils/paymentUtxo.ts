@@ -4,7 +4,6 @@ export class PaymentUTXO {
     lock(oneOfTwoHash: number[]) {
         const paymentLockingScript = new LockingScript();
             paymentLockingScript
-                .writeOpCode(OP.OP_1)
                 .writeOpCode(OP.OP_2DUP)
                 .writeOpCode(OP.OP_CAT)
                 .writeOpCode(OP.OP_HASH160)
@@ -23,6 +22,7 @@ export class PaymentUTXO {
     unlock(sig: TransactionSignature, userPubKey: string, SERVER_PUBKEY: string) {
         const paymentUnlockingScript = new UnlockingScript();
         paymentUnlockingScript
+            .writeOpCode(OP.OP_0)
             .writeBin(sig.toChecksigFormat())
             .writeBin(PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[])
             .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
