@@ -200,7 +200,7 @@ export class Ordinals implements ScriptTemplate {
                 // include the pattern from BRC-29
                 const { signature } = await wallet.createSignature({
                     hashToDirectlySign: Hash.sha256(Hash.sha256(preimage)),
-                    protocolID: [0, "ordinals"],
+                    protocolID: [0, "fractionalized"],
                     keyID: "0",
                     counterparty: 'self'
                 })
@@ -208,7 +208,7 @@ export class Ordinals implements ScriptTemplate {
                 console.log({ signature })
 
                 const { publicKey } = await wallet.getPublicKey({
-                    protocolID: [0, "ordinals"],
+                    protocolID: [0, "fractionalized"],
                     keyID: "0",
                     counterparty: 'self'
                 })

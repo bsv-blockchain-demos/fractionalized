@@ -33,6 +33,14 @@ export async function POST(request: Request) {
         }
         const investorObjectId = new ObjectId(investorId);
 
+        if (amount <= 0) {
+            return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+        } else if (amount > 100) {
+            return NextResponse.json({ error: "Amount must be less than 100%" }, { status: 400 });
+        } else if (typeof amount !== 'number') {
+            return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+        }
+
         // Acquire per-(propertyId, investorId) lock; unique index enforces single holder
         try {
             const lockRes = await locksCollection.insertOne({
@@ -139,7 +147,7 @@ export async function POST(request: Request) {
         const paymentChangeLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
-        const paymentChangeSats = paymentSourceTX.outputs[paymentVout].satoshis;
+        const paymentChangeSats = Number(paymentSourceTX.outputs[paymentVout].satoshis) - 2; // 2 satoshis for fees
 
         const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
             {
@@ -151,7 +159,12 @@ export async function POST(request: Request) {
                 outputDescription: "Ordinal token change",
                 satoshis: 1,
                 lockingScript: changeScript.toHex(),
-            }, // TODO add payment change
+            },
+            {
+                outputDescription: "Payment change",
+                satoshis: paymentChangeSats,
+                lockingScript: paymentChangeLockingScript.toHex(),
+            },
         ];
 
         // Merge the two input beefs required for the inputBEEF
@@ -202,8 +215,6 @@ export async function POST(request: Request) {
         if (!updateRes.modifiedCount) {
             throw new Error("Failed to update original token tx");
         }
-
-        // TODO always update the payment utxo to the new payment change output
 
         // Build share record; parent is always the original mint outpoint for purchases
         const formattedShare: Shares = {

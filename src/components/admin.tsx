@@ -267,10 +267,13 @@ export function Admin() {
 
             const paymentLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
             const paymentUnlockingScript = new PaymentUTXO().unlock(sig, userPubKey, SERVER_PUBKEY);
+            const paymentChangeLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
-            // Estimated at 4 sats in fees per share sold
+            // Estimated at 2 sats in fees per share sold
             const requiredSats = Math.max(0, Math.ceil(Number(_data.sell.percentToSell) * 2));
+
+            const changeSats = Number(requiredSats) - 2;
 
             const paymentTxAction = await userWallet?.createAction({
                 description: "Payment UTXO",
@@ -307,7 +310,12 @@ export function Admin() {
                         satoshis: 1,
                         lockingScript: ordinalLockingScript.toHex(),
                     },
-                ], // TODO add change output which takes all remaining satoshis
+                    {
+                        outputDescription: "Payment change",
+                        satoshis: changeSats,
+                        lockingScript: paymentChangeLockingScript.toHex(),
+                    },
+                ],
                 options: {
                     randomizeOutputs: false,
                 }

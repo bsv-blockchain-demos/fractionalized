@@ -2,31 +2,75 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { dummyProperties, type Property } from "../lib/dummydata";
-
-type Investment = {
-  propertyId: string;
-  percent: number; // 1..100
-};
+import { type Property } from "../lib/dummydata";
+import { useAuthContext } from "../context/walletContext";
+import { Spinner } from "./spinner";
+import { toast } from "react-hot-toast";
 
 export function Dashboard() {
-  // Placeholder: user's investments (demo data). Later replace with real user portfolio.
-  const myInvestments: Investment[] = useMemo(
-    () => [
-      { propertyId: "650000000000000000000001", percent: 10 },
-      { propertyId: "650000000000000000000006", percent: 5 },
-      { propertyId: "650000000000000000000010", percent: 20 },
-    ],
-    []
-  );
+  // Real data: user shares mapped to properties
+  const [investedCards, setInvestedCards] = useState<
+    { property: Property; percent: number }[]
+  >([]);
+  const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
+  const { userWallet, userPubKey, initializeWallet } = useAuthContext();
 
-  const [investedPropertiesState, setInvestedPropertiesState] = useState<Property[]>([]);
   useEffect(() => {
-    // TODO: Replace with API call to fetch the user's active selling listings
-    // Example:
-    // fetch("/api/my-properties").then(res => res.json()).then(setInvestedProperties);
-    setInvestedPropertiesState([]);
-  }, []);
+    const fetchInvestedProperties = async () => {
+      setLoadingInvestments(true);
+      try {
+        if (!userWallet) {
+          await initializeWallet();
+        }
+
+        // Get owned shares
+        const response = await fetch("/api/my-shares", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userPubKey }),
+        });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const data = await response.json();
+        const shares: Array<{
+          _id: string;
+          propertyId: string;
+          amount: number; // percent
+        }> = (data?.shares || []).map((s: any) => ({
+          _id: String(s?._id ?? ""),
+          propertyId: String(s?.propertyId ?? ""),
+          amount: Number(s?.amount ?? 0),
+        }));
+
+        if (!shares.length) {
+          setInvestedCards([]);
+          return;
+        }
+
+        // Fetch property details for each share
+        const props = await Promise.all(
+          shares.map(async (s) => {
+            const res = await fetch(`/api/properties/${s.propertyId}`);
+            if (!res.ok) throw new Error(`Property HTTP ${res.status}`);
+            const pd = await res.json();
+            return { property: pd?.item as Property, percent: s.amount };
+          })
+        );
+
+        // Filter out any failed/undefined items just in case
+        const valid = props.filter(
+          (p): p is { property: Property; percent: number } => !!p?.property
+        );
+        setInvestedCards(valid);
+      } catch (e: any) {
+        console.error(e);
+        toast.error("Failed to load your investments");
+      } finally {
+        setLoadingInvestments(false);
+      }
+    };
+    fetchInvestedProperties();
+    // Re-run if the user identity changes
+  }, [userWallet, userPubKey, initializeWallet]);
 
   // Placeholder selling list (to be implemented later)
   const [selling, setSelling] = useState<Property[]>([]);
@@ -37,12 +81,7 @@ export function Dashboard() {
     setSelling([]);
   }, []);
 
-  const investedProperties = useMemo(() => {
-    const map = new Map(myInvestments.map((i) => [i.propertyId, i.percent]));
-    return dummyProperties
-      .filter((p) => map.has(p._id))
-      .map((p) => ({ property: p, percent: map.get(p._id)! }));
-  }, [myInvestments]);
+  const investedProperties = investedCards;
 
   const parsePercent = (s: string) => {
     const n = parseFloat(String(s).replace("%", ""));
@@ -76,7 +115,14 @@ export function Dashboard() {
             Explore more properties
           </Link>
         </div>
-        {investedProperties.length === 0 ? (
+        {loadingInvestments ? (
+          <div className="p-6 rounded-lg bg-bg-tertiary border border-border-subtle text-text-secondary">
+            <div className="flex items-center gap-3">
+              <Spinner size={20} />
+              <span>Loading your investments...</span>
+            </div>
+          </div>
+        ) : investedProperties.length === 0 ? (
           <div className="p-6 rounded-lg bg-bg-tertiary border border-border-subtle text-text-secondary">
             You don’t have any investments yet. Browse properties to get started.
           </div>

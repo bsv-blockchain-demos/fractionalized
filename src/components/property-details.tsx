@@ -5,11 +5,15 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from './modal';
 import { useFeatureDisplay } from '../hooks/useFeatureDisplay';
+import { toast } from 'react-hot-toast';
+import { useAuthContext } from '../context/walletContext';
 
 export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const [property, setProperty] = useState<any | null>(() => dummyProperties.find(p => p._id.toString() === propertyId) || null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+
+    const { userWallet, initializeWallet, userPubKey } = useAuthContext();
 
     useEffect(() => {
         async function fetchProperty() {
@@ -42,8 +46,31 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
         return <div className="container mx-auto px-4 py-6 text-text-secondary">Property not found</div>;
     }
 
-    const handleContinueInvest = () => {
-        // TODO: implement
+    const handleContinueInvest = async () => {
+        const amount = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
+
+        if (!userWallet) {
+            await initializeWallet();
+        }
+
+        const response = await fetch(`/api/share-purchase`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                propertyId,
+                investorId: userPubKey,
+                amount: Number(amount),
+            }),
+        });
+        const data = await response.json();
+        if (data.error) {
+            console.error(data.error);
+            return;
+        }
+        console.log(data);
+        toast.success("Share purchased successfully");
     };
 
     const formatCurrency = (amount: number) => {

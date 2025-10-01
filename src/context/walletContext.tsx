@@ -55,7 +55,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
             }
 
             const { publicKey } = await newWallet.getPublicKey({ 
-                protocolID: [0, "ordinals"],
+                protocolID: [0, "fractionalized"],
                 keyID: "0", 
             });
 
