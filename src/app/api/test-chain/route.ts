@@ -4,7 +4,7 @@ import { sharesCollection } from "../../../lib/mongo";
 import { traceShareChain } from "../../../utils/shareChain";
 
 export async function POST(request: Request) {
-    const { propertyId, leafTransferTxid, investorId, verifyOnChain = false } = await request.json();
+    const { propertyId, leafTransferTxid, investorId } = await request.json();
 
     try {
         if (!propertyId) {

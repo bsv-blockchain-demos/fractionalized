@@ -8,11 +8,14 @@ import { Spinner } from "./spinner";
 import { toast } from "react-hot-toast";
 
 export function Dashboard() {
-  // Real data: user shares mapped to properties
+  // User shares mapped to properties
   const [investedCards, setInvestedCards] = useState<
     { property: Property; percent: number }[]
   >([]);
+  const [selling, setSelling] = useState<Property[]>([]);
+  
   const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
+  const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
   const { userWallet, userPubKey, initializeWallet } = useAuthContext();
 
   useEffect(() => {
@@ -29,7 +32,9 @@ export function Dashboard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId: userPubKey }),
         });
-        if (!response.ok) throw new Error("HTTP " + response.status);
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
         const data = await response.json();
         const shares: Array<{
           _id: string;
@@ -50,7 +55,9 @@ export function Dashboard() {
         const props = await Promise.all(
           shares.map(async (s) => {
             const res = await fetch(`/api/properties/${s.propertyId}`);
-            if (!res.ok) throw new Error(`Property HTTP ${res.status}`);
+            if (!res.ok) {
+              throw new Error(`Property HTTP ${res.status}`);
+            }
             const pd = await res.json();
             return { property: pd?.item as Property, percent: s.amount };
           })
@@ -72,14 +79,42 @@ export function Dashboard() {
     // Re-run if the user identity changes
   }, [userWallet, userPubKey, initializeWallet]);
 
-  // Placeholder selling list (to be implemented later)
-  const [selling, setSelling] = useState<Property[]>([]);
+  // Fetch properties the user is selling
   useEffect(() => {
-    // TODO: Replace with API call to fetch the user's active selling listings
-    // Example:
-    // fetch("/api/my-selling").then(res => res.json()).then(setSelling);
-    setSelling([]);
-  }, []);
+    const fetchSellingProperties = async () => {
+      setLoadingSelling(true);
+      try {
+        if (!userWallet) {
+          await initializeWallet();
+        }
+
+        // Get selling properties
+        const response = await fetch("/api/my-selling", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userPubKey }),
+        });
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+        const data = await response.json();
+        const props: Property[] = data?.items || [];
+
+        // Filter out any failed/undefined items just in case
+        const valid = props.filter(
+          (p): p is Property => !!p
+        );
+        setSelling(valid);
+      } catch (e: any) {
+        console.error(e);
+        toast.error("Failed to load your selling properties");
+      } finally {
+        setLoadingSelling(false);
+      }
+    };
+    fetchSellingProperties();
+    // Re-run if the user identity changes
+  }, [userWallet, userPubKey, initializeWallet]);
 
   const investedProperties = investedCards;
 
