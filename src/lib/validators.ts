@@ -102,3 +102,24 @@ export const sharesValidator = {
     additionalProperties: true,
   },
 } as const;
+
+export const marketItemsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'propertyId',
+      'sellerId',
+      'shareId',
+      'sellAmount',
+    ],
+    properties: {
+      propertyId: { bsonType: 'objectId' },
+      sellerId: { bsonType: 'string' },
+      shareId: { bsonType: 'objectId' },
+      sellAmount: { bsonType: 'number', minimum: 1 },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+    },
+    additionalProperties: true,
+  },
+} as const;

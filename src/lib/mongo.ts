@@ -1,7 +1,7 @@
 import { MongoClient, ServerApiVersion, Db, Collection, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 dotenv.config();
-import { propertiesValidator, sharesValidator, propertyDescriptionsValidator } from "./validators";
+import { propertiesValidator, sharesValidator, propertyDescriptionsValidator, marketItemsValidator } from "./validators";
 
 export interface Properties {
     _id: ObjectId;
@@ -52,6 +52,16 @@ export interface Shares {
     createdAt: Date;
 }
 
+export interface MarketItem {
+  _id: ObjectId; // mongo id
+  propertyId: ObjectId; // property id
+  sellerId: string; // seller pubkey
+  shareId: ObjectId; // share id
+  sellAmount: number; // sell amount
+  createdAt: Date; // created at
+  sold?: boolean; // sold
+};
+
 // Use environment variable for MongoDB URI or fallback to hardcoded value
 const uri = process.env.MONGODB_URI as string;
 const clusterName = process.env.MONGODB_CLUSTER_NAME as string;
@@ -71,6 +81,7 @@ let propertiesCollection: Collection<Properties>;
 let sharesCollection: Collection<Shares>;
 let locksCollection: Collection<ShareLock>;
 let propertyDescriptionsCollection: Collection<PropertyDescription>;
+let marketItemsCollection: Collection<MarketItem>;
 
 // Connect to MongoDB
 async function connectToMongo() {
@@ -139,6 +150,24 @@ async function connectToMongo() {
         }
       }
 
+      // market_items collection
+      if (!existing.has("market_items")) {
+        await db.createCollection("market_items", {
+          validator: marketItemsValidator as any,
+          validationLevel: "strict",
+        });
+      } else {
+        try {
+          await db.command({
+            collMod: "market_items",
+            validator: marketItemsValidator,
+            validationLevel: "strict",
+          });
+        } catch (e) {
+          console.warn("collMod market_items failed (will continue):", e);
+        }
+      }
+
       // share locks (no validator needed)
       if (!existing.has("share_locks")) {
         await db.createCollection("share_locks");
@@ -149,6 +178,7 @@ async function connectToMongo() {
       sharesCollection = db.collection("shares");
       locksCollection = db.collection("share_locks");
       propertyDescriptionsCollection = db.collection("property_descriptions");
+      marketItemsCollection = db.collection("market_items");
       
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
@@ -165,6 +195,8 @@ async function connectToMongo() {
       await propertyDescriptionsCollection.createIndex({ propertyId: 1 }, { unique: true });
       // Concurrency lock unique per (propertyId, investorId)
       await locksCollection.createIndex({ propertyId: 1, investorId: 1 }, { unique: true });
+      // Market items unique per (propertyId, shareId)
+      await marketItemsCollection.createIndex({ propertyId: 1, sellerId: 1 });
       
       // Note: _id is automatically unique in MongoDB, no need for custom id field
       
@@ -174,7 +206,7 @@ async function connectToMongo() {
       throw error;
     }
   }
-  return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection };
+  return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
 }
 
 // Connect immediately when this module is imported
@@ -192,4 +224,4 @@ process.on('SIGINT', async () => {
   }
 });
 
-export { connectToMongo, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection };
+export { connectToMongo, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
