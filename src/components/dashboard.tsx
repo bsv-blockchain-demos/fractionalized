@@ -13,9 +13,18 @@ export function Dashboard() {
     { property: Property; percent: number }[]
   >([]);
   const [selling, setSelling] = useState<Property[]>([]);
+  const [myListings, setMyListings] = useState<Array<{
+    _id: string;
+    propertyId: string;
+    name: string;
+    location: string;
+    sellAmount: number;
+    pricePerShare: number;
+  }>>([]);
 
   const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
   const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
+  const [loadingMyListings, setLoadingMyListings] = useState<boolean>(false);
   const { userWallet, userPubKey, initializeWallet } = useAuthContext();
 
   useEffect(() => {
@@ -87,6 +96,53 @@ export function Dashboard() {
     };
     fetchInvestedProperties();
     // Re-run if the user identity changes
+  }, [userWallet, userPubKey, initializeWallet]);
+
+  // Fetch user's market listings (unsold)
+  useEffect(() => {
+    const fetchMyListings = async () => {
+      setLoadingMyListings(true);
+      try {
+        if (!userWallet) {
+          try {
+            await initializeWallet();
+          } catch (e) {
+            console.error('Failed to initialize wallet:', e);
+            toast.error('Failed to connect wallet', {
+              duration: 5000,
+              position: 'top-center',
+              id: 'wallet-connect-error',
+            });
+            return;
+          }
+        }
+
+        const response = await fetch("/api/my-listings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userPubKey }),
+        });
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+        const data = await response.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setMyListings(items.map((i: any) => ({
+          _id: String(i?._id ?? ""),
+          propertyId: String(i?.propertyId ?? ""),
+          name: String(i?.name ?? "Unknown Property"),
+          location: String(i?.location ?? "Unknown"),
+          sellAmount: Number(i?.sellAmount ?? 0),
+          pricePerShare: Number(i?.pricePerShare ?? 0),
+        })));
+      } catch (e) {
+        console.error(e);
+        toast.error("Failed to load your listings");
+      } finally {
+        setLoadingMyListings(false);
+      }
+    };
+    fetchMyListings();
   }, [userWallet, userPubKey, initializeWallet]);
 
   // Fetch properties the user is selling
@@ -262,6 +318,39 @@ export function Dashboard() {
           </div>
         )}
       </section>
+
+      <div className="section-divider" />
+
+      {/* Your Market Listings */}
+      {loadingMyListings ? (
+        <div className="p-4 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-text-secondary mb-8">
+          <div className="flex items-center gap-3">
+            <Spinner size={16} />
+            <span>Loading your market listings...</span>
+          </div>
+        </div>
+      ) : myListings.length > 0 ? (
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xl font-bold text-text-primary">Your Market Listings</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {myListings.map((item) => (
+              <Link key={item._id} href={`/properties/${item.propertyId}`} className="block">
+                <div className="card-glass p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-text-primary">{item.name}</h3>
+                    <span className="badge-dark text-xs">Selling</span>
+                  </div>
+                  <p className="text-xs text-text-secondary mb-2">{item.location}</p>
+                  <div className="text-sm text-text-secondary">Amount: {item.sellAmount}%</div>
+                  <div className="text-sm text-text-primary">Price/share: AED {item.pricePerShare.toLocaleString()}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="section-divider" />
 

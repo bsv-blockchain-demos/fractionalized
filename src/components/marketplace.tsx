@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MarketSellModal } from "./market-sell-modal";
 import { MarketPurchaseModal } from "./market-purchase-modal";
@@ -14,19 +14,15 @@ import toast from "react-hot-toast";
 
 const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY;
 
-type MarketItem = {
-    _id: string; // mongo id
-    propertyId: string; // property id
-    sellerId: string; // seller id
-    shareId: string; // share id
-    sellAmount: number; // sell amount
-};
-
-type PropertyMeta = {
+type ApiListing = {
+    _id: string;
+    propertyId: string;
+    sellerId: string;
+    shareId: string;
+    sellAmount: number;
+    pricePerShare: number;
     name: string;
     location: string;
-    pricePerShareUsd: number;
-    tokenTxid: string;
 };
 
 type payloadData = {
@@ -35,74 +31,12 @@ type payloadData = {
     pricePerShare: number;
     transferTxid: string;
     tokenTxid: string;
-}
-
-// Temporary property metadata lookup. Replace with API route using propertyId.
-const DUMMY_PROPERTIES: Record<string, PropertyMeta> = {
-    "6710c9c0f1a2b2f8a1c00111": {
-        name: "Sunset Villas",
-        location: "Austin, TX",
-        pricePerShareUsd: 125,
-        tokenTxid: "",
-    },
-    "6710c9c0f1a2b2f8a1c00222": {
-        name: "Harbor Lofts",
-        location: "Seattle, WA",
-        pricePerShareUsd: 125,
-        tokenTxid: "",
-    },
-    "6710c9c0f1a2b2f8a1c00333": {
-        name: "Pineview Homes",
-        location: "Denver, CO",
-        pricePerShareUsd: 125,
-        tokenTxid: "",
-    },
-    "6710c9c0f1a2b2f8a1c00444": {
-        name: "Lakeside Retreat",
-        location: "Madison, WI",
-        pricePerShareUsd: 125,
-        tokenTxid: "",
-    },
 };
 
-// TODO: Replace this with a Mongo fetch (e.g., from `/api/properties`)
-const DUMMY_ITEMS: MarketItem[] = [
-    {
-        _id: "m1",
-        propertyId: "6710c9c0f1a2b2f8a1c00111",
-        sellerId: "s001",
-        shareId: "sh001",
-        sellAmount: 5,
-    },
-    {
-        _id: "m2",
-        propertyId: "6710c9c0f1a2b2f8a1c00222",
-        sellerId: "s002",
-        shareId: "sh002",
-        sellAmount: 12,
-    },
-    {
-        _id: "m3",
-        propertyId: "6710c9c0f1a2b2f8a1c00333",
-        sellerId: "s003",
-        shareId: "sh003",
-        sellAmount: 2,
-    },
-    {
-        _id: "m4",
-        propertyId: "6710c9c0f1a2b2f8a1c00444",
-        sellerId: "s004",
-        shareId: "sh004",
-        sellAmount: 20,
-    },
-];
-
-type UIItem = MarketItem & PropertyMeta;
-
-const sortFns: Record<string, (a: UIItem, b: UIItem) => number> = {
+const sortFns: Record<string, (a: ApiListing, b: ApiListing) => number> = {
     "relevance": () => 0,
-    "price-asc": (a, b) => a.pricePerShareUsd - b.pricePerShareUsd,
-    "price-desc": (a, b) => b.pricePerShareUsd - a.pricePerShareUsd,
+    "price-asc": (a, b) => a.pricePerShare - b.pricePerShare,
+    "price-desc": (a, b) => b.pricePerShare - a.pricePerShare,
     "amount-desc": (a, b) => b.sellAmount - a.sellAmount,
 };
 
@@ -124,6 +58,21 @@ export function Marketplace() {
     } | null>(null);
 
     const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+
+    const [items, setItems] = useState<ApiListing[]>([]);
+
+    useEffect(() => {
+        async function fetchListings() {
+            try {
+                const res = await fetch("/api/listings");
+                const data = await res.json();
+                setItems(Array.isArray(data?.items) ? data.items : []);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        fetchListings();
+    }, []);
 
     const handleNewListing = async (payload: payloadData) => {
         const { shareId, propertyId, pricePerShare, transferTxid, tokenTxid } = payload;
@@ -345,31 +294,14 @@ export function Marketplace() {
         }
     };
 
-    const uiItems: UIItem[] = useMemo(() => {
-        // Merge market items with property meta using propertyId
-        return DUMMY_ITEMS.map((mi) => {
-            const meta = DUMMY_PROPERTIES[mi.propertyId];
-            return {
-                ...mi,
-                ...(meta || {
-                    name: "Unknown Property",
-                    location: "Unknown",
-                    pricePerShareUsd: 0,
-                    availablePercent: 0,
-                    totalShares: 0,
-                }),
-            } as UIItem;
-        });
-    }, []);
-
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         const base = q
-            ? uiItems.filter((i) => `${i.name} ${i.location}`.toLowerCase().includes(q))
-            : uiItems;
+            ? items.filter((i) => `${i.name} ${i.location}`.toLowerCase().includes(q))
+            : items;
         const sorter = sortFns[sort] || sortFns["relevance"];
         return [...base].sort(sorter);
-    }, [query, sort, uiItems]);
+    }, [query, sort, items]);
 
     return (
         <div className="container mx-auto px-4">
@@ -439,7 +371,7 @@ export function Marketplace() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-text-secondary">Price / share</p>
-                                    <p className="text-text-primary font-medium">${""}{item.pricePerShareUsd.toFixed(0)}</p>
+                                    <p className="text-text-primary font-medium">AED {item.pricePerShare.toFixed(0)}</p>
                                 </div>
                             </div>
 
@@ -460,7 +392,7 @@ export function Marketplace() {
                                             name: item.name,
                                             location: item.location,
                                             sellAmount: item.sellAmount,
-                                            pricePerShare: item.pricePerShareUsd,
+                                            pricePerShare: item.pricePerShare,
                                             propertyId: item.propertyId,
                                             sellerId: item.sellerId,
                                         });
