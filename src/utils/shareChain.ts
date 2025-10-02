@@ -5,7 +5,7 @@ export type ChainHop = {
   transferTxid: string;
   parentTxid: string;
   amount: number;
-  investorId: ObjectId;
+  investorId: string;
   createdAt: Date;
 };
 
@@ -86,7 +86,7 @@ export async function traceShareChain(opts: {
       transferTxid: share.transferTxid as string,
       parentTxid: share.parentTxid as string,
       amount: share.amount as number,
-      investorId: share.investorId as ObjectId,
+      investorId: share.investorId as string,
       createdAt: share.createdAt as Date,
     };
     hops.push(hop);

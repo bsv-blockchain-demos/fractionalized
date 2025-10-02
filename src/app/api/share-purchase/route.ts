@@ -31,7 +31,6 @@ export async function POST(request: Request) {
         if (!ObjectId.isValid(investorId)) {
             return NextResponse.json({ error: "Invalid investorId" }, { status: 400 });
         }
-        const investorObjectId = new ObjectId(investorId);
 
         if (amount <= 0) {
             return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
@@ -46,7 +45,7 @@ export async function POST(request: Request) {
             const lockRes = await locksCollection.insertOne({
                 _id: new ObjectId(),
                 propertyId: propertyObjectId,
-                investorId: investorObjectId,
+                investorId,
                 createdAt: new Date(),
             });
             lockId = lockRes.insertedId;
@@ -220,7 +219,7 @@ export async function POST(request: Request) {
         const formattedShare: Shares = {
             _id: new ObjectId(),
             propertyId: propertyObjectId,
-            investorId: investorObjectId,
+            investorId,
             amount,
             parentTxid: property.txids.mintTxid,
             transferTxid: `${transferTx.txid}.0`,

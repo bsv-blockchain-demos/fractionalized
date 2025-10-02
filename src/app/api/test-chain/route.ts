@@ -22,9 +22,8 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: "Provide leafTransferTxid or investorId" }, { status: 400 });
             }
             const propertyObjectId = new ObjectId(propertyId);
-            const investorObjectId = new ObjectId(investorId);
             const lastShare = await sharesCollection
-                .find({ propertyId: propertyObjectId, investorId: investorObjectId })
+                .find({ propertyId: propertyObjectId, investorId })
                 .sort({ createdAt: -1 })
                 .limit(1)
                 .toArray();

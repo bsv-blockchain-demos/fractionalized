@@ -45,7 +45,7 @@ export interface ShareLock {
 export interface Shares {
     _id: ObjectId;
     propertyId: ObjectId;
-    investorId: ObjectId;
+    investorId: string;
     parentTxid: string;
     transferTxid: string;
     amount: number;
@@ -58,6 +58,7 @@ export interface MarketItem {
   sellerId: string; // seller pubkey
   shareId: ObjectId; // share id
   sellAmount: number; // sell amount
+  pricePerShare: number; // price per share
   createdAt: Date; // created at
   sold?: boolean; // sold
 };

@@ -119,6 +119,7 @@ export const marketItemsValidator = {
       sellAmount: { bsonType: 'number', minimum: 1 },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
+      sold: { bsonType: 'bool' },
     },
     additionalProperties: true,
   },

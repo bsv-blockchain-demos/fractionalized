@@ -15,15 +15,13 @@ export async function POST(request: Request) {
         }
 
         const propertyObjectId = new ObjectId(propertyId);
-        const sellerObjectId = new ObjectId(sellerId);
-        const buyerObjectId = new ObjectId(buyerId);
 
         // Acquire lock per (property, seller)
         try {
             const lockRes = await locksCollection.insertOne({
                 _id: new ObjectId(),
                 propertyId: propertyObjectId,
-                investorId: sellerObjectId,
+                investorId: sellerId,
                 createdAt: new Date(),
             });
             lockId = lockRes.insertedId;
@@ -45,7 +43,7 @@ export async function POST(request: Request) {
         const formattedShare: Shares = {
             _id: new ObjectId(),
             propertyId: propertyObjectId,
-            investorId: buyerObjectId,
+            investorId: buyerId,
             amount,
             parentTxid,
             transferTxid,

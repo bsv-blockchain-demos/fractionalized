@@ -51,6 +51,11 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
             const isConnected = await newWallet.isAuthenticated();
             if (!isConnected) {
                 console.error('Wallet not authenticated');
+                toast.error('Wallet not authenticated', {
+                    duration: 5000,
+                    position: 'top-center',
+                    id: 'wallet-not-authenticated',
+                });
                 return;
             }
 
