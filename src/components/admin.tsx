@@ -252,7 +252,7 @@ export function Admin() {
             const sig = new TransactionSignature(
                 rawSignature.r,
                 rawSignature.s,
-                TransactionSignature.SIGHASH_SINGLE
+                TransactionSignature.SIGHASH_FORKID
             );
 
             // Create unlockingScript to unlock the initial token UTXO

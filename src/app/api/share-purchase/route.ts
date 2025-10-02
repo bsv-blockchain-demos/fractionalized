@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         const sig = new TransactionSignature(
             rawSignature.r,
             rawSignature.s,
-            TransactionSignature.SIGHASH_SINGLE
+            TransactionSignature.SIGHASH_FORKID
         );
 
         // Unlock the payment UTXO for the transaction fees
