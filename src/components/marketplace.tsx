@@ -3,12 +3,16 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MarketSellModal } from "./market-sell-modal";
+import { MarketPurchaseModal } from "./market-purchase-modal";
 import { useAuthContext } from "../context/walletContext";
 import { Ordinals } from "../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
-import { Transaction } from "@bsv/sdk";
+import { PaymentUTXO } from "../utils/paymentUtxo";
+import { Hash, Transaction } from "@bsv/sdk";
 import toast from "react-hot-toast";
+
+const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY;
 
 type MarketItem = {
     _id: string; // mongo id
@@ -107,6 +111,17 @@ export function Marketplace() {
     const [sort, setSort] = useState<keyof typeof sortFns>("relevance");
     const [sellOpen, setSellOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [purchaseOpen, setPurchaseOpen] = useState(false);
+    const [purchaseLoading, setPurchaseLoading] = useState(false);
+    const [purchaseItem, setPurchaseItem] = useState<{
+        id: string;
+        name: string;
+        location: string;
+        sellAmount: number;
+        pricePerShare: number;
+        propertyId: string;
+        sellerId: string;
+    } | null>(null);
 
     const { userWallet, userPubKey, initializeWallet } = useAuthContext();
 
@@ -117,7 +132,17 @@ export function Marketplace() {
 
         try {
             if (!userWallet) {
-                await initializeWallet();
+                try {
+                    await initializeWallet();
+                } catch (e) {
+                    console.error('Failed to initialize wallet:', e);
+                    toast.error('Failed to connect wallet', {
+                        duration: 5000,
+                        position: 'top-center',
+                        id: 'wallet-connect-error',
+                    });
+                    return;
+                }
             }
 
             if (!userPubKey) {
@@ -222,7 +247,7 @@ export function Marketplace() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ propertyId, sellerId: userPubKey, amount: tokens, parentTxid: transferTxid, transferTxid: newListingTx.txid, pricePerShare }),
+                body: JSON.stringify({ propertyId, sellerId: userPubKey, amount: tokens, parentTxid: transferTxid, transferTxid: `${newListingTx.txid}.0`, pricePerShare }),
             });
 
             // Close the modal
@@ -243,6 +268,80 @@ export function Marketplace() {
                 id: "listing-error",
             });
             setLoading(false);
+        }
+    };
+
+    const handlePurchase = async (
+        { marketItemId, buyerId }: { marketItemId: string; buyerId: string }
+    ) => {
+        try {
+            if (!userWallet) {
+                try {
+                    await initializeWallet();
+                } catch (e) {
+                    console.error('Failed to initialize wallet:', e);
+                    toast.error('Failed to connect wallet', {
+                        duration: 5000,
+                        position: 'top-center',
+                        id: 'wallet-connect-error',
+                    });
+                    return;
+                }
+            }
+
+            setPurchaseLoading(true);
+            // Create the paymentTX
+            const oneOfTwoHash = Hash.hash160(SERVER_PUB_KEY + buyerId);
+            const paymentLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
+
+            const paymentUtxo = await userWallet!.createAction({
+                description: "Payment",
+                outputs: [
+                    {
+                        outputDescription: "Fee Payment",
+                        satoshis: 2,
+                        lockingScript: paymentLockingScript.toHex(),
+                    },
+                ],
+                options: {
+                    randomizeOutputs: false,
+                },
+            });
+
+            if (!paymentUtxo) {
+                toast.error("Failed to create payment", {
+                    duration: 5000,
+                    position: "top-center",
+                    id: "payment-error",
+                });
+                throw new Error("Failed to create payment");
+            }
+
+            // Send the paymentTX to the server and start ordinal transfer
+            const response = await fetch("/api/listing-purchase", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ marketItemId, buyerId, paymentTX: paymentUtxo }),
+            });
+            const data = await response.json();
+            if (response.status !== 200) {
+                toast.error(data.error, {
+                    duration: 5000,
+                    position: "top-center",
+                    id: "purchase-error",
+                });
+                throw new Error(data.error);
+            }
+            setPurchaseOpen(false);
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to purchase", {
+                duration: 5000,
+                position: "top-center",
+                id: "purchase-error",
+            });
+        } finally {
+            setPurchaseLoading(false);
         }
     };
 
@@ -355,7 +454,18 @@ export function Marketplace() {
                                 </Link>
                                 <button
                                     type="button"
-                                    onClick={() => alert(`Buy flow placeholder for share ${item.shareId}`)}
+                                    onClick={() => {
+                                        setPurchaseItem({
+                                            id: item._id,
+                                            name: item.name,
+                                            location: item.location,
+                                            sellAmount: item.sellAmount,
+                                            pricePerShare: item.pricePerShareUsd,
+                                            propertyId: item.propertyId,
+                                            sellerId: item.sellerId,
+                                        });
+                                        setPurchaseOpen(true);
+                                    }}
                                     className="flex-1 text-center bg-accent-primary hover:bg-accent-primary/90 text-white rounded-lg px-3 py-2 transition-colors btn-glow"
                                 >
                                     Buy
@@ -375,10 +485,20 @@ export function Marketplace() {
             {/* Sell modal */}
             <MarketSellModal
                 open={sellOpen}
+                loading={loading}
                 onClose={() => setSellOpen(false)}
                 onListed={(payload) => {
                     handleNewListing(payload);
                 }}
+            />
+
+            {/* Purchase modal */}
+            <MarketPurchaseModal
+                open={purchaseOpen}
+                loading={purchaseLoading}
+                item={purchaseItem}
+                onClose={() => setPurchaseOpen(false)}
+                onBuy={handlePurchase}
             />
         </div>
     );

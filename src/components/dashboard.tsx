@@ -13,7 +13,7 @@ export function Dashboard() {
     { property: Property; percent: number }[]
   >([]);
   const [selling, setSelling] = useState<Property[]>([]);
-  
+
   const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
   const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
   const { userWallet, userPubKey, initializeWallet } = useAuthContext();
@@ -23,7 +23,17 @@ export function Dashboard() {
       setLoadingInvestments(true);
       try {
         if (!userWallet) {
-          await initializeWallet();
+          try {
+            await initializeWallet();
+          } catch (e) {
+            console.error('Failed to initialize wallet:', e);
+            toast.error('Failed to connect wallet', {
+              duration: 5000,
+              position: 'top-center',
+              id: 'wallet-connect-error',
+            });
+            return;
+          }
         }
 
         // Get owned shares
@@ -85,7 +95,17 @@ export function Dashboard() {
       setLoadingSelling(true);
       try {
         if (!userWallet) {
-          await initializeWallet();
+          try {
+            await initializeWallet();
+          } catch (e) {
+            console.error('Failed to initialize wallet:', e);
+            toast.error('Failed to connect wallet', {
+              duration: 5000,
+              position: 'top-center',
+              id: 'wallet-connect-error',
+            });
+            return;
+          }
         }
 
         // Get selling properties

@@ -23,7 +23,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 const res = await fetch(`/api/properties/${propertyId}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-              
+
                 const item = data?.item;
                 if (item) {
                     setProperty(item);
@@ -50,7 +50,17 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
         const amount = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
 
         if (!userWallet) {
-            await initializeWallet();
+            try {
+                await initializeWallet();
+            } catch (e) {
+                console.error('Failed to initialize wallet:', e);
+                toast.error('Failed to connect wallet', {
+                    duration: 5000,
+                    position: 'top-center',
+                    id: 'wallet-connect-error',
+                });
+                return;
+            }
         }
 
         const response = await fetch(`/api/share-purchase`, {

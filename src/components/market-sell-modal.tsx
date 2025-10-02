@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "../context/walletContext";
+import { Spinner } from "./spinner";
+import toast from "react-hot-toast";
 
 type OwnedShare = {
   _id: string;
@@ -18,8 +20,9 @@ type Property = {
   tokenTxid: string;
 };
 
-export function MarketSellModal({ open, onClose, onListed }: {
+export function MarketSellModal({ open, loading, onClose, onListed }: {
   open: boolean;
+  loading: boolean;
   onClose: () => void;
   onListed: (payload: {
     shareId: string;
@@ -30,7 +33,7 @@ export function MarketSellModal({ open, onClose, onListed }: {
   }) => void;
 }) {
   const { userWallet, userPubKey, initializeWallet } = useAuthContext();
-  const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   const [shares, setShares] = useState<OwnedShare[]>([]);
   const [selectedShareId, setSelectedShareId] = useState<string>("");
   const [property, setProperty] = useState<Property | null>(null);
@@ -44,10 +47,20 @@ export function MarketSellModal({ open, onClose, onListed }: {
   useEffect(() => {
     if (!open) return;
     const run = async () => {
-      setLoading(true);
+      setLoadingData(true);
       try {
         if (!userWallet) {
-          await initializeWallet();
+          try {
+            await initializeWallet();
+          } catch (e) {
+            console.error('Failed to initialize wallet:', e);
+            toast.error('Failed to connect wallet', {
+              duration: 5000,
+              position: 'top-center',
+              id: 'wallet-connect-error',
+            });
+            return;
+          }
         }
         const res = await fetch("/api/my-shares", {
           method: "POST",
@@ -66,7 +79,7 @@ export function MarketSellModal({ open, onClose, onListed }: {
       } catch (e) {
         console.error(e);
       } finally {
-        setLoading(false);
+        setLoadingData(false);
       }
     };
     run();
@@ -114,10 +127,10 @@ export function MarketSellModal({ open, onClose, onListed }: {
       <div className="relative z-10 w-full max-w-lg mx-4 card-glass p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-text-primary">Sell share</h3>
-          <button onClick={onClose} className="text-text-secondary hover:text-text-primary">✕</button>
+          <button onClick={onClose} className="text-text-secondary hover:text-text-primary" disabled={loading}>✕</button>
         </div>
 
-        {loading ? (
+        {loadingData ? (
           <div className="text-sm text-text-secondary">Loading your shares...</div>
         ) : shares.length === 0 ? (
           <div className="text-sm text-text-secondary">No shares available to sell.</div>
@@ -129,7 +142,8 @@ export function MarketSellModal({ open, onClose, onListed }: {
               <select
                 value={selectedShareId}
                 onChange={(e) => setSelectedShareId(e.target.value)}
-                className="w-full rounded-lg border border-border-subtle bg-bg-primary text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/30"
+                disabled={loading}
+                className="w-full rounded-lg border border-border-subtle bg-bg-primary text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/30 disabled:opacity-60"
               >
                 {shares.map((s) => (
                   <option key={s._id} value={s._id}>
@@ -164,7 +178,8 @@ export function MarketSellModal({ open, onClose, onListed }: {
                 step={0.01}
                 value={pricePerShare}
                 onChange={(e) => setPricePerShare(Number(e.target.value))}
-                className="w-full rounded-lg border border-border-subtle bg-bg-primary text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/30"
+                disabled={loading}
+                className="w-full rounded-lg border border-border-subtle bg-bg-primary text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/30 disabled:opacity-60"
               />
               <p className="text-xs text-text-secondary mt-1">Estimate based on property price ÷ 100.</p>
             </div>
@@ -172,7 +187,8 @@ export function MarketSellModal({ open, onClose, onListed }: {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={onClose}
-                className="px-3 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary"
+                disabled={loading}
+                className="px-3 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -190,10 +206,20 @@ export function MarketSellModal({ open, onClose, onListed }: {
                   onListed(payload);
                   onClose();
                 }}
-                className="px-3 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white btn-glow"
+                disabled={loading}
+                className="px-3 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white btn-glow disabled:opacity-60"
               >
-                List for sale
+                {loading ? "Processing..." : "List for sale"}
               </button>
+            </div>
+          </div>
+        )}
+
+        {loading && (
+          <div className="absolute inset-0 rounded-xl bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex items-center gap-3 text-text-primary">
+              <Spinner size={20} />
+              <span>Processing your listing...</span>
             </div>
           </div>
         )}

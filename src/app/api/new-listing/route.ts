@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { propertiesCollection, sharesCollection, marketItemsCollection, Shares, MarketItem } from "../../../lib/mongo";
+import { propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, Shares, MarketItem } from "../../../lib/mongo";
 import { traceShareChain } from "../../../utils/shareChain";
 
 const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c6f244c294390d22d3f5bb81cb51dfc1eb165f6968e2455f18d39";
@@ -8,6 +8,7 @@ const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c
 export async function POST(request: Request) {
     const { propertyId, sellerId, amount, parentTxid, transferTxid, pricePerShare } = await request.json();
 
+    let lockId: ObjectId | null = null;
     try {
         if (!ObjectId.isValid(propertyId) || !ObjectId.isValid(sellerId)) {
             return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
@@ -24,6 +25,22 @@ export async function POST(request: Request) {
         }
         if (!property?.txids?.tokenTxid || !property?.txids?.mintTxid) {
             throw new Error("Property token/payment UTXOs not initialized");
+        }
+
+        // Acquire lock per (property, seller)
+        try {
+            const lockRes = await locksCollection.insertOne({
+                _id: new ObjectId(),
+                propertyId: propertyObjectId,
+                investorId: sellerId,
+                createdAt: new Date(),
+            });
+            lockId = lockRes.insertedId;
+        } catch (e: any) {
+            if (e?.code === 11000) {
+                return NextResponse.json({ error: "Another transfer is in progress for this seller and property" }, { status: 409 });
+            }
+            throw e;
         }
 
         const chainResult = await traceShareChain({ propertyId, leafTransferTxid: parentTxid });
@@ -59,5 +76,9 @@ export async function POST(request: Request) {
     } catch (e) {
         console.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    } finally {
+        if (lockId) {
+            await locksCollection.deleteOne({ _id: lockId });
+        }
     }
 }
