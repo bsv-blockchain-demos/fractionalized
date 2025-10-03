@@ -6,6 +6,7 @@ import { PaymentUTXO } from "../../../utils/paymentUtxo";
 import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
+import { traceShareChain } from "../../../utils/shareChain";
 
 const STORAGE_URL = process.env.STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -39,6 +40,12 @@ export async function POST(request: Request) {
         }
         if (!property?.txids?.tokenTxid || !property?.txids?.mintTxid) {
             throw new Error("Property token/payment UTXOs not initialized");
+        }
+
+        // Trace chain of share before proceeding
+        const traceRes = await traceShareChain({propertyId: propertyObjectId, leafTransferTxid: share.transferTxid});
+        if (!traceRes) {
+            throw new Error("Invalid share");
         }
 
         // Acquire lock per (property, buyer)
