@@ -13,7 +13,7 @@ import {
     PublicKey
 } from "@bsv/sdk";
 
-const serverPubkey = process.env.NEXT_PUBLIC_SERVER_PUBKEY;
+const serverPubkey = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 export class Ordinals implements ScriptTemplate {
     lock(

@@ -12,7 +12,7 @@ import { PaymentUTXO } from "../utils/paymentUtxo";
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
 
-const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c6f244c294390d22d3f5bb81cb51dfc1eb165f6968e2455f18d39";
+const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 export function Admin() {
     // Character limits (must match server validators in validators.ts)

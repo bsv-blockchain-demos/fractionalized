@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, Shares, MarketItem } from "../../../lib/mongo";
 import { traceShareChain } from "../../../utils/shareChain";
 
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c6f244c294390d22d3f5bb81cb51dfc1eb165f6968e2455f18d39";
+const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 export async function POST(request: Request) {
     const { propertyId, sellerId, amount, parentTxid, transferTxid, pricePerShare } = await request.json();

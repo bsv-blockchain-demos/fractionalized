@@ -10,7 +10,7 @@ import { PaymentUTXO } from "../../../utils/paymentUtxo";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY || "03817231c1ba7c6f244c294390d22d3f5bb81cb51dfc1eb165f6968e2455f18d39";
+const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 export async function POST(request: Request) {
     const { propertyId, investorId, amount } = await request.json();

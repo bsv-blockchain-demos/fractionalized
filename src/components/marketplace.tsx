@@ -12,7 +12,7 @@ import { PaymentUTXO } from "../utils/paymentUtxo";
 import { Hash, Transaction } from "@bsv/sdk";
 import toast from "react-hot-toast";
 
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUB_KEY;
+const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 type ApiListing = {
     _id: string;
@@ -151,7 +151,7 @@ export function Marketplace() {
                 inputs: [
                     {
                         inputDescription: "Share",
-                        outpoint: `${transferTxid}.0`,
+                        outpoint: transferTxid,
                         unlockingScript: ordinalUnlockingScript.toHex(),
                     },
                 ],

@@ -183,7 +183,7 @@ async function connectToMongo() {
       
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
-      await propertiesCollection.createIndex({ "txids.TokenTxid": 1 }, { unique: true });
+      await propertiesCollection.createIndex({ "txids.tokenTxid": 1 }, { unique: true });
 
       await sharesCollection.createIndex({ "_id": 1 });
       // For quick lookup of latest share for a property and per investor
