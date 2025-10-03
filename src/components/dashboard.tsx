@@ -6,6 +6,9 @@ import { type Property } from "../lib/dummydata";
 import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 import { toast } from "react-hot-toast";
+import SellingListings from "./dashboard/SellingListings";
+import MarketListings from "./dashboard/MarketListings";
+import PortfolioStats from "./dashboard/PortfolioStats";
 
 export function Dashboard() {
   // User shares mapped to properties
@@ -289,102 +292,18 @@ export function Dashboard() {
 
       <div className="section-divider" />
 
-      {/* Selling listings (placeholder) */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold text-text-primary">Your Listings (Selling)</h2>
-          <button type="button" className="px-3 py-1.5 rounded-lg border border-border-subtle bg-bg-secondary text-sm text-text-primary btn-glow">
-            List a property
-          </button>
-        </div>
-        {selling.length === 0 ? (
-          <div className="p-4 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-text-secondary">
-            You don't have any listings yet.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {selling.map((property) => (
-              <Link key={property._id} href={`/properties/${property._id}`} className="block">
-                <div className="card-glass p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-text-primary">{property.title}</h3>
-                    <span className="badge-dark text-xs">Selling</span>
-                  </div>
-                  <p className="text-xs text-text-secondary mb-2">{property.location}</p>
-                  <div className="text-sm text-text-primary">Asking: {formatCurrency(property.priceAED)}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Selling listings */}
+      <SellingListings selling={selling} />
 
       <div className="section-divider" />
 
       {/* Your Market Listings */}
-      {loadingMyListings ? (
-        <div className="p-4 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-text-secondary mb-8">
-          <div className="flex items-center gap-3">
-            <Spinner size={16} />
-            <span>Loading your market listings...</span>
-          </div>
-        </div>
-      ) : myListings.length > 0 ? (
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold text-text-primary">Your Market Listings</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {myListings.map((item) => (
-              <Link key={item._id} href={`/properties/${item.propertyId}`} className="block">
-                <div className="card-glass p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-text-primary">{item.name}</h3>
-                    <span className="badge-dark text-xs">Selling</span>
-                  </div>
-                  <p className="text-xs text-text-secondary mb-2">{item.location}</p>
-                  <div className="text-sm text-text-secondary">Amount: {item.sellAmount}%</div>
-                  <div className="text-sm text-text-primary">Price/share: AED {item.pricePerShare.toLocaleString()}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <MarketListings loading={loadingMyListings} items={myListings} />
 
       <div className="section-divider" />
 
       {/* Portfolio stats */}
-      <section className="mb-4">
-        <div className="card-elevated p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
-            <div className="group/stat hover:scale-105 transition-transform duration-300">
-              <div className="text-2xl font-bold mb-1 text-accent-primary group-hover/stat:text-accent-subtle transition-colors duration-300">
-                {formatCurrency(stats.totalInvestedAED)}
-              </div>
-              <div className="text-text-secondary">Total Invested</div>
-            </div>
-            <div className="group/stat hover:scale-105 transition-transform duration-300">
-              <div className="text-2xl font-bold mb-1" style={{ color: "var(--success)" }}>
-                {formatCurrency(stats.expectedYearlyIncomeAED)}
-              </div>
-              <div className="text-text-secondary">Expected Yearly Income</div>
-            </div>
-            <div className="group/stat hover:scale-105 transition-transform duration-300">
-              <div className="text-2xl font-bold mb-1" style={{ color: "var(--info)" }}>
-                {stats.avgGrossYield.toFixed(2)}%
-              </div>
-              <div className="text-text-secondary">Avg Gross Yield</div>
-            </div>
-            <div className="group/stat hover:scale-105 transition-transform duration-300">
-              <div className="text-2xl font-bold mb-1 text-warning group-hover/stat:text-amber-400 transition-colors duration-300">
-                {stats.positions}
-              </div>
-              <div className="text-text-secondary">Positions</div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <PortfolioStats stats={stats} />
     </div>
   );
 }
