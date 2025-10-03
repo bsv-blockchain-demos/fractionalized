@@ -1,6 +1,7 @@
 import { propertiesCollection, propertyDescriptionsCollection } from "../../../../lib/mongo";
 import { NextResponse } from "next/server";
 import { Properties } from "../../../../lib/mongo";
+import { toOutpoint } from "../../../../utils/outpoints";
 
 export async function POST(request: Request) {
     const { data, tx, seller } = await request.json();
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     const formattedPropertyData: Properties = {
         ...rest,
         txids: {
-            tokenTxid: `${tx.txid}.0`,
+            tokenTxid: toOutpoint(tx.txid, 0),
         },
         seller,
     };

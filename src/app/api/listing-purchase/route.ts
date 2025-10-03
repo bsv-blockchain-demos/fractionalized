@@ -7,10 +7,12 @@ import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
+import { SERVER_PUBKEY } from "../../../utils/env";
+import { toOutpoint } from "../../../utils/outpoints";
 
 const STORAGE_URL = process.env.STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
+const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 export async function POST(request: Request) {
     const { marketItemId, buyerId, paymentTX } = await request.json();
@@ -109,7 +111,7 @@ export async function POST(request: Request) {
                 },
                 {
                     inputDescription: "Fee payment",
-                    outpoint: `${paymentTX.txid}.0`,
+                    outpoint: toOutpoint(paymentTX.txid as string, 0),
                     unlockingScript: paymentUnlockingScript.toHex(),
                 }
             ],
@@ -144,7 +146,7 @@ export async function POST(request: Request) {
             investorId: buyerId,
             amount: marketItem.sellAmount,
             parentTxid: share.transferTxid,
-            transferTxid: `${transferTx.txid}.0`,
+            transferTxid: toOutpoint(transferTx.txid as string, 0),
             createdAt: new Date(),
         };
         const shareRes = await sharesCollection.insertOne(formattedShare);

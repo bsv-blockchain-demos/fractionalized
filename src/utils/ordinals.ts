@@ -1,19 +1,20 @@
 import {
-    LockingScript,
-    ScriptTemplate,
-    Transaction,
-    UnlockingScript,
-    Hash,
-    OP,
-    Utils,
-    WalletInterface,
-    Script,
-    TransactionSignature,
-    Signature,
-    PublicKey
-} from "@bsv/sdk";
+     LockingScript,
+     ScriptTemplate,
+     Transaction,
+     UnlockingScript,
+     Hash,
+     OP,
+     Utils,
+     WalletInterface,
+     Script,
+     TransactionSignature,
+     Signature,
+     PublicKey
+ } from "@bsv/sdk";
+import { SERVER_PUBKEY } from "./env";
 
-const serverPubkey = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
+const serverPubkey = SERVER_PUBKEY;
 
 export class Ordinals implements ScriptTemplate {
     lock(

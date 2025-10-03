@@ -7,12 +7,12 @@ import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
 import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature } from "@bsv/sdk";
 import { Ordinals } from "../utils/ordinals";
+import { SERVER_PUBKEY } from "../utils/env";
 import { PaymentUTXO } from "../utils/paymentUtxo";
+import { toOutpoint } from "../utils/outpoints";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
-
-const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 export function Admin() {
     // Character limits (must match server validators in validators.ts)
@@ -234,7 +234,14 @@ export function Admin() {
             } else if (tokensToMint > 100) {
                 throw new Error("Percent to sell must be less than or equal to 100");
             }
-            const ordinalLockingScript = new Ordinals().lock(userPubKey, `${response.txid}_0`, `${response.txid}.0`, tokensToMint, "deploy+mint", true);
+            const ordinalLockingScript = new Ordinals().lock(
+                userPubKey,
+                `${response.txid}_0`,
+                toOutpoint(response.txid, 0),
+                tokensToMint,
+                "deploy+mint",
+                true
+            );
 
             // Create signature to satisfy lockingScript
             // @ts-expect-error
@@ -300,7 +307,7 @@ export function Admin() {
                 inputs: [
                     {
                         inputDescription: "Payment",
-                        outpoint: `${paymentTxAction?.txid}.0`,
+                        outpoint: toOutpoint(String(paymentTxAction?.txid), 0),
                         unlockingScript: paymentUnlockingScript.toHex(),
                     },
                 ],
@@ -334,7 +341,7 @@ export function Admin() {
                 },
                 body: JSON.stringify({
                     mintTx: actionRes,
-                    propertyTokenTxid: `${response.txid}.0`,
+                    propertyTokenTxid: toOutpoint(response.txid, 0),
                 }),
             });
             const sendMintTxData = await sendMintTx.json();

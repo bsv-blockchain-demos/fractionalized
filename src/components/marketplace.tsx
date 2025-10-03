@@ -10,9 +10,11 @@ import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUTXO } from "../utils/paymentUtxo";
 import { Hash, Transaction } from "@bsv/sdk";
+import { toTxid, toOutpoint } from "../utils/outpoints";
+import { SERVER_PUBKEY } from "../utils/env";
 import toast from "react-hot-toast";
 
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
+const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 type ApiListing = {
     _id: string;
@@ -119,7 +121,7 @@ export function Marketplace() {
             }
 
             // Transfer share to multisig with server
-            const txid = transferTxid.split(".")[0];
+            const txid = toTxid(transferTxid);
             const tx = await getTransactionByTxID(txid);
 
             if (!tx) {
@@ -196,7 +198,7 @@ export function Marketplace() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ propertyId, sellerId: userPubKey, amount: tokens, parentTxid: transferTxid, transferTxid: `${newListingTx.txid}.0`, pricePerShare }),
+                body: JSON.stringify({ propertyId, sellerId: userPubKey, amount: tokens, parentTxid: transferTxid, transferTxid: toOutpoint(newListingTx.txid as string, 0), pricePerShare }),
             });
 
             // Close the modal

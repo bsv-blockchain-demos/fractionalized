@@ -7,10 +7,12 @@ import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
 import { PaymentUTXO } from "../../../utils/paymentUtxo";
+import { SERVER_PUBKEY } from "../../../utils/env";
+import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
+const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 export async function POST(request: Request) {
     const { propertyId, investorId, amount } = await request.json();
@@ -89,8 +91,7 @@ export async function POST(request: Request) {
 
         // Always spend from the original mint outpoint for purchases
         const currentOrdinalOutpoint = property.txids.mintTxid as string;
-        const [parentTxID, parentVoutStr] = String(currentOrdinalOutpoint).split('.');
-        const parentVout = Number(parentVoutStr || '0');
+        const { txid: parentTxID, vout: parentVout } = parseOutpoint(currentOrdinalOutpoint);
 
         // Use overlay query with parentTxID to get full TX
         const response = await getTransactionByTxID(parentTxID);
@@ -134,8 +135,7 @@ export async function POST(request: Request) {
             throw new Error("Failed to get transaction by txid");
         }
 
-        const [paymentTxID, paymentVoutStr] = String(property.txids.paymentTxid).split('.');
-        const paymentVout = Number(paymentVoutStr || '0');
+        const { txid: paymentTxID, vout: paymentVout } = parseOutpoint(property.txids.paymentTxid as string);
         const paymentTx = await getTransactionByTxID(paymentTxID);
         if (!paymentTx) {
             throw new Error("Failed to get transaction by txid");
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
         // Update the original token tx
         const updateRes = await propertiesCollection.updateOne(
             { _id: propertyObjectId },
-            { $set: { "txids.mintTxid": `${transferTx.txid}.1`, "txids.paymentTxid": `${transferTx.txid}.2` } }
+            { $set: { "txids.mintTxid": toOutpoint(transferTx.txid as string, 1), "txids.paymentTxid": toOutpoint(transferTx.txid as string, 2) } }
         );
         if (!updateRes.modifiedCount) {
             throw new Error("Failed to update original token tx");
@@ -222,7 +222,7 @@ export async function POST(request: Request) {
             investorId,
             amount,
             parentTxid: property.txids.mintTxid,
-            transferTxid: `${transferTx.txid}.0`,
+            transferTxid: toOutpoint(transferTx.txid as string, 0),
             createdAt: new Date(),
         }
         const share = await sharesCollection.insertOne(formattedShare);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { propertiesCollection } from "../../../../lib/mongo";
 import { Transaction } from "@bsv/sdk";
 import { broadcastTX } from "../../../../hooks/overlayFunctions";
+import { toOutpoint } from "../../../../utils/outpoints";
 
 export async function POST(request: Request) {
     const body = await request.json();
@@ -30,8 +31,8 @@ export async function POST(request: Request) {
             { _id: property._id },
             {
                 $set: {
-                    "txids.mintTxid": `${mintTx.txid}.0`,
-                    "txids.paymentTxid": `${mintTx.txid}.1`,
+                    "txids.mintTxid": toOutpoint(mintTx.txid, 0),
+                    "txids.paymentTxid": toOutpoint(mintTx.txid, 1),
                 },
             }
         );
