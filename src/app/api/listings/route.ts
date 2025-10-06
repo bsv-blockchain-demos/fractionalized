@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
+import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
 import { ObjectId } from "mongodb";
 
 export async function GET() {
     try {
+        await connectToMongo();
+
         // Find unsold listings (sold: false OR missing)
         const cursor = marketItemsCollection.aggregate([
             {

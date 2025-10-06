@@ -1,4 +1,4 @@
-import { propertiesCollection, sharesCollection, locksCollection, Shares, marketItemsCollection } from "../../../lib/mongo";
+import { connectToMongo, propertiesCollection, sharesCollection, locksCollection, Shares, marketItemsCollection } from "../../../lib/mongo";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
@@ -19,6 +19,8 @@ export async function POST(request: Request) {
 
     let lockId: ObjectId | null = null;
     try {
+        await connectToMongo();
+
         const wallet = await makeWallet("main", STORAGE_URL as string, SERVER_PRIVATE_KEY as string);
 
         // Fetch all necessary data from marketItem collection -> share collection -> property collection

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { propertiesCollection } from "../../../lib/mongo";
+import { connectToMongo, propertiesCollection } from "../../../lib/mongo";
 
 // Helper to build aggregation pipeline based on filters and sorting, returning a $facet
 function buildFacetPipeline(body: any) {
@@ -162,6 +162,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    await connectToMongo();
+
     const pipeline = buildFacetPipeline(body);
     const [res] = await propertiesCollection.aggregate(pipeline).toArray();
     const items = res?.items || [];
@@ -186,6 +188,8 @@ export async function GET(request: Request) {
     if (filtersParam) {
       try { filters = JSON.parse(filtersParam); } catch {}
     }
+
+    await connectToMongo();
 
     const pipeline = buildFacetPipeline({ page, limit, sortBy, activeStatus, filters });
     const [res] = await propertiesCollection.aggregate(pipeline).toArray();

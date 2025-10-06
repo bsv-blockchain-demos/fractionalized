@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { propertiesCollection } from "../../../lib/mongo";
+import { connectToMongo, propertiesCollection } from "../../../lib/mongo";
 
 export async function POST(request: Request) {
   try {
+    await connectToMongo();
+
     const body = await request.json().catch(() => ({}));
     const userId: string | undefined = body.userId || body.sellerId || body.investorId;
 

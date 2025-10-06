@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { propertiesCollection } from "../../../../lib/mongo";
+import { connectToMongo, propertiesCollection } from "../../../../lib/mongo";
 import { Transaction } from "@bsv/sdk";
 import { broadcastTX } from "../../../../hooks/overlayFunctions";
 import { toOutpoint } from "../../../../utils/outpoints";
@@ -11,6 +11,8 @@ export async function POST(request: Request) {
     const { mintTx, propertyTokenTxid } = body;
 
     try {
+        await connectToMongo();
+
         // Validate and save mint transaction UTXO
         const property = await propertiesCollection.findOne({
             "txids.tokenTxid": propertyTokenTxid

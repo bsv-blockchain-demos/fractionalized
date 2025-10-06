@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, Shares, MarketItem } from "../../../lib/mongo";
+import { connectToMongo, propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, Shares, MarketItem } from "../../../lib/mongo";
 import { traceShareChain } from "../../../utils/shareChain";
 
 const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
@@ -10,6 +10,8 @@ export async function POST(request: Request) {
 
     let lockId: ObjectId | null = null;
     try {
+        await connectToMongo();
+
         if (!ObjectId.isValid(propertyId) || !ObjectId.isValid(sellerId)) {
             return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
         }

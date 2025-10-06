@@ -1,9 +1,11 @@
-import { propertiesCollection, propertyDescriptionsCollection } from "../../../../lib/mongo";
+import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } from "../../../../lib/mongo";
 import { NextResponse } from "next/server";
 import { Properties } from "../../../../lib/mongo";
 import { toOutpoint } from "../../../../utils/outpoints";
 
 export async function POST(request: Request) {
+    await connectToMongo();
+
     const { data, tx, seller } = await request.json();
 
     // Enforce server-side limits (must match validators.ts)
@@ -18,7 +20,6 @@ export async function POST(request: Request) {
         // Title & Location
         const t = String(title ?? "").trim();
         const loc = String(location ?? "").trim();
-        if (!t) errors.push("title is required");
         if (!loc) errors.push("location is required");
         if (t.length > MAX_TITLE) errors.push(`title too long (${t.length}/${MAX_TITLE})`);
         if (loc.length > MAX_LOCATION) errors.push(`location too long (${loc.length}/${MAX_LOCATION})`);

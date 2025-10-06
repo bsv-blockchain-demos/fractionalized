@@ -7,9 +7,10 @@ export const propertiesValidator = {
     properties: {
       txids: {
         bsonType: 'object',
-        required: ['TokenTxid'],
+        // tokenTxid can be added later; do not require it at insertion time
+        // required: ['tokenTxid'],
         properties: {
-          TokenTxid: {
+          tokenTxid: {
             bsonType: 'string',
             pattern: outpointPattern,
           },
@@ -29,7 +30,6 @@ export const propertiesValidator = {
       },
       title: { bsonType: 'string', maxLength: 80 },
       location: { bsonType: 'string', maxLength: 80 },
-      priceAED: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
       currentValuationAED: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
       investors: { bsonType: ['int','long'], minimum: 0, maximum: 100 },
       investmentBreakdown: {

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
+import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
 
 export async function POST(request: Request) {
   try {
+    await connectToMongo();
+
     const { userId } = await request.json();
     if (!userId || typeof userId !== "string") {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 });

@@ -1,4 +1,4 @@
-import { propertiesCollection, Shares, sharesCollection, locksCollection } from "../../../lib/mongo";
+import { connectToMongo, propertiesCollection, Shares, sharesCollection, locksCollection } from "../../../lib/mongo";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
@@ -22,6 +22,8 @@ export async function POST(request: Request) {
     // Transfer 1satOrdinal from the property UTXO to the investor
     let lockId: ObjectId | null = null;
     try {
+        await connectToMongo();
+
         if (!SERVER_KEY || !STORAGE) {
             return NextResponse.json({ error: "Server wallet not configured" }, { status: 500 });
         }

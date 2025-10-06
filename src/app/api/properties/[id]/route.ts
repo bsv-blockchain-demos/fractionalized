@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { propertiesCollection, propertyDescriptionsCollection } from "../../../../lib/mongo";
+import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } from "../../../../lib/mongo";
 
 export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    await connectToMongo();
+
     const { id } = params;
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });

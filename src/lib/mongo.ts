@@ -183,7 +183,31 @@ async function connectToMongo() {
       
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
-      await propertiesCollection.createIndex({ "txids.tokenTxid": 1 }, { unique: true });
+      // Ensure unique tokenTxid only when present (partial unique index)
+      try {
+        const desiredIndexName = "txids.tokenTxid_unique";
+        // Drop conflicting legacy index if present (e.g., auto-named txids.tokenTxid_1)
+        const existingIndexes = await propertiesCollection.listIndexes().toArray().catch(() => [] as any[]);
+        // Attempt to drop any legacy lowercase or uppercase index variants
+        const conflictingIndexes = existingIndexes.filter((i: any) => (
+          i.name === "txids.tokenTxid_1" ||
+          i.name === "txids.TokenTxid_1" ||
+          (i.key && (i.key["txids.tokenTxid"] === 1 || i.key["txids.TokenTxid"] === 1) && i.name !== desiredIndexName)
+        ));
+        for (const idx of conflictingIndexes) {
+          try { await propertiesCollection.dropIndex(idx.name); } catch {}
+        }
+        await propertiesCollection.createIndex(
+          { "txids.tokenTxid": 1 },
+          {
+            name: desiredIndexName,
+            unique: true,
+            partialFilterExpression: { "txids.tokenTxid": { $type: "string" } },
+          }
+        );
+      } catch (e) {
+        console.warn("Ensuring txids.tokenTxid index failed (will continue):", e);
+      }
 
       await sharesCollection.createIndex({ "_id": 1 });
       // For quick lookup of latest share for a property and per investor
