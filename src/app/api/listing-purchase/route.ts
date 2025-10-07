@@ -77,9 +77,6 @@ export async function POST(request: Request) {
         const fullOrdinalTx = Transaction.fromBEEF(ordinalTx.outputs[0].beef as number[]);
 
         // Create ordinal transfer transaction scripts
-        const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, false, share.investorId);
-        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(fullOrdinalTx, 0);
-
         const ordinalTransferScript = new Ordinals().lock(buyerId, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
 
         // Create signature to unlock the fee paymentUTXO
@@ -99,7 +96,25 @@ export async function POST(request: Request) {
             TransactionSignature.SIGHASH_FORKID
         );
 
-        const paymentUnlockingScript = new PaymentUTXO().unlock(sig, buyerId, SERVER_PUB_KEY)
+        const paymentUnlockingScript = new PaymentUTXO().unlock(sig, buyerId, SERVER_PUB_KEY);
+
+        // Create pre-image transaction for ordinal unlock
+        const preimageTx = new Transaction();
+        preimageTx.addInput({
+            sourceTransaction: fullOrdinalTx,
+            sourceOutputIndex: 0,
+        });
+        preimageTx.addInput({
+            sourceTransaction: paymentTX,
+            sourceOutputIndex: 0,
+        });
+        preimageTx.addOutput({
+            satoshis: 1,
+            lockingScript: ordinalTransferScript,
+        });
+
+        const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, false, share.investorId);
+        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
 
         // Create transfer transaction
         const transferTx = await wallet.createAction({

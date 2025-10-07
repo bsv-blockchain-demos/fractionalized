@@ -137,14 +137,25 @@ export function Marketplace() {
             const fullTx = Transaction.fromBEEF(tx.outputs[0].beef);
             const tokens = await calcTokenTransfer(fullTx, 0, 0);
 
-            // Create the unlocking script
-            const ordinalUnlockFrame = new Ordinals().unlock(userWallet!, "single");
-            const ordinalUnlockingScript = await ordinalUnlockFrame.sign(fullTx, 0);
-
             const assetId = transferTxid.replace(".", "_");
 
-            // Create the multisig locking script
+            // Create the multisig locking script for the new output
             const ordinalLockingScript = new Ordinals().lock(userPubKey, assetId, tokenTxid, tokens, "transfer", false, true);
+
+            // Build a preimage transaction that mirrors the intended spend for correct ordinal signature
+            const ordinalUnlockFrame = new Ordinals().unlock(userWallet!, "single");
+            const preimageTx = new Transaction();
+            preimageTx.addInput({
+                sourceTransaction: fullTx,
+                sourceOutputIndex: 0,
+            });
+            preimageTx.addOutput({
+                satoshis: 1,
+                lockingScript: ordinalLockingScript,
+            });
+
+            // Sign the ordinal input (index 0) against the preimage transaction
+            const ordinalUnlockingScript = await ordinalUnlockFrame.sign(preimageTx, 0);
 
             // Create the transaction
             const newListingTx = await userWallet!.createAction({

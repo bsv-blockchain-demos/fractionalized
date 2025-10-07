@@ -107,7 +107,6 @@ export async function POST(request: Request) {
 
         // Create the ordinal unlocking and locking script for transfer (mint spend => treat as first)
         const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, true, property.seller);
-        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(fullParentTx, parentVout);
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
         const ordinalTransferScript = new Ordinals().lock(investorId, assetId, propertyTokenTxid, amount, "transfer");
@@ -167,6 +166,32 @@ export async function POST(request: Request) {
                 lockingScript: paymentChangeLockingScript.toHex(),
             },
         ];
+
+        // Build a preimage transaction mirroring the final spend for correct ordinal signature
+        const preimageTx = new Transaction();
+        preimageTx.addInput({
+            sourceTransaction: fullParentTx,
+            sourceOutputIndex: parentVout,
+        });
+        preimageTx.addInput({
+            sourceTransaction: paymentSourceTX,
+            sourceOutputIndex: paymentVout,
+        });
+        preimageTx.addOutput({
+            satoshis: 1,
+            lockingScript: ordinalTransferScript,
+        });
+        preimageTx.addOutput({
+            satoshis: 1,
+            lockingScript: changeScript,
+        });
+        preimageTx.addOutput({
+            satoshis: paymentChangeSats,
+            lockingScript: paymentChangeLockingScript,
+        });
+
+        // Sign the ordinal input (index 0) against the preimage transaction
+        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
 
         // Merge the two input beefs required for the inputBEEF
         const beef = new Beef();
