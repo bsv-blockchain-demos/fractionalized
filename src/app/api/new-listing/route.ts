@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToMongo, propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, Shares, MarketItem } from "../../../lib/mongo";
+import { requireAuth } from "../../../utils/apiAuth";
 import { traceShareChain } from "../../../utils/shareChain";
 
 const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
 
 export async function POST(request: Request) {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const userIdFromToken = auth.user;
     const { propertyId, sellerId, amount, parentTxid, transferTxid, pricePerShare } = await request.json();
+
+    // Identity check: a user can only create listings for themselves
+    if (sellerId !== userIdFromToken) {
+        return NextResponse.json({ error: "You can't create listings for someone else" }, { status: 403 });
+    }
 
     let lockId: ObjectId | null = null;
     try {

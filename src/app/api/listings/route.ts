@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
 import { ObjectId } from "mongodb";
+import { requireAuth } from "../../../utils/apiAuth";
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        const auth = await requireAuth(request);
+        if (auth instanceof NextResponse) return auth;
+
         await connectToMongo();
 
         // Find unsold listings (sold: false OR missing)

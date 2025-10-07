@@ -1,26 +1,20 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
+import { requireAuth } from "../../../utils/apiAuth";
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const userIdFromToken = auth.user;
   try {
     await connectToMongo();
 
-    const { userId } = await request.json();
-    if (!userId || typeof userId !== "string") {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-    }
+    // Use authenticated user from token
+    const userId = userIdFromToken;
 
     const cursor = marketItemsCollection.aggregate([
-      {
-        $match: {
-          sellerId: userId,
-          $or: [
-            { sold: { $exists: false } },
-            { sold: false },
-          ],
-        },
-      },
+      { $match: { sellerId: userId, $or: [{ sold: { $exists: false } }, { sold: false }] } },
       {
         $lookup: {
           from: propertiesCollection.collectionName,

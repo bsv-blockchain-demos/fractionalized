@@ -1,26 +1,21 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { connectToMongo, sharesCollection } from "../../../lib/mongo";
+import { requireAuth } from "../../../utils/apiAuth";
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const userIdFromToken = auth.user; // pubkey
   try {
     await connectToMongo();
 
-    const body = await request.json().catch(() => ({}));
-    const userId: string | undefined = body.userId || body.investorId;
+    // Use pubkey from token
+    const investorPubKey = userIdFromToken;
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-    }
-    if (!ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-    const investorObjectId = new ObjectId(userId);
-
-    // Return only shares currently owned by the user: shares for this investor
+    // Return only shares currently owned by the user: shares for this investor pubkey
     // where there is no other share with parentTxid equal to this share's transferTxid
     const pipeline = [
-      { $match: { investorId: investorObjectId } },
+      { $match: { investorId: investorPubKey } },
       {
         $lookup: {
           from: "shares",

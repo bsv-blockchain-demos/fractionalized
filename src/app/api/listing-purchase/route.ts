@@ -9,13 +9,22 @@ import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
 import { SERVER_PUBKEY } from "../../../utils/env";
 import { toOutpoint } from "../../../utils/outpoints";
+import { requireAuth } from "../../../utils/apiAuth";
 
 const STORAGE_URL = process.env.STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
 const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 export async function POST(request: Request) {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.user;
     const { marketItemId, buyerId, paymentTX } = await request.json();
+
+    // Verify the investoryId (requester) is the logged in user
+    if (userId !== buyerId) {
+        return NextResponse.json({ error: "You can't make a purchase for another user" }, { status: 401 });
+    }
 
     let lockId: ObjectId | null = null;
     try {

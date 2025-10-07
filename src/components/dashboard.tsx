@@ -49,11 +49,7 @@ export function Dashboard() {
         }
 
         // Get owned shares
-        const response = await fetch("/api/my-shares", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: userPubKey }),
-        });
+        const response = await fetch("/api/my-shares", { method: "POST" });
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
@@ -120,11 +116,7 @@ export function Dashboard() {
           }
         }
 
-        const response = await fetch("/api/my-listings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: userPubKey }),
-        });
+        const response = await fetch("/api/my-listings", { method: "POST" });
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
@@ -168,11 +160,7 @@ export function Dashboard() {
         }
 
         // Get selling properties
-        const response = await fetch("/api/my-selling", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: userPubKey }),
-        });
+        const response = await fetch("/api/my-selling", { method: "POST" });
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }

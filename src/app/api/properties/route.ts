@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectToMongo, propertiesCollection } from "../../../lib/mongo";
+import { requireAuth } from "../../../utils/apiAuth";
 
 // Helper to build aggregation pipeline based on filters and sorting, returning a $facet
 function buildFacetPipeline(body: any) {
@@ -160,6 +161,8 @@ function buildFacetPipeline(body: any) {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
     const body = await request.json();
 
     await connectToMongo();
@@ -178,6 +181,8 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
     const { searchParams } = new URL(request.url);
     const page = Number(searchParams.get("page") || 1);
     const limit = Number(searchParams.get("limit") || 20);

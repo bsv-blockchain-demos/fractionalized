@@ -23,22 +23,27 @@ const AuthContext = createContext<authContextType>({
     isAuthenticated: null,
     checkAuth: async () => { return false; },
 });
-
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
     const [userWallet, setUserWallet] = useState<authContextType['userWallet']>(null);
     const [userPubKey, setUserPubKey] = useState<authContextType['userPubKey']>(null);
     const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
-    const checkAuth = useCallback(async () => {
+    const checkAuth = useCallback(async (): Promise<boolean> => {
         try {
-            const response = await fetch("/api/auth/me");
-            setIsAuthenticated(response.ok);
-            return true;
+            if (userWallet) {
+                const authenticated = await userWallet.isAuthenticated();
+                const isAuth = !!authenticated;
+                setIsAuthenticated(isAuth);
+                return isAuth;
+            } else {
+                throw new Error("Wallet not initialized");
+            }
         } catch (error) {
+            console.error("Failed to check authentication:", error);
             setIsAuthenticated(false);
             return false;
         }
-    }, []);
+    }, [userWallet]);
 
     useEffect(() => {
         checkAuth();
@@ -59,9 +64,9 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
                 return;
             }
 
-            const { publicKey } = await newWallet.getPublicKey({ 
+            const { publicKey } = await newWallet.getPublicKey({
                 protocolID: [0, "fractionalized"],
-                keyID: "0", 
+                keyID: "0",
             });
 
             // Only update state once everything is fetched
@@ -84,7 +89,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
 
     useEffect(() => {
         initializeWallet();
-    }, []);
+    }, [initializeWallet]);
 
     return (
         <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth }}>

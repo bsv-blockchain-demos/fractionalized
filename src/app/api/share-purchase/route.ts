@@ -9,13 +9,22 @@ import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { SERVER_PUBKEY } from "../../../utils/env";
 import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
+import { requireAuth } from "../../../utils/apiAuth";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
 const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 export async function POST(request: Request) {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.user;
     const { propertyId, investorId, amount } = await request.json();
+
+    // Verify the investoryId (requester) is the logged in user
+    if (userId !== investorId) {
+        return NextResponse.json({ error: "You can't make a purchase for another user" }, { status: 401 });
+    }
 
     // Verify the purchase and make a blockchain transaction
 

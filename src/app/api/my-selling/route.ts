@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
 import { connectToMongo, propertiesCollection } from "../../../lib/mongo";
+import { requireAuth } from "../../../utils/apiAuth";
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const userIdFromToken = auth.user;
   try {
     await connectToMongo();
 
-    const body = await request.json().catch(() => ({}));
-    const userId: string | undefined = body.userId || body.sellerId || body.investorId;
-
-    if (!userId || typeof userId !== "string") {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-    }
+    // Use authenticated user from token
+    const userId: string = userIdFromToken;
 
     // seller is stored as a string pubkey in the properties collection
-    const items = await propertiesCollection
-      .find({ seller: userId })
-      .toArray();
+    const items = await propertiesCollection.find({ seller: userId }).toArray();
 
     return NextResponse.json({ items });
   } catch (e) {

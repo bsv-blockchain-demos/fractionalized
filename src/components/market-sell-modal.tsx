@@ -62,11 +62,7 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
             return;
           }
         }
-        const res = await fetch("/api/my-shares", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: userPubKey }),
-        });
+        const res = await fetch("/api/my-shares", { method: "POST" });
         const data = await res.json();
         const mapped: OwnedShare[] = (data?.shares || []).map((s: any) => ({
           _id: String(s?._id ?? ""),
