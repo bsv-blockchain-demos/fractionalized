@@ -221,7 +221,7 @@ export class Ordinals implements ScriptTemplate {
                     signatureScope
                 );
                 const unlockScript = new UnlockingScript();
-                if (isFirst && sellerPubkey) {
+                if (sellerPubkey) {
                     // If first ordinal child connect with serverWallet (multisig script)
                     unlockScript.writeOpCode(OP.OP_0)
                     unlockScript.writeBin(sig.toChecksigFormat());

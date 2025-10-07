@@ -5,10 +5,10 @@ import { InfoTip } from "./info-tip";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
-import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature } from "@bsv/sdk";
+import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature, Transaction } from "@bsv/sdk";
 import { Ordinals } from "../utils/ordinals";
 import { SERVER_PUBKEY } from "../utils/env";
-import { PaymentUTXO } from "../utils/paymentUtxo";
+import { PaymentUtxo } from "../utils/paymentUtxo";
 import { toOutpoint } from "../utils/outpoints";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
@@ -272,9 +272,8 @@ export function Admin() {
             // Multisig 1 of 2 so server can use funds for transfer fees
             const oneOfTwoHash = Hash.hash160(SERVER_PUBKEY + userPubKey, "hex");
 
-            const paymentLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
-            const paymentUnlockingScript = new PaymentUTXO().unlock(sig, userPubKey, SERVER_PUBKEY);
-            const paymentChangeLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
+            const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
+            const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
             // Estimated at 2 sats in fees per share sold
@@ -299,6 +298,33 @@ export function Admin() {
             if (!paymentTxAction?.txid) {
                 throw new Error("Failed to create payment UTXO");
             }
+
+            // Build preimage for payment input and sign with PaymentUtxo frame
+            const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
+            const preimageTx = new Transaction();
+            preimageTx.addInput({
+                sourceTransaction: paymentSourceTX,
+                sourceOutputIndex: 0,
+            });
+            preimageTx.addOutput({
+                satoshis: 1,
+                lockingScript: ordinalLockingScript,
+            });
+            preimageTx.addOutput({
+                satoshis: changeSats,
+                lockingScript: paymentChangeLockingScript,
+            });
+
+            const paymentUnlockFrame = new PaymentUtxo().unlock(
+                userWallet!,
+                "single",
+                false,
+                undefined,
+                undefined,
+                SERVER_PUBKEY,
+                false // order: server first, then user to match hash(SERVER + user)
+            );
+            const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 0);
 
             // Create the mint transaction
             const actionRes = await userWallet?.createAction({

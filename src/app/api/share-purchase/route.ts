@@ -6,7 +6,7 @@ import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash
 import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
-import { PaymentUTXO } from "../../../utils/paymentUtxo";
+import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { SERVER_PUBKEY } from "../../../utils/env";
 import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
 
@@ -72,24 +72,7 @@ export async function POST(request: Request) {
         // Get property token txid to put in the inscribed token (for indentification)
         const propertyTokenTxid = property.txids.tokenTxid;
 
-        const { signature } = await wallet.createSignature({
-            protocolID: [0, "ordinals"],
-            keyID: "0",
-            counterparty: 'self'
-        });
-        if (!signature) {
-            throw new Error("Failed to create signature");
-        }
-
-        const rawSignature = Signature.fromDER(signature, 'hex')
-        const sig = new TransactionSignature(
-            rawSignature.r,
-            rawSignature.s,
-            TransactionSignature.SIGHASH_FORKID
-        );
-
-        // Unlock the payment UTXO for the transaction fees
-        const paymentUnlockingScript = new PaymentUTXO().unlock(sig, property.seller, SERVER_PUB_KEY);
+        // Payment unlocking will be signed against the preimage (frame-based)
 
         // Always spend from the original mint outpoint for purchases
         const currentOrdinalOutpoint = property.txids.mintTxid as string;
@@ -144,7 +127,7 @@ export async function POST(request: Request) {
 
         // Create new multiSig lockingScript for the payment change UTXO
         const oneOfTwoHash = Hash.hash160(SERVER_PUB_KEY + property.seller, "hex");
-        const paymentChangeLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
+        const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
         const paymentChangeSats = Number(paymentSourceTX.outputs[paymentVout].satoshis) - 2; // 2 satoshis for fees
@@ -167,7 +150,7 @@ export async function POST(request: Request) {
             },
         ];
 
-        // Build a preimage transaction mirroring the final spend for correct ordinal signature
+        // Build a preimage transaction mirroring the final spend for correct signatures
         const preimageTx = new Transaction();
         preimageTx.addInput({
             sourceTransaction: fullParentTx,
@@ -190,8 +173,10 @@ export async function POST(request: Request) {
             lockingScript: paymentChangeLockingScript,
         });
 
-        // Sign the ordinal input (index 0) against the preimage transaction
+        // Sign the ordinal input (index 0) and payment input (index 1) against the preimage transaction
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
+        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, "single", false, undefined, undefined, property.seller);
+        const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Merge the two input beefs required for the inputBEEF
         const beef = new Beef();

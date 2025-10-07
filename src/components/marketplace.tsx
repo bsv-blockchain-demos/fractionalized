@@ -8,7 +8,7 @@ import { useAuthContext } from "../context/walletContext";
 import { Ordinals } from "../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
-import { PaymentUTXO } from "../utils/paymentUtxo";
+import { PaymentUtxo } from "../utils/paymentUtxo";
 import { Hash, Transaction } from "@bsv/sdk";
 import { toTxid, toOutpoint } from "../utils/outpoints";
 import { SERVER_PUBKEY } from "../utils/env";
@@ -254,7 +254,7 @@ export function Marketplace() {
             setPurchaseLoading(true);
             // Create the paymentTX
             const oneOfTwoHash = Hash.hash160(SERVER_PUB_KEY + buyerId);
-            const paymentLockingScript = new PaymentUTXO().lock(oneOfTwoHash);
+            const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
             const paymentUtxo = await userWallet!.createAction({
                 description: "Payment",

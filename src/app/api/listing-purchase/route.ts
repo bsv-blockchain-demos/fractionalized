@@ -2,7 +2,7 @@ import { connectToMongo, propertiesCollection, sharesCollection, locksCollection
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
-import { PaymentUTXO } from "../../../utils/paymentUtxo";
+import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
@@ -79,24 +79,7 @@ export async function POST(request: Request) {
         // Create ordinal transfer transaction scripts
         const ordinalTransferScript = new Ordinals().lock(buyerId, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
 
-        // Create signature to unlock the fee paymentUTXO
-        const { signature } = await wallet.createSignature({
-            protocolID: [0, "ordinals"],
-            keyID: "0",
-            counterparty: 'self'
-        });
-        if (!signature) {
-            throw new Error("Failed to create signature");
-        }
-
-        const rawSignature = Signature.fromDER(signature, 'hex')
-        const sig = new TransactionSignature(
-            rawSignature.r,
-            rawSignature.s,
-            TransactionSignature.SIGHASH_FORKID
-        );
-
-        const paymentUnlockingScript = new PaymentUTXO().unlock(sig, buyerId, SERVER_PUB_KEY);
+        // Payment unlocking will be signed against a preimage (frame-based)
 
         // Create pre-image transaction for ordinal unlock
         const preimageTx = new Transaction();
@@ -115,6 +98,10 @@ export async function POST(request: Request) {
 
         const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, false, share.investorId);
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
+
+        // Create payment unlocking script using the same preimage and input index 1
+        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, "all", false, undefined, undefined, buyerId);
+        const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Create transfer transaction
         const transferTx = await wallet.createAction({
