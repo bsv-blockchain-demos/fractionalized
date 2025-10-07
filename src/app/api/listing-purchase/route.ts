@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     // Verify the investoryId (requester) is the logged in user
     if (userId !== buyerId) {
-        return NextResponse.json({ error: "You can't make a purchase for another user" }, { status: 401 });
+        return NextResponse.json({ error: "You can't make a purchase for another user" }, { status: 403 });
     }
 
     let lockId: ObjectId | null = null;

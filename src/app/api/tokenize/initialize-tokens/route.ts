@@ -3,8 +3,12 @@ import { connectToMongo, propertiesCollection } from "../../../../lib/mongo";
 import { Transaction } from "@bsv/sdk";
 import { broadcastTX } from "../../../../hooks/overlayFunctions";
 import { toOutpoint } from "../../../../utils/outpoints";
+import { requireAuth } from "../../../../utils/apiAuth";
 
 export async function POST(request: Request) {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.user;
     const body = await request.json();
 
     // Save the created mint transaction on our backend

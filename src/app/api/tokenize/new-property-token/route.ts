@@ -2,11 +2,21 @@ import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } 
 import { NextResponse } from "next/server";
 import { Properties } from "../../../../lib/mongo";
 import { toOutpoint } from "../../../../utils/outpoints";
+import { requireAuth } from "../../../../utils/apiAuth";
 
 export async function POST(request: Request) {
+    const auth = await requireAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.user;
+
     await connectToMongo();
 
     const { data, tx, seller } = await request.json();
+
+    // Identity check: token user must match seller
+    if (seller !== userId) {
+        return NextResponse.json({ error: "You can't tokenize a property for another user" }, { status: 403 });
+    }
 
     // Enforce server-side limits (must match validators.ts)
     const MAX_DETAILS = 1500;
