@@ -38,14 +38,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
         }
         fetchProperty();
     }, [propertyId]);
-
-    if (loading && !property) {
-        return <div className="container mx-auto px-4 py-6 text-text-secondary">Loading property...</div>;
-    }
-    if (!property) {
-        return <div className="container mx-auto px-4 py-6 text-text-secondary">Property not found</div>;
-    }
-
+    
     const handleContinueInvest = async () => {
         const amount = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
 
@@ -88,7 +81,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     };
 
     // Feature display (icons + pluralized labels)
-    const displayFeatures = useFeatureDisplay(property.features);
+    const displayFeatures = useFeatureDisplay(property?.features ?? []);
 
     // Invest modal state (percent-only)
     const [isInvestOpen, setInvestOpen] = useState(false);
@@ -96,7 +89,17 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const [selectedPercent, setSelectedPercent] = useState<number | 'custom'>(1);
     const [customPercent, setCustomPercent] = useState<string>('');
 
+    if (loading && !property) {
+        return <div className="container mx-auto px-4 py-6 text-text-secondary">Loading property...</div>;
+    }
+    if (!property) {
+        return <div className="container mx-auto px-4 py-6 text-text-secondary">Property not found</div>;
+    }
+
     // Derived numbers
+    const sellerIdentifier =  (property as any).seller || null;
+    const isSeller = !!sellerIdentifier && !!userPubKey && String(sellerIdentifier).toLowerCase() === String(userPubKey).toLowerCase();
+
     const priceAED = property.priceAED;
     // sanitize custom percent: integers only 1..100
     const sanitizedCustom = (() => {
@@ -138,13 +141,15 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             <span className="text-sm text-text-secondary">
                                 {property.investors} investors
                             </span>
-                            <button
-                                type="button"
-                                onClick={() => setInvestOpen(true)}
-                                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent"
-                            >
-                                Invest
-                            </button>
+                            {!isSeller && (
+                                <button
+                                    type="button"
+                                    onClick={() => setInvestOpen(true)}
+                                    className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent"
+                                >
+                                    Invest
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
