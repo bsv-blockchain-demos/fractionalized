@@ -34,6 +34,14 @@ export function Navbar() {
                         </li>
                         <li>
                             <Link 
+                                href="/create" 
+                                className={isActive("/create") ? "nav-link active" : "nav-link"}
+                            >
+                                Create
+                            </Link>
+                        </li>
+                        <li>
+                            <Link 
                                 href="/properties" 
                                 className={isActive("/properties") ? "nav-link active" : "nav-link"}
                             >
@@ -54,14 +62,6 @@ export function Navbar() {
                                 className={isActive("/marketplace") ? "nav-link active" : "nav-link"}
                             >
                                 Marketplace
-                            </Link>
-                        </li>
-                        <li>
-                            <Link 
-                                href="/admin" 
-                                className={isActive("/admin") ? "nav-link active" : "nav-link"}
-                            >
-                                Admin
                             </Link>
                         </li>
                     </ul>
