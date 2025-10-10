@@ -23,6 +23,7 @@ export interface Properties {
     images: string[],
     txids: Record<string, string>,
     seller: string,
+    proofOfOwnership?: string, // Base64 encoded PDF document
 }
 
 export interface PropertyDescription {

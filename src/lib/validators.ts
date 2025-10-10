@@ -40,6 +40,7 @@ export const propertiesValidator = {
           runningCost: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
         },
       },
+      proofOfOwnership: { bsonType: 'string', maxLength: 10485760 }, // ~10MB base64 limit (roughly 7.5MB PDF)
     },
     additionalProperties: true,
   },

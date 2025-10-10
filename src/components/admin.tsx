@@ -415,6 +415,7 @@ export function Admin() {
             Studio: 0,
         } as Record<string, number>,
         images: "", // comma-separated URLs
+        proofOfOwnership: "", // Base64 encoded PDF
     });
 
     // Shares modal state
@@ -431,6 +432,43 @@ export function Admin() {
         }));
     const updateFeature = (key: string, value: number) =>
         setForm((f) => ({ ...f, features: { ...f.features, [key]: value } }));
+
+    const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file type
+        if (file.type !== "application/pdf") {
+            toast.error("Please upload a PDF file");
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            toast.error("File size must be less than 5MB");
+            return;
+        }
+
+        try {
+            // Convert PDF to base64
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64 = reader.result as string;
+                // Remove the data URL prefix (data:application/pdf;base64,)
+                const base64Data = base64.split(",")[1];
+                setForm((f) => ({ ...f, proofOfOwnership: base64Data }));
+                toast.success("Proof of ownership uploaded successfully");
+            };
+            reader.onerror = () => {
+                toast.error("Failed to read file");
+            };
+            reader.readAsDataURL(file);
+        } catch (error) {
+            console.error("Error uploading file:", error);
+            toast.error("Failed to upload file");
+        }
+    };
 
     const detailsLen = useMemo(() => form.descriptionDetails.length, [form.descriptionDetails]);
     const titleLen = useMemo(() => form.title.length, [form.title]);
@@ -469,6 +507,7 @@ export function Admin() {
                 .map((s) => s.trim())
                 .filter(Boolean),
             sell: sellConfig, // include shares configuration from modal
+            proofOfOwnership: form.proofOfOwnership || undefined, // Include base64 PDF if uploaded
         };
 
         await handleSubmit(payload);
@@ -809,6 +848,42 @@ export function Admin() {
                         >
                             Configure percent to sell
                         </button>
+                    </div>
+                </div>
+
+                {/* Proof of Ownership Upload */}
+                <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
+                    <h2 className="text-lg font-semibold mb-3 text-text-primary">Proof of Ownership</h2>
+                    <div className="space-y-3">
+                        <div className="text-sm text-text-secondary">
+                            Upload a PDF document proving ownership of the property (e.g., title deed, ownership certificate).
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <label className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary text-sm btn-glow hover:cursor-pointer inline-block">
+                                <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    onChange={handlePdfUpload}
+                                    className="hidden"
+                                />
+                                Choose PDF File
+                            </label>
+                            {form.proofOfOwnership && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-green-400">✓ Document uploaded</span>
+                                    <button
+                                        type="button"
+                                        className="text-sm text-red-400 hover:text-red-300"
+                                        onClick={() => setForm(f => ({ ...f, proofOfOwnership: "" }))}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="text-xs text-text-secondary">
+                            Max file size: 5MB. File will be securely stored as base64 encoded data.
+                        </div>
                     </div>
                 </div>
 

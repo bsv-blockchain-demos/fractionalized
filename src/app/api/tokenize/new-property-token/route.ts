@@ -24,8 +24,9 @@ export async function POST(request: Request) {
     const MAX_WHY_TEXT = 400;
     const MAX_TITLE = 80;
     const MAX_LOCATION = 80;
+    const MAX_PROOF_OF_OWNERSHIP = 10485760; // 10MB base64 limit
     try {
-        const { description, whyInvest, title, location } = data || {};
+        const { description, whyInvest, title, location, proofOfOwnership } = data || {};
         const errors: string[] = [];
         // Title & Location
         const t = String(title ?? "").trim();
@@ -45,6 +46,20 @@ export async function POST(request: Request) {
                 if (tlen > MAX_WHY_TITLE) errors.push(`whyInvest[${idx}].title too long (${tlen}/${MAX_WHY_TITLE})`);
                 if (xlen > MAX_WHY_TEXT) errors.push(`whyInvest[${idx}].text too long (${xlen}/${MAX_WHY_TEXT})`);
             });
+        }
+        // Validate proof of ownership if provided
+        if (proofOfOwnership) {
+            if (typeof proofOfOwnership !== 'string') {
+                errors.push('proofOfOwnership must be a base64 string');
+            } else if (proofOfOwnership.length > MAX_PROOF_OF_OWNERSHIP) {
+                errors.push(`proofOfOwnership too large (${proofOfOwnership.length}/${MAX_PROOF_OF_OWNERSHIP} chars)`);
+            } else {
+                // Validate base64 format
+                const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+                if (!base64Regex.test(proofOfOwnership)) {
+                    errors.push('proofOfOwnership must be valid base64');
+                }
+            }
         }
 
         // Numeric sanity checks (avoid pathological values)
