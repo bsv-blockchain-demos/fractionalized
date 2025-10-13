@@ -9,7 +9,7 @@ export interface SellingListingsProps {
   onListProperty?: () => void;
 }
 
-const formatCurrency = (amount: number) => `AED ${amount.toLocaleString()}`;
+const formatCurrency = (amount: number) => `USD ${amount.toLocaleString()}`;
 
 export default function SellingListings({ selling, onListProperty }: SellingListingsProps) {
   return (
@@ -38,7 +38,7 @@ export default function SellingListings({ selling, onListProperty }: SellingList
                   <span className="badge-dark text-xs">Selling</span>
                 </div>
                 <p className="text-xs text-text-secondary mb-2">{property.location}</p>
-                <div className="text-sm text-text-primary">Asking: {formatCurrency(property.priceAED)}</div>
+                <div className="text-sm text-text-primary">Asking: {formatCurrency(property.priceUSD)}</div>
               </div>
             </Link>
           ))}

@@ -7,11 +7,11 @@ export interface Properties {
     _id: ObjectId;
     title: string;
     location: string;
-    priceAED: number;
+    priceUSD: number;
     investors: number;
     status: string;
     annualisedReturn: string;
-    currentValuationAED: number;
+    currentValuationUSD: number;
     grossYield: string;
     netYield: string;
     investmentBreakdown: {

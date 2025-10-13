@@ -115,7 +115,7 @@ export function Properties() {
         { key: 'sold', label: 'Sold' },
     ];
     const formatCurrency = (amount: number) => {
-        return `AED ${amount.toLocaleString()}`;
+        return `USD ${amount.toLocaleString()}`;
     };
 
     const formatDate = (dateString: string) => {

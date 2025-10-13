@@ -77,7 +77,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     };
 
     const formatCurrency = (amount: number) => {
-        return `AED ${amount.toLocaleString()}`;
+        return `USD ${amount.toLocaleString()}`;
     };
 
     // Feature display (icons + pluralized labels)
@@ -100,7 +100,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const sellerIdentifier =  (property as any).seller || null;
     const isSeller = !!sellerIdentifier && !!userPubKey && String(sellerIdentifier).toLowerCase() === String(userPubKey).toLowerCase();
 
-    const priceAED = property.priceAED;
+    const priceUSD = property.priceUSD;
     // sanitize custom percent: integers only 1..100
     const sanitizedCustom = (() => {
         const n = Math.floor(Number(customPercent || 0));
@@ -109,12 +109,12 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     })();
     const percentFromState = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
     const effectivePercent = percentFromState;
-    const investmentAmountAED = (priceAED * (effectivePercent || 0)) / 100;
+    const investmentAmountUSD = (priceUSD * (effectivePercent || 0)) / 100;
     const annualisedRate = (() => {
         const n = parseFloat(String(property.annualisedReturn).replace('%', ''));
         return isNaN(n) ? 0 : n / 100;
     })();
-    const expectedAnnualReturnAED = investmentAmountAED * annualisedRate;
+    const expectedAnnualReturnUSD = investmentAmountUSD * annualisedRate;
 
     return (
         <div className="container mx-auto px-4 py-6">
@@ -134,7 +134,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                     <h1 className="text-3xl font-bold text-text-primary">{property.title}</h1>
                     <div className="text-right">
                         <div className="text-3xl font-bold mb-2 text-text-primary">
-                            {formatCurrency(property.priceAED)}
+                            {formatCurrency(property.priceUSD)}
                         </div>
                         <div className="flex items-center gap-4 justify-end">
                             <span className="px-3 py-1 rounded text-sm font-medium badge-success">{property.status.toUpperCase()}</span>
@@ -211,7 +211,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             </p>
                             <h3 className="font-semibold mb-2 text-text-primary">Below Market Price</h3>
                             <p className="text-sm text-text-secondary">
-                                Priced at AED 1,450,000 approximately 22.8% below the estimated AED 1,874,563 valuation by third party company, offering a strong entry point.
+                                Priced at USD 1,450,000 approximately 22.8% below the estimated USD 1,874,563 valuation by third party company, offering a strong entry point.
                             </p>
                         </div>
                         <div>
@@ -225,7 +225,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             </p>
                             <h3 className="font-semibold mb-2 text-text-primary">Prime Location</h3>
                             <p className="text-sm text-text-secondary">
-                                Strategically located in Business Bay with easy access to Downtown Dubai, Dubai Mall, and metro stations, ensuring high rental demand and capital appreciation.
+                                Strategically located in Business Bay with easy access to downtown areas and metro stations, ensuring high rental demand and capital appreciation.
                             </p>
                         </div>
                     </div>
@@ -240,7 +240,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 <div className="grid grid-cols-4 gap-6">
                     <div>
                         <div className="text-sm mb-1 text-text-secondary">Property price</div>
-                        <div className="font-bold text-text-primary">{formatCurrency(property.priceAED)}</div>
+                        <div className="font-bold text-text-primary">{formatCurrency(property.priceUSD)}</div>
                     </div>
                     <div>
                         <div className="text-sm mb-1 text-text-secondary">Purchase cost</div>
@@ -341,18 +341,18 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                     {/* Preview */}
                     <div className="p-3 rounded-lg bg-bg-tertiary border border-border-subtle text-sm">
                         <div className="mb-1">
-                            You're investing <span className="font-semibold text-text-primary">{formatCurrency(investmentAmountAED)}</span>
+                            You're investing <span className="font-semibold text-text-primary">{formatCurrency(investmentAmountUSD)}</span>
                             {` = `}
                             <span className="font-semibold text-text-primary">{(effectivePercent || 0).toFixed(0)}%</span> ownership of this property.
                         </div>
                         <div>
-                            Expected annualized return: <span className="font-semibold" style={{ color: 'var(--success)' }}>{formatCurrency(expectedAnnualReturnAED)}</span>
+                            Expected annualized return: <span className="font-semibold" style={{ color: 'var(--success)' }}>{formatCurrency(expectedAnnualReturnUSD)}</span>
                         </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-2">
                         <div className="text-sm text-text-secondary">
-                            Price: <span className="font-medium text-text-primary">{formatCurrency(priceAED)}</span>
+                            Price: <span className="font-medium text-text-primary">{formatCurrency(priceUSD)}</span>
                         </div>
                         <div className="flex gap-2">
                             <button

@@ -384,7 +384,7 @@ export function Marketplace() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-text-secondary">Price / share</p>
-                                    <p className="text-text-primary font-medium">AED {item.pricePerShare.toFixed(0)}</p>
+                                    <p className="text-text-primary font-medium">USD {item.pricePerShare.toFixed(0)}</p>
                                 </div>
                             </div>
 

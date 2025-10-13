@@ -63,14 +63,14 @@ export async function POST(request: Request) {
         }
 
         // Numeric sanity checks (avoid pathological values)
-        const MAX_CURRENCY = 1e12; // AED cap ~ 1 trillion
+        const MAX_CURRENCY = 1e12; // USD cap ~ 1 trillion
         const MAX_INVESTORS = 1e7; // 10 million investors cap
         const isValidCurrency = (n: any) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= MAX_CURRENCY;
         const isValidInteger = (n: any) => Number.isInteger(n) && n >= 0;
 
         const currencyChecks: Array<[string, any]> = [
-            ["priceAED", data?.priceAED],
-            ["currentValuationAED", data?.currentValuationAED],
+            ["priceUSD", data?.priceUSD],
+            ["currentValuationUSD", data?.currentValuationUSD],
             ["investmentBreakdown.purchaseCost", data?.investmentBreakdown?.purchaseCost],
             ["investmentBreakdown.transactionCost", data?.investmentBreakdown?.transactionCost],
             ["investmentBreakdown.runningCost", data?.investmentBreakdown?.runningCost],

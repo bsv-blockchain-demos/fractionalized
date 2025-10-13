@@ -6,7 +6,7 @@ export default function PropertiesPage() {
     <div>
       <PageHeader
         title="Properties"
-        subtitle="Browse and filter investment properties across prime Dubai locations."
+        subtitle="Browse and filter investment properties across prime locations."
       />
       <Properties />
     </div>

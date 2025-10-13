@@ -3,8 +3,8 @@
 import React from "react";
 
 export interface PortfolioStatsData {
-  totalInvestedAED: number;
-  expectedYearlyIncomeAED: number;
+  totalInvestedUSD: number;
+  expectedYearlyIncomeUSD: number;
   avgGrossYield: number; // percent
   positions: number;
 }
@@ -13,7 +13,7 @@ export interface PortfolioStatsProps {
   stats: PortfolioStatsData;
 }
 
-const formatCurrency = (amount: number) => `AED ${amount.toLocaleString()}`;
+const formatCurrency = (amount: number) => `USD ${amount.toLocaleString()}`;
 
 export default function PortfolioStats({ stats }: PortfolioStatsProps) {
   return (
@@ -22,13 +22,13 @@ export default function PortfolioStats({ stats }: PortfolioStatsProps) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
           <div className="group/stat hover:scale-105 transition-transform duration-300">
             <div className="text-2xl font-bold mb-1 text-accent-primary group-hover/stat:text-accent-subtle transition-colors duration-300">
-              {formatCurrency(stats.totalInvestedAED)}
+              {formatCurrency(stats.totalInvestedUSD)}
             </div>
             <div className="text-text-secondary">Total Invested</div>
           </div>
           <div className="group/stat hover:scale-105 transition-transform duration-300">
             <div className="text-2xl font-bold mb-1" style={{ color: "var(--success)" }}>
-              {formatCurrency(stats.expectedYearlyIncomeAED)}
+              {formatCurrency(stats.expectedYearlyIncomeUSD)}
             </div>
             <div className="text-text-secondary">Expected Yearly Income</div>
           </div>

@@ -9,7 +9,7 @@ export type PurchaseItem = {
   name: string;
   location: string;
   sellAmount: number; // percent
-  pricePerShare: number; // AED per 1%
+  pricePerShare: number; // USD per 1%
   propertyId: string;
   sellerId: string;
 };
@@ -72,11 +72,11 @@ export function MarketPurchaseModal({
         <div className="space-y-2 text-sm mb-4">
           <div className="flex justify-between">
             <span className="text-text-secondary">Price per 1%</span>
-            <span className="text-text-primary font-medium">AED {item.pricePerShare.toLocaleString()}</span>
+            <span className="text-text-primary font-medium">USD {item.pricePerShare.toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-text-secondary">Total price</span>
-            <span className="text-text-primary font-semibold">AED {totalPrice.toLocaleString()}</span>
+            <span className="text-text-primary font-semibold">USD {totalPrice.toLocaleString()}</span>
           </div>
         </div>
 

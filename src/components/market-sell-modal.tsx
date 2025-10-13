@@ -16,7 +16,7 @@ type Property = {
   _id: string;
   title: string;
   location: string;
-  priceAED: number;
+  priceUSD: number;
   tokenTxid: string;
 };
 
@@ -96,12 +96,12 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
           _id: String(item?._id ?? selectedShare.propertyId),
           title: String(item?.title ?? "Property"),
           location: String(item?.location ?? ""),
-          priceAED: Number(item?.priceAED ?? 0),
+          priceUSD: Number(item?.priceUSD ?? 0),
           tokenTxid: String(item?.txids?.tokenTxid ?? ""),
         };
         setProperty(prop);
         // First estimate: property price / 100 (price per % share)
-        const estimate = Math.max(0, Math.round((prop.priceAED / 100) * 100) / 100);
+        const estimate = Math.max(0, Math.round((prop.priceUSD / 100) * 100) / 100);
         setPricePerShare(estimate);
       } catch (e) {
         console.error(e);
@@ -159,7 +159,7 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-text-secondary">Property price</div>
-                    <div className="font-medium text-text-primary">AED {property.priceAED.toLocaleString()}</div>
+                    <div className="font-medium text-text-primary">USD {property.priceUSD.toLocaleString()}</div>
                   </div>
                 </div>
               </div>
@@ -167,7 +167,7 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
 
             {/* Price per share */}
             <div>
-              <label className="block text-xs text-text-secondary mb-1">Price per 1% share (AED)</label>
+              <label className="block text-xs text-text-secondary mb-1">Price per 1% share (USD)</label>
               <input
                 type="number"
                 min={0}

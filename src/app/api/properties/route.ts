@@ -25,8 +25,8 @@ function buildFacetPipeline(body: any) {
   }
 
   // Numeric ranges (direct numeric fields)
-  if (filters.priceMin != null) match.priceAED = { ...(match.priceAED || {}), $gte: Number(filters.priceMin) };
-  if (filters.priceMax != null) match.priceAED = { ...(match.priceAED || {}), $lte: Number(filters.priceMax) };
+  if (filters.priceMin != null) match.priceUSD = { ...(match.priceUSD || {}), $gte: Number(filters.priceMin) };
+  if (filters.priceMax != null) match.priceUSD = { ...(match.priceUSD || {}), $lte: Number(filters.priceMax) };
 
   if (filters.investorsMin != null) match.investors = { ...(match.investors || {}), $gte: Number(filters.investorsMin) };
   if (filters.investorsMax != null) match.investors = { ...(match.investors || {}), $lte: Number(filters.investorsMax) };
@@ -103,13 +103,13 @@ function buildFacetPipeline(body: any) {
   const sort: Record<string, 1 | -1> = {};
   switch (sortBy) {
     case "price_asc":
-      sort.priceAED = 1; break;
+      sort.priceUSD = 1; break;
     case "price_desc":
-      sort.priceAED = -1; break;
+      sort.priceUSD = -1; break;
     case "valuation_asc":
-      sort.currentValuationAED = 1; break;
+      sort.currentValuationUSD = 1; break;
     case "valuation_desc":
-      sort.currentValuationAED = -1; break;
+      sort.currentValuationUSD = -1; break;
     case "investors_asc":
       sort.investors = 1; break;
     case "investors_desc":
@@ -127,7 +127,7 @@ function buildFacetPipeline(body: any) {
     case "annualised_desc":
       sort.annualisedReturnNum = -1; break;
     default:
-      sort.priceAED = -1; break;
+      sort.priceUSD = -1; break;
   }
   const skip = Math.max(0, (Number(page) - 1) * Number(limit));
 

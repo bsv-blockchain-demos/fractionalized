@@ -51,7 +51,7 @@ export function Home() {
                         Low Entry Point
                     </h3>
                     <p className="text-text-secondary group-hover:text-text-primary transition-colors duration-300">
-                        Start investing with as little as AED 1,000 through fractional ownership
+                        Start investing with as little as USD 1,000 through fractional ownership
                     </p>
                 </div>
             </div>
@@ -64,7 +64,7 @@ export function Home() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8 text-center">
                     <div className="group/stat hover:scale-105 transition-transform duration-300">
                         <div className="text-3xl font-bold mb-2 text-accent-primary group-hover/stat:text-accent-subtle transition-colors duration-300">
-                            AED 50M+
+                            USD 50M+
                         </div>
                         <div className="text-text-secondary group-hover/stat:text-text-primary transition-colors duration-300">
                             Total Investment Volume

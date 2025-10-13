@@ -30,7 +30,7 @@ export const propertiesValidator = {
       },
       title: { bsonType: 'string', maxLength: 80 },
       location: { bsonType: 'string', maxLength: 80 },
-      currentValuationAED: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
+      currentValuationUSD: { bsonType: ['double','int','long','decimal'], minimum: 0, maximum: 1e12 },
       investors: { bsonType: ['int','long'], minimum: 0, maximum: 100 },
       investmentBreakdown: {
         bsonType: 'object',

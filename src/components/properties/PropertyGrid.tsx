@@ -7,10 +7,10 @@ export interface PropertyItem {
   status?: string;
   location?: string;
   title?: string;
-  priceAED?: number;
+  priceUSD?: number;
   investors?: number;
   annualisedReturn?: string;
-  currentValuationAED?: number;
+  currentValuationUSD?: number;
   grossYield?: string;
 }
 
@@ -19,8 +19,8 @@ export interface PropertyGridProps {
 }
 
 const formatCurrency = (amount: number | undefined) => {
-  if (typeof amount !== "number") return "AED 0";
-  return `AED ${amount.toLocaleString()}`;
+  if (typeof amount !== "number") return "USD 0";
+  return `USD ${amount.toLocaleString()}`;
 };
 
 export default function PropertyGrid({ items }: PropertyGridProps) {
@@ -77,7 +77,7 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
                 {/* Price and Investors */}
                 <div className="flex justify-between items-center mb-4">
                   <div className="text-xl font-bold text-text-primary">
-                    {formatCurrency(property.priceAED as number)}
+                    {formatCurrency(property.priceUSD as number)}
                   </div>
                   <div className="text-sm text-text-secondary">
                     {property.investors} investors
@@ -92,7 +92,7 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-secondary">Current valuation</span>
-                    <span className="font-medium text-text-primary">{formatCurrency(property.currentValuationAED as number)}</span>
+                    <span className="font-medium text-text-primary">{formatCurrency(property.currentValuationUSD as number)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-secondary">Gross yield</span>

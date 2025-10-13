@@ -5,11 +5,11 @@ export type Property = {
   _id: string;
   title: string;
   location: string;
-  priceAED: number;
+  priceUSD: number;
   investors: number;
   status: string;
   annualisedReturn: string;
-  currentValuationAED: number;
+  currentValuationUSD: number;
   grossYield: string;
   netYield: string;
   investmentBreakdown: {
@@ -31,11 +31,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000001",
     title: "One Bedroom Apartment in Skyview Tower",
     location: "Dubai Marina, Dubai | Apartment",
-    priceAED: 1380000,
+    priceUSD: 1380000,
     investors: 0,
     status: "funded",
     annualisedReturn: "11.92%",
-    currentValuationAED: 1380000,
+    currentValuationUSD: 1380000,
     grossYield: "7.85%",
     netYield: "5.22%",
     investmentBreakdown: {
@@ -80,11 +80,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000002",
     title: "Two Bedroom Apartment in Pearl Residences",
     location: "Jumeirah Village Circle, Dubai | Apartment",
-    priceAED: 1050000,
+    priceUSD: 1050000,
     investors: 0,
     status: "open",
     annualisedReturn: "9.75%",
-    currentValuationAED: 1050000,
+    currentValuationUSD: 1050000,
     grossYield: "6.90%",
     netYield: "4.88%",
     investmentBreakdown: {
@@ -129,11 +129,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000003",
     title: "Studio Apartment in Marina Heights",
     location: "Dubai Marina, Dubai | Apartment",
-    priceAED: 640000,
+    priceUSD: 640000,
     investors: 0,
     status: "sold",
     annualisedReturn: "12.44%",
-    currentValuationAED: 640000,
+    currentValuationUSD: 640000,
     grossYield: "8.10%",
     netYield: "5.44%",
     investmentBreakdown: {
@@ -160,11 +160,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000004",
     title: "One Bedroom Apartment in Creekside Views",
     location: "Dubai Creek Harbour, Dubai | Apartment",
-    priceAED: 970000,
+    priceUSD: 970000,
     investors: 0,
     status: "upcoming",
     annualisedReturn: "10.15%",
-    currentValuationAED: 970000,
+    currentValuationUSD: 970000,
     grossYield: "7.20%",
     netYield: "4.95%",
     investmentBreakdown: {
@@ -192,11 +192,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000005",
     title: "Studio Apartment in Palm Jumeirah Residences",
     location: "Palm Jumeirah, Dubai | Apartment",
-    priceAED: 715000,
+    priceUSD: 715000,
     investors: 0,
     status: "funded",
     annualisedReturn: "14.20%",
-    currentValuationAED: 715000,
+    currentValuationUSD: 715000,
     grossYield: "8.50%",
     netYield: "5.70%",
     investmentBreakdown: {
@@ -223,11 +223,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000006",
     title: "One Bedroom Apartment in Horizon Tower",
     location: "Business Bay, Dubai | Apartment",
-    priceAED: 1280000,
+    priceUSD: 1280000,
     investors: 0,
     status: "open",
     annualisedReturn: "13.05%",
-    currentValuationAED: 1280000,
+    currentValuationUSD: 1280000,
     grossYield: "8.20%",
     netYield: "5.40%",
     investmentBreakdown: {
@@ -272,11 +272,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000007",
     title: "Two Bedroom Apartment in Lakeside Tower",
     location: "Jumeirah Lake Towers, Dubai | Apartment",
-    priceAED: 1190000,
+    priceUSD: 1190000,
     investors: 0,
     status: "open",
     annualisedReturn: "9.85%",
-    currentValuationAED: 1190000,
+    currentValuationUSD: 1190000,
     grossYield: "7.00%",
     netYield: "4.78%",
     investmentBreakdown: {
@@ -304,11 +304,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000008",
     title: "One Bedroom Apartment in Downtown Heights",
     location: "Downtown Dubai, Dubai | Apartment",
-    priceAED: 1560000,
+    priceUSD: 1560000,
     investors: 0,
     status: "upcoming",
     annualisedReturn: "12.20%",
-    currentValuationAED: 1560000,
+    currentValuationUSD: 1560000,
     grossYield: "8.40%",
     netYield: "5.60%",
     investmentBreakdown: {
@@ -336,11 +336,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000009",
     title: "Studio Apartment in Green Oasis",
     location: "Al Furjan, Dubai | Apartment",
-    priceAED: 585000,
+    priceUSD: 585000,
     investors: 0,
     status: "sold",
     annualisedReturn: "11.50%",
-    currentValuationAED: 585000,
+    currentValuationUSD: 585000,
     grossYield: "7.60%",
     netYield: "5.05%",
     investmentBreakdown: {
@@ -367,11 +367,11 @@ export const dummyProperties: Property[] = [
     _id: "650000000000000000000010",
     title: "One Bedroom Apartment in Seaview Residences",
     location: "JBR, Dubai | Apartment",
-    priceAED: 1420000,
+    priceUSD: 1420000,
     investors: 0,
     status: "funded",
     annualisedReturn: "13.60%",
-    currentValuationAED: 1420000,
+    currentValuationUSD: 1420000,
     grossYield: "8.60%",
     netYield: "5.75%",
     investmentBreakdown: {

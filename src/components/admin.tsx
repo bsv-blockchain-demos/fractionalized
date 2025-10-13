@@ -78,12 +78,12 @@ export function Admin() {
             return;
         }
         // Currency fields
-        if (/priceAED/i.test(msg) && priceRef.current) {
+        if (/priceUSD/i.test(msg) && priceRef.current) {
             priceRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
             priceRef.current.focus();
             return;
         }
-        if (/currentValuationAED/i.test(msg) && valuationRef.current) {
+        if (/currentValuationUSD/i.test(msg) && valuationRef.current) {
             valuationRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
             valuationRef.current.focus();
             return;
@@ -388,8 +388,8 @@ export function Admin() {
     const [form, setForm] = useState({
         title: "",
         location: "",
-        priceAED: "",
-        currentValuationAED: "",
+        priceUSD: "",
+        currentValuationUSD: "",
         investors: "0",
         status: "open" as Status,
         annualisedReturn: "", // e.g. 11.92%
@@ -479,11 +479,11 @@ export function Admin() {
         const payload = {
             title: form.title.trim(),
             location: form.location.trim(),
-            priceAED: Number(form.priceAED || 0),
+            priceUSD: Number(form.priceUSD || 0),
             investors: Number(form.investors || 0),
             status: form.status,
             annualisedReturn: form.annualisedReturn.trim(),
-            currentValuationAED: Number(form.currentValuationAED || 0),
+            currentValuationUSD: Number(form.currentValuationUSD || 0),
             grossYield: form.grossYield.trim(),
             netYield: form.netYield.trim(),
             investmentBreakdown: {
@@ -578,7 +578,7 @@ export function Admin() {
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 value={form.location}
                                 onChange={(e) => updateField("location", e.target.value.slice(0, MAX_LOCATION))}
-                                placeholder="Dubai Marina, Dubai | Apartment"
+                                placeholder="City Center, Location | Apartment"
                                 required
                                 maxLength={MAX_LOCATION}
                             />
@@ -615,26 +615,26 @@ export function Admin() {
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Valuations & Yields</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Price (AED)</label>
+                            <label className="block text-sm mb-1 text-text-secondary">Price (USD)</label>
                             <input
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 ref={priceRef}
-                                value={form.priceAED}
-                                onChange={(e) => updateField("priceAED", e.target.value)}
+                                value={form.priceUSD}
+                                onChange={(e) => updateField("priceUSD", e.target.value)}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-sm mb-1 text-text-secondary">Current Valuation (AED)</label>
+                            <label className="block text-sm mb-1 text-text-secondary">Current Valuation (USD)</label>
                             <input
                                 type="number"
                                 min={0}
                                 className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
                                 ref={valuationRef}
-                                value={form.currentValuationAED}
-                                onChange={(e) => updateField("currentValuationAED", e.target.value)}
+                                value={form.currentValuationUSD}
+                                onChange={(e) => updateField("currentValuationUSD", e.target.value)}
                                 required
                             />
                         </div>
@@ -672,7 +672,7 @@ export function Admin() {
                 </div>
 
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
-                    <h2 className="text-lg font-semibold mb-3 text-text-primary">Investment Breakdown (AED)</h2>
+                    <h2 className="text-lg font-semibold mb-3 text-text-primary">Investment Breakdown (USD)</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm mb-1 text-text-secondary flex items-center">

@@ -108,7 +108,7 @@ export function FilterSortModal({
 
         {/* Price range */}
         <div>
-          <div className="text-sm text-text-secondary mb-2">Price (AED)</div>
+          <div className="text-sm text-text-secondary mb-2">Price (USD)</div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input
               type="number"

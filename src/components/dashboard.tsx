@@ -190,21 +190,21 @@ export function Dashboard() {
     return isNaN(n) ? 0 : n;
   };
 
-  const formatCurrency = (amount: number) => `AED ${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `USD ${amount.toLocaleString()}`;
 
   // Portfolio stats
   const stats = useMemo(() => {
-    const totalInvestedAED = investedProperties.reduce((sum, ip) => sum + (ip.property.priceAED * ip.percent) / 100, 0);
-    const expectedYearlyIncomeAED = investedProperties.reduce((sum, ip) => {
+    const totalInvestedUSD = investedProperties.reduce((sum, ip) => sum + (ip.property.priceUSD * ip.percent) / 100, 0);
+    const expectedYearlyIncomeUSD = investedProperties.reduce((sum, ip) => {
       const annualised = parsePercent(ip.property.annualisedReturn) / 100;
-      const invested = (ip.property.priceAED * ip.percent) / 100;
+      const invested = (ip.property.priceUSD * ip.percent) / 100;
       return sum + invested * annualised;
     }, 0);
     const avgGrossYield = investedProperties.length
       ? investedProperties.reduce((sum, ip) => sum + parsePercent(ip.property.grossYield), 0) / investedProperties.length
       : 0;
     const positions = investedProperties.length;
-    return { totalInvestedAED, expectedYearlyIncomeAED, avgGrossYield, positions };
+    return { totalInvestedUSD, expectedYearlyIncomeUSD, avgGrossYield, positions };
   }, [investedProperties]);
 
   return (
@@ -253,14 +253,14 @@ export function Dashboard() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-text-secondary">Invested</span>
-                        <span className="font-medium text-text-primary">{formatCurrency((property.priceAED * percent) / 100)}</span>
+                        <span className="font-medium text-text-primary">{formatCurrency((property.priceUSD * percent) / 100)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-text-secondary">Expected yearly income</span>
                         <span className="font-medium" style={{ color: "var(--success)" }}>
                           {(() => {
                             const rate = parsePercent(property.annualisedReturn) / 100;
-                            const invested = (property.priceAED * percent) / 100;
+                            const invested = (property.priceUSD * percent) / 100;
                             return formatCurrency(invested * rate);
                           })()}
                         </span>
