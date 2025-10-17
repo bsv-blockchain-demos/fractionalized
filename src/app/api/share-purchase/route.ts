@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
 import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash } from "@bsv/sdk";
-import { Ordinals } from "../../../utils/ordinals";
+import { Ordinals } from "../../../utils/ordinalsP2PKH";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";

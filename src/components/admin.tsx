@@ -6,7 +6,7 @@ import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
 import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature, Transaction } from "@bsv/sdk";
-import { Ordinals } from "../utils/ordinals";
+import { Ordinals } from "../utils/ordinalsP2PKH";
 import { SERVER_PUBKEY } from "../utils/env";
 import { PaymentUtxo } from "../utils/paymentUtxo";
 import { toOutpoint } from "../utils/outpoints";
@@ -317,11 +317,11 @@ export function Admin() {
 
             const paymentUnlockFrame = new PaymentUtxo().unlock(
                 userWallet!,
+                SERVER_PUBKEY,
                 "single",
                 false,
                 undefined,
                 undefined,
-                SERVER_PUBKEY,
                 false // order: server first, then user to match hash(SERVER + user)
             );
             const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 0);

@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
-import { Ordinals } from "../../../utils/ordinals";
+import { Ordinals } from "../../../utils/ordinalsP2PKH";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
 
         // Create payment unlocking script using the same preimage and input index 1
-        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, "all", false, undefined, undefined, buyerId);
+        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, buyerId);
         const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Create transfer transaction

@@ -10,9 +10,16 @@ import {
   Transaction,
   Script,
   Hash,
+  ScriptChunk,
 } from "@bsv/sdk";
+import { calculatePreimage } from "./preimage";
 
 export class PaymentUtxo implements ScriptTemplate {
+
+  static hashFromPubkeys(pubkeys: PublicKey[]): number[] {
+    return Hash.hash160(pubkeys.reduce((a, b: PublicKey) => a.concat(b.toDER() as number[]), [] as number[]));
+  }
+
   lock(oneOfTwoHash: number[]) {
     const paymentLockingScript = new LockingScript();
     paymentLockingScript
@@ -34,11 +41,11 @@ export class PaymentUtxo implements ScriptTemplate {
 
   unlock(
     wallet: WalletInterface,
+    otherPubkey: string, //  the non-wallet pubkey
     signOutputs: "all" | "none" | "single" = "all",
     anyoneCanPay = false,
     sourceSatoshis?: number,
     lockingScript?: Script,
-    counterpartyPubkey?: string,
     firstPubkeyIsWallet: boolean = true,
   ): {
     sign: (tx: Transaction, inputIndex: number) => Promise<UnlockingScript>;
@@ -46,37 +53,7 @@ export class PaymentUtxo implements ScriptTemplate {
   } {
     return {
       sign: async (tx: Transaction, inputIndex: number) => {
-        let signatureScope = TransactionSignature.SIGHASH_FORKID;
-        if (signOutputs === "all") signatureScope |= TransactionSignature.SIGHASH_ALL;
-        if (signOutputs === "none") signatureScope |= TransactionSignature.SIGHASH_NONE;
-        if (signOutputs === "single") signatureScope |= TransactionSignature.SIGHASH_SINGLE;
-        if (anyoneCanPay) signatureScope |= TransactionSignature.SIGHASH_ANYONECANPAY;
-
-        const input = tx.inputs[inputIndex];
-        const otherInputs = tx.inputs.filter((_, i) => i !== inputIndex);
-
-        const sourceTXID = input.sourceTXID || input.sourceTransaction?.id("hex");
-        if (!sourceTXID) throw new Error("sourceTXID or sourceTransaction required for signing");
-
-        sourceSatoshis ||= input.sourceTransaction?.outputs[input.sourceOutputIndex].satoshis;
-        if (!sourceSatoshis) throw new Error("sourceSatoshis or input sourceTransaction required for signing");
-
-        lockingScript ||= input.sourceTransaction?.outputs[input.sourceOutputIndex].lockingScript;
-        if (!lockingScript) throw new Error("lockingScript or input sourceTransaction required for signing");
-
-        const preimage = TransactionSignature.format({
-          sourceTXID,
-          sourceOutputIndex: input.sourceOutputIndex,
-          sourceSatoshis,
-          transactionVersion: tx.version,
-          otherInputs,
-          inputIndex,
-          outputs: tx.outputs,
-          inputSequence: input.sequence || 0xffffffff,
-          subscript: lockingScript,
-          lockTime: tx.lockTime,
-          scope: signatureScope,
-        });
+        const { preimage, signatureScope } = calculatePreimage(tx, inputIndex, signOutputs, anyoneCanPay, sourceSatoshis, lockingScript);
 
         // BRC-29 pattern
         const { signature } = await wallet.createSignature({
@@ -99,16 +76,14 @@ export class PaymentUtxo implements ScriptTemplate {
         // Multisig: push OP_0, then sig, then two pubkeys to match the committed hash
         unlockScript.writeOpCode(OP.OP_0);
         unlockScript.writeBin(sig.toChecksigFormat());
-        if (!counterpartyPubkey) throw new Error("counterpartyPubkey required for PaymentUtxo.unlock");
-        const selfKey = PublicKey.fromString(publicKey).encode(true) as number[];
-        const otherKey = PublicKey.fromString(counterpartyPubkey).encode(true) as number[];
-        if (firstPubkeyIsWallet) {
-          unlockScript.writeBin(selfKey);
-          unlockScript.writeBin(otherKey);
-        } else {
-          unlockScript.writeBin(otherKey);
-          unlockScript.writeBin(selfKey);
-        }
+        unlockScript.writeBin(PublicKey.fromString(publicKey).encode(true) as number[]);
+        unlockScript.writeBin(PublicKey.fromString(otherPubkey).encode(true) as number[]);
+        if (!firstPubkeyIsWallet) {
+          // reverse the order of the last two script chunks
+          const lastChunk = unlockScript.chunks.pop() as ScriptChunk;
+          const secondLastChunk = unlockScript.chunks.pop() as ScriptChunk;
+          unlockScript.chunks.push(lastChunk, secondLastChunk);
+        } 
 
         return unlockScript;
       },
