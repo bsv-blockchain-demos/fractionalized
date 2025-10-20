@@ -46,7 +46,9 @@ export class Ordinals implements ScriptTemplate {
         const jsonString = JSON.stringify(inscription);
         const lockingScript = new LockingScript();
         if (isFirst) {
-            const oneOfTwoHash = Hash.hash160(serverPubkey + address, "hex");
+            const serverPubKeyArray = PublicKey.fromString(serverPubkey).encode(true) as number[];
+            const userPubKeyArray = PublicKey.fromString(address).encode(true) as number[];
+            const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(userPubKeyArray));
 
             lockingScript
                 // Write inscription
@@ -74,7 +76,9 @@ export class Ordinals implements ScriptTemplate {
                 .writeOpCode(OP.OP_RETURN)
                 .writeBin(Utils.toArray(tokenTxid, "hex"));
         } else if (serverChange) {
-            const oneOfTwoHash = Hash.hash160(serverPubkey + address, "hex");
+            const serverPubKeyArray = PublicKey.fromString(serverPubkey).encode(true) as number[];
+            const userPubKeyArray = PublicKey.fromString(address).encode(true) as number[];
+            const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(userPubKeyArray));
 
             lockingScript
                 // Write inscription
@@ -200,7 +204,7 @@ export class Ordinals implements ScriptTemplate {
 
                 // include the pattern from BRC-29
                 const { signature } = await wallet.createSignature({
-                    hashToDirectlySign: Hash.sha256(Hash.sha256(preimage)),
+                    hashToDirectlySign: Hash.sha256(preimage),
                     protocolID: [0, "fractionalized"],
                     keyID: "0",
                     counterparty: 'self'

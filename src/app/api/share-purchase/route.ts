@@ -2,7 +2,7 @@ import { connectToMongo, propertiesCollection, Shares, sharesCollection, locksCo
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
-import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash } from "@bsv/sdk";
+import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash, PublicKey } from "@bsv/sdk";
 import { Ordinals } from "../../../utils/ordinals";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
@@ -135,7 +135,9 @@ export async function POST(request: Request) {
         }
 
         // Create new multiSig lockingScript for the payment change UTXO
-        const oneOfTwoHash = Hash.hash160(SERVER_PUB_KEY + property.seller, "hex");
+        const serverPubKeyArray = PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[];
+        const sellerPubKeyArray = PublicKey.fromString(property.seller).encode(true) as number[];
+        const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(sellerPubKeyArray));
         const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
