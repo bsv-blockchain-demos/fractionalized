@@ -16,10 +16,6 @@ import { calculatePreimage } from "./preimage";
 
 export class PaymentUtxo implements ScriptTemplate {
 
-  static hashFromPubkeys(pubkeys: PublicKey[]): number[] {
-    return Hash.hash160(pubkeys.reduce((a, b: PublicKey) => a.concat(b.toDER() as number[]), [] as number[]));
-  }
-
   lock(oneOfTwoHash: number[]) {
     const paymentLockingScript = new LockingScript();
     paymentLockingScript
