@@ -6,17 +6,24 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 export function Login() {
+    console.log('Login component: Mounting');
     const [loading, setLoading] = useState(false);
     const { initializeWallet, checkAuth, userPubKey } = useAuthContext();
+    console.log('Login component: Hooks initialized, userPubKey:', userPubKey);
     const router = useRouter();
 
     const handleLogin = useCallback(async () => {
+        console.log('handleLogin: Starting login process');
         try {
             setLoading(true);
+            console.log('handleLogin: Loading set to true');
 
             // Ensure wallet is initialized and authenticated
+            console.log('handleLogin: Calling initializeWallet');
             await initializeWallet();
+            console.log('handleLogin: initializeWallet completed');
             const isAuth = await checkAuth();
+            console.log('handleLogin: checkAuth result:', isAuth);
             if (!isAuth) {
                 toast.error("Please authenticate your wallet first", {
                     duration: 4000,
@@ -27,6 +34,7 @@ export function Login() {
             }
 
             if (!userPubKey) {
+                console.log('handleLogin: userPubKey is missing');
                 toast.error("Missing public key from wallet", {
                     duration: 4000,
                     position: "top-center",
@@ -34,14 +42,18 @@ export function Login() {
                 });
                 return;
             }
+            console.log('handleLogin: userPubKey found:', userPubKey);
 
             // Ask server to set JWT cookie
+            console.log('handleLogin: Making fetch request to /api/auth/login with userPubKey:', userPubKey);
             const res = await fetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ request: "login", userPubKey }),
             });
+            console.log('handleLogin: Fetch response status:', res.status);
             const data = await res.json().catch(() => ({}));
+            console.log('handleLogin: Fetch response data:', data);
             if (!res.ok) {
                 toast.error(data?.message || "Login failed", {
                     duration: 4000,
@@ -58,15 +70,17 @@ export function Login() {
             });
 
             // Navigate away from /login; middleware will allow since cookie set
+            console.log('handleLogin: Login successful, navigating to /');
             router.replace("/");
         } catch (e) {
-            console.error(e);
+            console.error('handleLogin: Unexpected error during login:', e);
             toast.error("Unexpected error during login", {
                 duration: 4000,
                 position: "top-center",
                 id: "login-error",
             });
         } finally {
+            console.log('handleLogin: Setting loading to false');
             setLoading(false);
         }
     }, [initializeWallet, checkAuth, userPubKey, router]);
