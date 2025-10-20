@@ -1,7 +1,8 @@
-import { PrivateKey, Transaction, Script, LockingScript, OP, UnlockingScript, TransactionSignature, Hash, Spend } from '@bsv/sdk'
+import { PrivateKey, Transaction, Script, LockingScript, OP, UnlockingScript, TransactionSignature, Hash, Spend, MerklePath, PublicKey } from '@bsv/sdk'
 import { OrdinalsP2PKH } from '../src/utils/ordinalsP2PKH'
 import { OrdinalsP2MS } from '../src/utils/ordinalsP2MS'
 import { makeWallet } from '../src/lib/serverWallet'
+import { hashFromPubkeys } from '../src/utils/hashFromPubkeys'
 const { sha256, hash160 } = Hash
 
 describe('Ordinals.lock', () => {
@@ -25,42 +26,49 @@ describe('Ordinals.lock', () => {
       counterparty: 'self',
     })
 
-    const uut = new OrdinalsP2MS()
+    const userAddress = PublicKey.fromString(userLockingKey).toAddress()
+
+    const hash = hashFromPubkeys([PublicKey.fromString(userLockingKey), PublicKey.fromString(serverLockingKey)])
   
-      const sourceTransaction = new Transaction()
-      sourceTransaction.addInput({
-        sourceTXID: '0000000000000000000000000000000000000000000000000000000000000000',
-        sourceOutputIndex: 0,
-        unlockingScript: Script.fromASM('OP_TRUE')
-      })
-      sourceTransaction.addOutput({
-        lockingScript: uut.lock(),
-        satoshis: 2
-      })
-  
-      sourceTransaction.merklePath = MerklePath.fromCoinbaseTxidAndHeight(sourceTransaction.id('hex'), 1234)
-  
-      const tx = new Transaction()
-  
-      tx.addInput({
-        sourceTransaction,
-        sourceOutputIndex: 0,
-        unlockingScriptTemplate: uut.unlock(userWallet, serverLockingKey)
-      })
-      tx.addOutput({
-        lockingScript: Script.fromASM('OP_TRUE'),
-        satoshis: 1
-      })
-  
-      await tx.fee()
-      await tx.sign()
-  
-      const result: boolean = await tx.verify('scripts only')
-  
-      expect(result).toBe(true)
+    const sourceTransaction = new Transaction()
+    sourceTransaction.addInput({
+      sourceTXID: '0000000000000000000000000000000000000000000000000000000000000000',
+      sourceOutputIndex: 0,
+      unlockingScript: Script.fromASM('OP_TRUE')
+    })
+    sourceTransaction.addOutput({
+      lockingScript: new OrdinalsP2MS().lock(hash, 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe_0', 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe', 34, 'transfer'),
+      satoshis: 3
     })
 
-    it('Successfully validates a Multi-sig spend', async () => {
+    sourceTransaction.merklePath = MerklePath.fromCoinbaseTxidAndHeight(sourceTransaction.id('hex'), 1234)
+
+    const tx = new Transaction()
+
+    tx.addInput({
+      sourceTransaction,
+      sourceOutputIndex: 0,
+      unlockingScriptTemplate: new OrdinalsP2MS().unlock(userWallet, serverLockingKey)
+    })
+    tx.addOutput({
+      lockingScript: new OrdinalsP2PKH().lock(userAddress, 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe_0', 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe', 12, 'transfer'),
+      satoshis: 1
+    })
+    tx.addOutput({
+      lockingScript: new OrdinalsP2MS().lock(hash, 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe_0', 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe', 22, 'transfer'),
+      satoshis: 1
+    })
+
+
+    await tx.fee()
+    await tx.sign()
+
+    const result: boolean = await tx.verify('scripts only')
+
+    expect(result).toBe(true)
+  })
+
+  it('Successfully validates a Multi-sig spend', async () => {
     // Get all the necessary keys
     const privateKey = new PrivateKey(1)
     const pirvateKey2 = new PrivateKey(2)
