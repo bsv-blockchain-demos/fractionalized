@@ -1,4 +1,4 @@
-import { PrivateKey, Transaction, Script, LockingScript, OP, UnlockingScript, TransactionSignature, Hash, Spend, MerklePath, PublicKey } from '@bsv/sdk'
+import { PrivateKey, Transaction, Script, LockingScript, OP, UnlockingScript, TransactionSignature, Hash, Spend, MerklePath, PublicKey, Random, Utils } from '@bsv/sdk'
 import { OrdinalsP2PKH } from '../src/utils/ordinalsP2PKH'
 import { OrdinalsP2MS } from '../src/utils/ordinalsP2MS'
 import { makeWallet } from '../src/lib/serverWallet'
@@ -9,21 +9,25 @@ describe('Ordinals.lock', () => {
   it('creates a Ordinal and spends it validly', async () => {
     const userPriv = PrivateKey.fromRandom()
     const serverPriv = PrivateKey.fromRandom()
+    const serverkeyID = Utils.toBase64(Random(8))
+    const keyID = Utils.toBase64(Random(8))
+    const serverIdentityKey = serverPriv.toPublicKey().toString()
+    const userIdentityKey = userPriv.toPublicKey().toString()
 
     const userWallet = await makeWallet('main', 'https://store-us-1.bsvb.tech', userPriv.toHex())
     const serverWallet = await makeWallet('main', 'https://store-us-1.bsvb.tech', serverPriv.toHex())
     // Ensure env var is set before importing the module under test
     const { publicKey: serverLockingKey } = await serverWallet.getPublicKey({
       protocolID: [0, "fractionalized"],
-      keyID: "1234",
+      keyID: serverkeyID,
       counterparty: "self",
     })
 
 
     const { publicKey: userLockingKey } = await serverWallet.getPublicKey({
       protocolID: [0, "fractionalized"],
-      keyID: "5678",
-      counterparty: userPriv.toPublicKey().toString(),
+      keyID,
+      counterparty: userIdentityKey,
     })
 
     console.log({ 'serverWallet.getPublicKey': userLockingKey })
@@ -47,10 +51,11 @@ describe('Ordinals.lock', () => {
 
     const tx = new Transaction()
 
+    // userWallet signs
     tx.addInput({
       sourceTransaction,
       sourceOutputIndex: 0,
-      unlockingScriptTemplate: new OrdinalsP2MS().unlock(userWallet, "5678", serverPriv.toPublicKey().toString(), serverLockingKey)
+      unlockingScriptTemplate: new OrdinalsP2MS().unlock(userWallet, keyID, serverIdentityKey, serverLockingKey)
     })
     tx.addOutput({
       lockingScript: new OrdinalsP2PKH().lock(userAddress, 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe_0', 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe', 12, 'transfer'),
