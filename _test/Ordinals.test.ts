@@ -15,16 +15,18 @@ describe('Ordinals.lock', () => {
     // Ensure env var is set before importing the module under test
     const { publicKey: serverLockingKey } = await serverWallet.getPublicKey({
       protocolID: [0, "fractionalized"],
-      keyID: "0",
+      keyID: "1234",
       counterparty: "self",
     })
 
 
-    const { publicKey: userLockingKey } = await userWallet.getPublicKey({
+    const { publicKey: userLockingKey } = await serverWallet.getPublicKey({
       protocolID: [0, "fractionalized"],
-      keyID: "0",
-      counterparty: 'self',
+      keyID: "5678",
+      counterparty: userPriv.toPublicKey().toString(),
     })
+
+    console.log({ 'serverWallet.getPublicKey': userLockingKey })
 
     const userAddress = PublicKey.fromString(userLockingKey).toAddress()
 
@@ -48,7 +50,7 @@ describe('Ordinals.lock', () => {
     tx.addInput({
       sourceTransaction,
       sourceOutputIndex: 0,
-      unlockingScriptTemplate: new OrdinalsP2MS().unlock(userWallet, serverLockingKey)
+      unlockingScriptTemplate: new OrdinalsP2MS().unlock(userWallet, "5678", serverPriv.toPublicKey().toString(), serverLockingKey)
     })
     tx.addOutput({
       lockingScript: new OrdinalsP2PKH().lock(userAddress, 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe_0', 'cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe', 12, 'transfer'),
@@ -64,6 +66,9 @@ describe('Ordinals.lock', () => {
     await tx.sign()
 
     const result: boolean = await tx.verify('scripts only')
+
+    const c = tx.toHex()
+    console.log(c)
 
     expect(result).toBe(true)
   })

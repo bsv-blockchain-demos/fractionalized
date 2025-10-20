@@ -77,6 +77,8 @@ export class OrdinalsP2MS implements ScriptTemplate {
 
     unlock(
         wallet: WalletInterface,
+        keyID: string,
+        counterparty: string,
         otherPubkey: string, //  the non-wallet pubkey
         signOutputs: "all" | "none" | "single" = "all",
         anyoneCanPay = false,
@@ -95,17 +97,20 @@ export class OrdinalsP2MS implements ScriptTemplate {
                 const { signature } = await wallet.createSignature({
                     hashToDirectlySign: Hash.hash256(preimage),
                     protocolID: [0, "fractionalized"],
-                    keyID: "0",
-                    counterparty: 'self'
+                    keyID,
+                    counterparty
                 })
 
                 console.log({ signature })
 
                 const { publicKey } = await wallet.getPublicKey({
                     protocolID: [0, "fractionalized"],
-                    keyID: "0",
-                    counterparty: 'self'
+                    keyID,
+                    counterparty,
+                    forSelf: true
                 })
+
+                console.log({ 'wallet.getPublicKey': publicKey })
 
                 const rawSignature = Signature.fromDER(signature, 'hex')
                 const sig = new TransactionSignature(
