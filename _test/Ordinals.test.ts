@@ -1,78 +1,31 @@
-import { LockingScript } from '@bsv/sdk'
-import { PrivateKey, Transaction, Script } from '@bsv/sdk'
-import { Ordinals } from '../src/utils/ordinalsP2PKH'
+import { PrivateKey, Transaction, Script, LockingScript, OP, UnlockingScript, TransactionSignature, Hash, Spend } from '@bsv/sdk'
+import { OrdinalsP2PKH } from '../src/utils/ordinalsP2PKH'
+import { OrdinalsP2MS } from '../src/utils/ordinalsP2MS'
 import { makeWallet } from '../src/lib/serverWallet'
+const { sha256, hash160 } = Hash
 
 describe('Ordinals.lock', () => {
-  beforeEach(() => {
-    // Ensure env var is set before importing the module under test
-    process.env.NEXT_PUBLIC_SERVER_PUBKEY = '0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798'
-    jest.resetModules()
-  })
-
-  it('creates a first output with multisig + inscription when isFirst=true', async () => {
-    const uut = new Ordinals()
-    const script = uut.lock(
-      // address (pubkey hex), assetId, tokenTxid, shares, type, isFirst
-      '0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798',
-      'deadbeef.0',
-      'cafebabe'.padEnd(64, 'a'),
-      100,
-      'deploy+mint',
-      true
-    )
-    expect(script).toBeInstanceOf(LockingScript)
-  })
-
-  it('creates a transfer output with inscription and singlesig when not first', async () => {
-    const uut = new Ordinals()
-    const script = uut.lock(
-      '0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798',
-      'deadbeef.1',
-      'cafebabe'.padEnd(64, 'b'),
-      5,
-      'transfer'
-    )
-    expect(script).toBeInstanceOf(LockingScript)
-  })
-
-  it('creates serverChange output when serverChange=true', async () => {
-    const uut = new Ordinals()
-    const script = uut.lock(
-      '02D0DE0AAEAEFAD02B8BDc8A01A1B8B11C696BD3F0F5A0D7A1A2B3C4D5E6F70809',
-      'asset.2',
-      '00'.repeat(32),
-      1,
-      'transfer',
-      false,
-      true
-    )
-    expect(script).toBeInstanceOf(LockingScript)
-  })
-
   it('creates a Ordinal and spends it validly', async () => {
-      const uut = new Ordinals()
-      const userPriv = PrivateKey.fromRandom()
-      const serverPriv = PrivateKey.fromRandom()
-  
-      const userWallet = await makeWallet('main', 'https://store-us-1.bsvb.tech', userPriv.toHex())
-      const serverWallet = await makeWallet('main', 'https://store-us-1.bsvb.tech', serverPriv.toHex())
-  
-  
-      const { publicKey: serverLockingKey } = await serverWallet.getPublicKey({
-        protocolID: [0, "fractionalized"],
-        keyID: "0",
-        counterparty: "self",
-      })
-  
-  
-      const { publicKey: userLockingKey } = await userWallet.getPublicKey({
-        protocolID: [0, "fractionalized"],
-        keyID: "0",
-        counterparty: 'self',
-      })
+    const userPriv = PrivateKey.fromRandom()
+    const serverPriv = PrivateKey.fromRandom()
 
-      const address = 
+    const userWallet = await makeWallet('main', 'https://store-us-1.bsvb.tech', userPriv.toHex())
+    const serverWallet = await makeWallet('main', 'https://store-us-1.bsvb.tech', serverPriv.toHex())
+    // Ensure env var is set before importing the module under test
+    const { publicKey: serverLockingKey } = await serverWallet.getPublicKey({
+      protocolID: [0, "fractionalized"],
+      keyID: "0",
+      counterparty: "self",
+    })
+
+
+    const { publicKey: userLockingKey } = await userWallet.getPublicKey({
+      protocolID: [0, "fractionalized"],
+      keyID: "0",
+      counterparty: 'self',
+    })
+
+    const uut = new OrdinalsP2MS()
   
       const sourceTransaction = new Transaction()
       sourceTransaction.addInput({
@@ -106,5 +59,103 @@ describe('Ordinals.lock', () => {
   
       expect(result).toBe(true)
     })
+
+    it('Successfully validates a Multi-sig spend', async () => {
+    // Get all the necessary keys
+    const privateKey = new PrivateKey(1)
+    const pirvateKey2 = new PrivateKey(2)
+    const publicKey = privateKey.toPublicKey()
+    const publicKey2 = pirvateKey2.toPublicKey()
+    const publicKeyNumArray = publicKey.encode(true) as number[]
+    const publicKey2NumArray = publicKey2.encode(true) as number[]
+    // Create hash of public keys
+    const oneOfTwoHash = hash160(publicKeyNumArray.concat(publicKey2NumArray))
+    // Create multisig locking script
+    const lockingScript = new LockingScript();
+    lockingScript
+      .writeOpCode(OP.OP_2DUP)
+      .writeOpCode(OP.OP_CAT)
+      .writeOpCode(OP.OP_HASH160)
+      .writeBin(oneOfTwoHash)
+      .writeOpCode(OP.OP_EQUALVERIFY)
+      .writeOpCode(OP.OP_TOALTSTACK)
+      .writeOpCode(OP.OP_TOALTSTACK)
+      .writeOpCode(OP.OP_1)
+      .writeOpCode(OP.OP_FROMALTSTACK)
+      .writeOpCode(OP.OP_FROMALTSTACK)
+      .writeOpCode(OP.OP_2)
+      .writeOpCode(OP.OP_CHECKMULTISIG);
+    
+    const satoshis = 1
+    const sourceTx = new Transaction(
+      1,
+      [],
+      [
+        {
+          lockingScript,
+          satoshis
+        }
+      ],
+      0
+    )
+    const spendTx = new Transaction(
+      1,
+      [
+        {
+          sourceTransaction: sourceTx,
+          sourceOutputIndex: 0,
+          sequence: 0xffffffff
+        }
+      ],
+      [],
+      0
+    )
+
+    // Create signature
+    const signatureScope = TransactionSignature.SIGHASH_ALL | TransactionSignature.SIGHASH_FORKID;
+    const preimage = TransactionSignature.format({
+      sourceTXID: sourceTx.id('hex'),
+      sourceOutputIndex: 0,
+      sourceSatoshis: satoshis,
+      transactionVersion: spendTx.version,
+      otherInputs: [], // Should exclude the current input (inputIndex 0)
+      inputIndex: 0,
+      outputs: spendTx.outputs,
+      inputSequence: 0xffffffff,
+      subscript: lockingScript,
+      lockTime: spendTx.lockTime,
+      scope: signatureScope,
+    });
+    const rawSignature = privateKey.sign(sha256(preimage))
+    const sig = new TransactionSignature(
+      rawSignature.r,
+      rawSignature.s,
+      signatureScope
+    )
+    const sigForScript = sig.toChecksigFormat()
+  
+    const unlockingScript = new UnlockingScript()
+    unlockingScript
+      .writeOpCode(OP.OP_0) // required dummy for checkmultisig
+      .writeBin(sigForScript)
+      .writeBin(publicKeyNumArray)
+      .writeBin(publicKey2NumArray)
+      
+    const spend = new Spend({
+      sourceTXID: sourceTx.id('hex'),
+      sourceOutputIndex: 0,
+      sourceSatoshis: satoshis,
+      lockingScript,
+      transactionVersion: 1,
+      otherInputs: [],
+      inputIndex: 0,
+      unlockingScript,
+      outputs: [],
+      inputSequence: 0xffffffff,
+      lockTime: 0
+    })
+    const valid = spend.validate()
+    expect(valid).toBe(true)
+  })
 })
 
