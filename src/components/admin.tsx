@@ -243,31 +243,6 @@ export function Admin() {
                 true
             );
 
-            // Create signature to satisfy lockingScript
-            // @ts-expect-error
-            const { signature } = await userWallet?.createSignature({
-                hashToDirectlySign: propertyDataHash,
-                protocolID: [0, "fractionalized"],
-                keyID: "0",
-                counterparty: 'self'
-            });
-            if (!signature) {
-                throw new Error("Failed to create signature");
-            }
-
-            const rawSignature = Signature.fromDER(signature, 'hex')
-            const sig = new TransactionSignature(
-                rawSignature.r,
-                rawSignature.s,
-                TransactionSignature.SIGHASH_FORKID
-            );
-
-            // Create unlockingScript to unlock the initial token UTXO
-            const unlockingScript = new UnlockingScript();
-            unlockingScript
-                .writeBin(sig.toChecksigFormat())
-                .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
-
             // Create payment UTXO
             // Multisig 1 of 2 so server can use funds for transfer fees
             const serverPubKeyArray = PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[];
