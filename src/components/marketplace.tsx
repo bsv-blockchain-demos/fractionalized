@@ -9,7 +9,7 @@ import { Ordinals } from "../utils/ordinalsP2PKH";
 import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../utils/paymentUtxo";
-import { Hash, Transaction } from "@bsv/sdk";
+import { Hash, Transaction, PublicKey } from "@bsv/sdk";
 import { toTxid, toOutpoint } from "../utils/outpoints";
 import { SERVER_PUBKEY } from "../utils/env";
 import toast from "react-hot-toast";
@@ -253,7 +253,9 @@ export function Marketplace() {
 
             setPurchaseLoading(true);
             // Create the paymentTX
-            const oneOfTwoHash = Hash.hash160(SERVER_PUB_KEY + buyerId);
+            const serverPubKeyArray = PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[];
+            const buyerPubKeyArray = PublicKey.fromString(buyerId).encode(true) as number[];
+            const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(buyerPubKeyArray));
             const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
             const paymentUtxo = await userWallet!.createAction({

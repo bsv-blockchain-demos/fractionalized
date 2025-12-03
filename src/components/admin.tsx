@@ -245,42 +245,23 @@ export function Admin() {
                 "deploy+mint"
             );
 
-            // Create signature to satisfy lockingScript
-            const { signature } = await userWallet?.createSignature({
-                hashToDirectlySign: propertyDataHash,
-                protocolID: [0, "ordinals"],
-                keyID: "0",
-                counterparty: 'self'
-            });
-            if (!signature) {
-                throw new Error("Failed to create signature");
-            }
-
-            const rawSignature = Signature.fromDER(signature, 'hex')
-            const sig = new TransactionSignature(
-                rawSignature.r,
-                rawSignature.s,
-                TransactionSignature.SIGHASH_FORKID
-            );
-
-            // Create unlockingScript to unlock the initial token UTXO
-            const unlockingScript = new UnlockingScript();
-            unlockingScript
-                .writeBin(sig.toChecksigFormat())
-                .writeBin(PublicKey.fromString(userPubKey).encode(true) as number[]);
-
             // Create payment UTXO
             // Multisig 1 of 2 so server can use funds for transfer fees
-            const oneOfTwoHash = Hash.hash160(SERVER_PUBKEY + userPubKey, "hex");
+            const serverPubKeyArray = PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[];
+            const userPubKeyArray = PublicKey.fromString(userPubKey).encode(true) as number[];
+            const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(userPubKeyArray));
 
             const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
             const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
-            // Estimated at 2 sats in fees per share sold
-            const requiredSats = Math.max(0, Math.ceil(Number(_data.sell.percentToSell) * 2));
+            // Estimated at 2 sats in fees per share sold, minimum 3 to ensure changeSats >= 1
+            const requiredSats = Math.max(3, Math.ceil(Number(_data.sell.percentToSell) * 2));
 
             const changeSats = Number(requiredSats) - 2;
+            if (changeSats < 1) {
+                throw new Error("Insufficient satoshis for payment change output");
+            }
 
             const paymentTxAction = await userWallet?.createAction({
                 description: "Payment UTXO",
@@ -379,6 +360,7 @@ export function Admin() {
             setStep2("success");
         } catch (e) {
             // If any error occurs, mark the current running step as error
+            console.error("Error during tokenization process:", e);
             if (step1 === "running") setStep1("error");
             else if (step2 === "running") setStep2("error");
         } finally {
