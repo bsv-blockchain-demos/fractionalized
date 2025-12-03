@@ -3,7 +3,8 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
 import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash, PublicKey } from "@bsv/sdk";
-import { Ordinals } from "../../../utils/ordinals";
+import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
+import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
@@ -98,10 +99,10 @@ export async function POST(request: Request) {
         const fullParentTx = Transaction.fromBEEF(txbeef as number[]);
 
         // Create the ordinal unlocking and locking script for transfer (mint spend => treat as first)
-        const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, true, property.seller);
+        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", false, 1, undefined, true);
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
-        const ordinalTransferScript = new Ordinals().lock(investorId, assetId, propertyTokenTxid, amount, "transfer");
+        const ordinalTransferScript = new OrdinalsP2PKH().lock(investorId, assetId, propertyTokenTxid, amount, "transfer");
 
         // Also get the amount of tokens left from the actual ordinalTxLockingscript
         // Then calculate the token change to send back to the original mintTx
@@ -112,14 +113,16 @@ export async function POST(request: Request) {
         }
 
         // Only allow change if it's from the original mint outpoint
-        const changeScript = new Ordinals().lock(
-            property.seller,
+        const serverKeyArray = PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[];
+        const userKeyArray = PublicKey.fromString(property.seller).encode(true) as number[];
+        const oneOfTwohashForChange = Hash.hash160(serverKeyArray.concat(userKeyArray));
+
+        const changeScript = new OrdinalsP2MS().lock(
+            oneOfTwohashForChange,
             property.txids.mintTxid.replace(".", "_"),
             propertyTokenTxid,
             changeAmount,
             "transfer",
-            false,
-            true
         );
 
         // Query to overlay to get the TX beefs
@@ -186,7 +189,7 @@ export async function POST(request: Request) {
 
         // Sign the ordinal input (index 0) and payment input (index 1) against the preimage transaction
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
-        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, "single", false, undefined, undefined, property.seller);
+        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, property.seller, "single", false, undefined, undefined);
         const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Merge the two input beefs required for the inputBEEF

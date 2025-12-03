@@ -12,9 +12,9 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@bsv/sdk": "^1.7.6",
-    "@bsv/wallet-toolbox": "^1.6.23",
-    "@bsv/wallet-toolbox-client": "^1.6.23",
+    "@bsv/sdk": "^1.8.3",
+    "@bsv/wallet-toolbox": "^1.6.30",
+    "@bsv/wallet-toolbox-client": "^1.6.30",
     "dotenv": "^17.2.2",
     "jose": "^6.1.0",
     "mongodb": "^6.19.0",

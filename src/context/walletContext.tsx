@@ -7,54 +7,53 @@ import { useContext, createContext, useState, useEffect, useCallback } from "rea
 import { toast } from "react-hot-toast";
 
 type authContextType = {
-    userWallet: WalletClient | null;
+    userWallet: WalletClient;
     userPubKey: string | null;
     initializeWallet: () => Promise<void>;
     setIsAuthenticated: (value: boolean) => void;
-    isAuthenticated: boolean | null;
+    isAuthenticated: boolean;
     checkAuth: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<authContextType>({
-    userWallet: null,
+    userWallet: new WalletClient(),
     userPubKey: null,
     initializeWallet: async () => { },
     setIsAuthenticated: () => { },
-    isAuthenticated: null,
+    isAuthenticated: false,
     checkAuth: async () => { return false; },
 });
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
-    const [userWallet, setUserWallet] = useState<authContextType['userWallet']>(null);
+    console.log('AuthContextProvider: Component mounting');
+    const [userWallet, setUserWallet] = useState<authContextType['userWallet']>(new WalletClient());
+    console.log('AuthContextProvider: userWallet initialized');
     const [userPubKey, setUserPubKey] = useState<authContextType['userPubKey']>(null);
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+    console.log('AuthContextProvider: userPubKey initialized');
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+    console.log('AuthContextProvider: isAuthenticated initialized');
 
     const checkAuth = useCallback(async (): Promise<boolean> => {
-        try {
-            if (userWallet) {
-                const authenticated = await userWallet.isAuthenticated();
-                const isAuth = !!authenticated;
-                setIsAuthenticated(isAuth);
-                return isAuth;
-            } else {
-                throw new Error("Wallet not initialized");
-            }
-        } catch (error) {
-            console.error("Failed to check authentication:", error);
-            setIsAuthenticated(false);
-            return false;
+        console.log('checkAuth: Starting authentication check');
+        if (userWallet) {
+            console.log('checkAuth: userWallet exists, calling isAuthenticated');
+            const { authenticated } = await userWallet.isAuthenticated();
+            console.log('checkAuth: authenticated result:', authenticated);
+            setIsAuthenticated(authenticated || false);
+            console.log('checkAuth: setIsAuthenticated called with:', authenticated || false);
+            return authenticated || false
+        } else {
+            console.log('checkAuth: userWallet is null or undefined');
         }
+        return false
     }, [userWallet]);
 
-    useEffect(() => {
-        checkAuth();
-    }, [checkAuth]);
-
     const initializeWallet = useCallback(async () => {
+        console.log('initializeWallet: Starting wallet initialization');
         try {
-            const newWallet = new WalletClient('auto', 'fractionalize');
-
-            const isConnected = await newWallet.isAuthenticated();
-            if (!isConnected) {
+            console.log('initializeWallet: Checking authentication');
+            const { authenticated } = await userWallet.isAuthenticated();
+            console.log('initializeWallet: authenticated result:', authenticated);
+            if (!authenticated) {
                 console.error('Wallet not authenticated');
                 toast.error('Wallet not authenticated', {
                     duration: 5000,
@@ -63,20 +62,25 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
                 });
                 return;
             }
+            console.log('initializeWallet: Wallet authenticated, setting isAuthenticated to true');
+            setIsAuthenticated(true);
 
-            const { publicKey } = await newWallet.getPublicKey({
+            console.log('initializeWallet: Fetching public key');
+            const { publicKey } = await userWallet.getPublicKey({
                 protocolID: [0, "fractionalized"],
                 keyID: "0",
             });
+            console.log('initializeWallet: publicKey fetched:', publicKey);
 
             // Only update state once everything is fetched
-            setUserWallet(newWallet);
+            console.log('initializeWallet: Setting userPubKey');
             setUserPubKey(publicKey);
             toast.success('Wallet connected successfully', {
                 duration: 5000,
                 position: 'top-center',
                 id: 'wallet-connect-success',
             });
+            console.log('initializeWallet: Wallet initialization completed successfully');
         } catch (error) {
             console.error('Failed to initialize wallet:', error);
             toast.error('Failed to connect wallet', {
@@ -85,11 +89,9 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
                 id: 'wallet-connect-error',
             });
         }
-    }, []);
+    }, [userWallet]);
 
-    useEffect(() => {
-        initializeWallet();
-    }, [initializeWallet]);
+    console.log('AuthContextProvider: Rendering provider with children');
 
     return (
         <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth }}>

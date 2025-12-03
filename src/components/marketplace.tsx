@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MarketSellModal } from "./market-sell-modal";
 import { MarketPurchaseModal } from "./market-purchase-modal";
 import { useAuthContext } from "../context/walletContext";
-import { Ordinals } from "../utils/ordinals";
+import { Ordinals } from "../utils/ordinalsP2PKH";
 import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../utils/paymentUtxo";

@@ -6,10 +6,12 @@ import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
 import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature, Transaction } from "@bsv/sdk";
-import { Ordinals } from "../utils/ordinals";
+import { OrdinalsP2PKH } from "../utils/ordinalsP2PKH";
+import { OrdinalsP2MS } from "../utils/ordinalsP2MS";
 import { SERVER_PUBKEY } from "../utils/env";
 import { PaymentUtxo } from "../utils/paymentUtxo";
 import { toOutpoint } from "../utils/outpoints";
+import { hashFromPubkeys } from "@/utils/hashFromPubkeys";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -234,13 +236,13 @@ export function Admin() {
             } else if (tokensToMint > 100) {
                 throw new Error("Percent to sell must be less than or equal to 100");
             }
-            const ordinalLockingScript = new Ordinals().lock(
-                userPubKey,
+            const hashOfPubkeys = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUBKEY)])
+            const ordinalLockingScript = new OrdinalsP2MS().lock(
+                hashOfPubkeys,
                 `${response.txid}_0`,
                 toOutpoint(response.txid, 0),
                 tokensToMint,
-                "deploy+mint",
-                true
+                "deploy+mint"
             );
 
             // Create payment UTXO
@@ -297,11 +299,11 @@ export function Admin() {
 
             const paymentUnlockFrame = new PaymentUtxo().unlock(
                 userWallet!,
-                "all",
+                SERVER_PUBKEY,
+                "single",
                 false,
                 undefined,
                 undefined,
-                SERVER_PUBKEY,
                 false // order: server first, then user to match hash(SERVER + user)
             );
             const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 0);
