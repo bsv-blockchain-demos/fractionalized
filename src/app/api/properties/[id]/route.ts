@@ -4,12 +4,12 @@ import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } 
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectToMongo();
 
-    const { id } = params;
+    const { id } = await params;
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }

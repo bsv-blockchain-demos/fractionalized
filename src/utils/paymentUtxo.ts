@@ -53,7 +53,7 @@ export class PaymentUtxo implements ScriptTemplate {
 
         // BRC-29 pattern
         const { signature } = await wallet.createSignature({
-          hashToDirectlySign: Hash.sha256(preimage),
+          hashToDirectlySign: Hash.hash256(preimage),
           protocolID: [0, "fractionalized"],
           keyID: "0",
           counterparty: "self",

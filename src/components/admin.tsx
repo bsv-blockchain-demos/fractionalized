@@ -127,6 +127,8 @@ export function Admin() {
         setStep1("running");
         setStep2("idle");
 
+        let currentStep = 1; // Track which step we're in
+
         const authenticated = await checkAuth();
         if (!authenticated) {
             toast.error('Failed to authenticate', {
@@ -212,6 +214,7 @@ export function Admin() {
                 throw new Error("Failed to send property token");
             }
             setStep1("success");
+            currentStep = 2; // Moving to step 2
 
             // Step 2: Minting shares for property token...
             setStep2("running");
@@ -340,15 +343,20 @@ export function Admin() {
             });
             const sendMintTxData = await sendMintTx.json();
             console.log({ sendMintTxData });
-            if (!sendMintTxData?.ok) {
+            if (!sendMintTxData?.success) {
                 throw new Error("Failed to mint shares for property token");
             }
             setStep2("success");
         } catch (e) {
             // If any error occurs, mark the current running step as error
             console.error("Error during tokenization process:", e);
-            if (step1 === "running") setStep1("error");
-            else if (step2 === "running") setStep2("error");
+            if (currentStep === 1) {
+                setStep1("error");
+            } else if (currentStep === 2) {
+                setStep2("error");
+            }
+
+            toast.error(e instanceof Error ? e.message : 'An error occurred during tokenization');
         } finally {
             setProcessing(false);
         }
