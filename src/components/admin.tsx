@@ -137,20 +137,6 @@ export function Admin() {
             return;
         }
 
-        if (!userWallet) {
-            try {
-                await initializeWallet();
-            } catch (e) {
-                console.error('Failed to initialize wallet:', e);
-                toast.error('Failed to connect wallet', {
-                    duration: 5000,
-                    position: 'top-center',
-                    id: 'wallet-connect-error',
-                });
-                return;
-            }
-        }
-
         if (!userPubKey) {
             toast.error('Failed to get public key', {
                 duration: 5000,
@@ -162,12 +148,13 @@ export function Admin() {
 
         try {
             // Step 1: Creating property token...
-            const pubKeyHash = Hash.hash160(userPubKey, "hex");
+            const pubKeyHash = Hash.hash160(userPubKey, "hex") as number[];
 
             const title = _data.title.trim().toLowerCase();
             const location = _data.location.trim().toLowerCase();
+            const currentDate = new Date().toISOString();
             const propertyDataHash = Hash.hash256(
-                Utils.toArray(`${title}-${location}`, "utf8")
+                Utils.toArray(`${title}-${location}-${currentDate}`, "utf8")
             );
 
             const script = new LockingScript();
@@ -247,9 +234,7 @@ export function Admin() {
 
             // Create payment UTXO
             // Multisig 1 of 2 so server can use funds for transfer fees
-            const serverPubKeyArray = PublicKey.fromString(SERVER_PUBKEY).encode(true) as number[];
-            const userPubKeyArray = PublicKey.fromString(userPubKey).encode(true) as number[];
-            const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(userPubKeyArray));
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUBKEY), PublicKey.fromString(userPubKey)]);
 
             const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
             const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
@@ -286,6 +271,7 @@ export function Admin() {
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: paymentSourceTX,
+                sequence: 0xffffffff,
                 sourceOutputIndex: 0,
             });
             preimageTx.addOutput({

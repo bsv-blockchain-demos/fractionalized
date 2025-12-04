@@ -4,8 +4,6 @@ import { connectToMongo, propertiesCollection, sharesCollection, marketItemsColl
 import { requireAuth } from "../../../utils/apiAuth";
 import { traceShareChain } from "../../../utils/shareChain";
 
-const SERVER_PUB_KEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY as string;
-
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
@@ -63,7 +61,7 @@ export async function POST(request: Request) {
         const formattedShare: Shares = {
             _id: new ObjectId(),
             propertyId: propertyObjectId,
-            investorId: `${sellerId}_${SERVER_PUB_KEY}`,
+            investorId: sellerId,
             amount,
             parentTxid,
             transferTxid,

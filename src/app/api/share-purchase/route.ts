@@ -8,13 +8,12 @@ import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../../../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
-import { SERVER_PUBKEY } from "../../../utils/env";
 import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
+import { hashFromPubkeys } from "../../../utils/hashFromPubkeys";
 
 const STORAGE = process.env.STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
-const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -113,9 +112,11 @@ export async function POST(request: Request) {
         }
 
         // Only allow change if it's from the original mint outpoint
-        const serverKeyArray = PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[];
-        const userKeyArray = PublicKey.fromString(property.seller).encode(true) as number[];
-        const oneOfTwohashForChange = Hash.hash160(serverKeyArray.concat(userKeyArray));
+        const { publicKey: serverKey } = await wallet.getPublicKey({
+            protocolID: [0, "fractionalized"],
+            keyID: "0",
+        });
+        const oneOfTwohashForChange = hashFromPubkeys([PublicKey.fromString(serverKey), PublicKey.fromString(property.seller)]);
 
         const changeScript = new OrdinalsP2MS().lock(
             oneOfTwohashForChange,
@@ -138,9 +139,7 @@ export async function POST(request: Request) {
         }
 
         // Create new multiSig lockingScript for the payment change UTXO
-        const serverPubKeyArray = PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[];
-        const sellerPubKeyArray = PublicKey.fromString(property.seller).encode(true) as number[];
-        const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(sellerPubKeyArray));
+        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(serverKey), PublicKey.fromString(property.seller)]);
         const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);

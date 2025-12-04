@@ -3,17 +3,16 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
-import { Ordinals } from "../../../utils/ordinalsP2PKH";
+import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
+import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
-import { SERVER_PUBKEY } from "../../../utils/env";
 import { toOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
 
 const STORAGE_URL = process.env.STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
-const SERVER_PUB_KEY = SERVER_PUBKEY;
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -86,7 +85,7 @@ export async function POST(request: Request) {
         const fullOrdinalTx = Transaction.fromBEEF(ordinalTx.outputs[0].beef as number[]);
 
         // Create ordinal transfer transaction scripts
-        const ordinalTransferScript = new Ordinals().lock(buyerId, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
+        const ordinalTransferScript = new OrdinalsP2PKH().lock(buyerId, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
 
         // Payment unlocking will be signed against a preimage (frame-based)
 
@@ -105,7 +104,7 @@ export async function POST(request: Request) {
             lockingScript: ordinalTransferScript,
         });
 
-        const ordinalUnlockingFrame = new Ordinals().unlock(wallet, "single", false, 1, undefined, false, share.investorId);
+        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(wallet, "0", "self", share.investorId, 'single', false, undefined, undefined, true);
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
 
         // Create payment unlocking script using the same preimage and input index 1

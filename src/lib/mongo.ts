@@ -64,18 +64,39 @@ export interface MarketItem {
   sold?: boolean; // sold
 };
 
-// Use environment variable for MongoDB URI or fallback to hardcoded value
-const uri = process.env.MONGODB_URI as string;
-const clusterName = process.env.MONGODB_CLUSTER_NAME as string;
+if (!process.env.MONGODB_URI) {
+  throw new Error('Please add your MONGODB_URI to .env file');
+}
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
+const uri = process.env.MONGODB_URI;
+
+// Connection options with pooling configuration
+const options = {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
-});
+  },
+  maxPoolSize: 10, // Maximum number of connections in the pool
+  minPoolSize: 2,  // Minimum number of connections to maintain
+  maxIdleTimeMS: 30000, // Close connections that have been idle for 30 seconds
+};
+
+// Global cached connection (persists across serverless function invocations)
+declare global {
+  var mongoClientPromise: Promise<MongoClient> | undefined;
+}
+
+let clientPromise: Promise<MongoClient>;
+
+// Use global caching in both development and production to prevent connection leaks
+// This ensures the same connection is reused across serverless function invocations
+if (!global.mongoClientPromise) {
+  const client = new MongoClient(uri, options);
+  global.mongoClientPromise = client.connect();
+  console.log('Creating new MongoDB client connection');
+}
+clientPromise = global.mongoClientPromise;
 
 // Database and collections
 let db: Db;
@@ -89,12 +110,12 @@ let marketItemsCollection: Collection<MarketItem>;
 async function connectToMongo() {
   if (!db) {
     try {
-      // Connect the client to the server
-      await client.connect();
-      console.log("Connected to MongoDB!");
-      
-      // Initialize database and collections
-      db = client.db(clusterName);
+      /// Use the cached client promise
+      const client = await clientPromise;
+      console.log("🔌 Initializing MongoDB database connection...");
+
+      // Initialize database
+      db = client.db();
       // Ensure collections exist with validators applied
       const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name));
 
@@ -235,8 +256,10 @@ async function connectToMongo() {
   return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
 }
 
+const client = await clientPromise;
+
 // Connect immediately when this module is imported
-connectToMongo().catch(console.error);
+await connectToMongo();
 
 // Handle application shutdown
 process.on('SIGINT', async () => {

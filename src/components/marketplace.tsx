@@ -5,7 +5,8 @@ import Link from "next/link";
 import { MarketSellModal } from "./market-sell-modal";
 import { MarketPurchaseModal } from "./market-purchase-modal";
 import { useAuthContext } from "../context/walletContext";
-import { Ordinals } from "../utils/ordinalsP2PKH";
+import { OrdinalsP2PKH } from "../utils/ordinalsP2PKH";
+import { OrdinalsP2MS } from "../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../utils/paymentUtxo";
@@ -13,6 +14,7 @@ import { Hash, Transaction, PublicKey } from "@bsv/sdk";
 import { toTxid, toOutpoint } from "../utils/outpoints";
 import { SERVER_PUBKEY } from "../utils/env";
 import toast from "react-hot-toast";
+import { hashFromPubkeys } from "../utils/hashFromPubkeys";
 
 const SERVER_PUB_KEY = SERVER_PUBKEY;
 
@@ -140,10 +142,11 @@ export function Marketplace() {
             const assetId = transferTxid.replace(".", "_");
 
             // Create the multisig locking script for the new output
-            const ordinalLockingScript = new Ordinals().lock(userPubKey, assetId, tokenTxid, tokens, "transfer", false, true);
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUB_KEY)]);
+            const ordinalLockingScript = new OrdinalsP2MS().lock(oneOfTwoHash, assetId, tokenTxid, tokens, "transfer");
 
             // Build a preimage transaction that mirrors the intended spend for correct ordinal signature
-            const ordinalUnlockFrame = new Ordinals().unlock(userWallet!, "single");
+            const ordinalUnlockFrame = new OrdinalsP2PKH().unlock(userWallet!, "single");
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: fullTx,
@@ -253,9 +256,7 @@ export function Marketplace() {
 
             setPurchaseLoading(true);
             // Create the paymentTX
-            const serverPubKeyArray = PublicKey.fromString(SERVER_PUB_KEY).encode(true) as number[];
-            const buyerPubKeyArray = PublicKey.fromString(buyerId).encode(true) as number[];
-            const oneOfTwoHash = Hash.hash160(serverPubKeyArray.concat(buyerPubKeyArray));
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUB_KEY), PublicKey.fromString(buyerId)]);
             const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
             const paymentUtxo = await userWallet!.createAction({

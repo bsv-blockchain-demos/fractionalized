@@ -91,6 +91,11 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
         }
     }, [userWallet]);
 
+    // Initialize wallet on mount
+    useEffect(() => {
+        initializeWallet();
+    }, [initializeWallet]);
+
     console.log('AuthContextProvider: Rendering provider with children');
 
     return (
