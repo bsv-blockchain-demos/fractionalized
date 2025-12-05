@@ -228,19 +228,19 @@ export function Admin() {
             }
             const hashOfPubkeys = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUBKEY)])
             const ordinalLockingScript = new OrdinalsP2MS().lock(
-                hashOfPubkeys,
-                `${response.txid}_0`,
-                toOutpoint(response.txid, 0),
-                tokensToMint,
-                "deploy+mint"
+                /* oneOfTwoHash */ hashOfPubkeys,
+                /* assetId */ `${response.txid}_0`,
+                /* tokenTxid */ toOutpoint(response.txid, 0),
+                /* shares */ tokensToMint,
+                /* type */ "deploy+mint"
             );
 
             // Create payment UTXO
             // Multisig 1 of 2 so server can use funds for transfer fees
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUBKEY), PublicKey.fromString(userPubKey)]);
 
-            const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
-            const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
+            const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
+            const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
             // Estimated at 2 sats in fees per share sold, minimum 3 to ensure changeSats >= 1
@@ -287,13 +287,13 @@ export function Admin() {
             });
 
             const paymentUnlockFrame = new PaymentUtxo().unlock(
-                userWallet!,
-                SERVER_PUBKEY,
-                "single",
-                false,
-                undefined,
-                undefined,
-                false // order: server first, then user to match hash(SERVER + user)
+                /* wallet */ userWallet!,
+                /* otherPubkey */ SERVER_PUBKEY,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ false,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ false // order: server first, then user to match hash(SERVER + user)
             );
             const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 0);
 

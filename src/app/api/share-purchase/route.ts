@@ -125,12 +125,28 @@ export async function POST(request: Request) {
         const fullParentTx = Transaction.fromBEEF(txbeef as number[]);
 
         // Create the ordinal unlocking and locking script for transfer (mint spend => treat as first)
-        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", false, undefined, undefined, false);
+        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(
+            /* wallet */ wallet,
+            /* keyID */ "0",
+            /* counterparty */ "self",
+            /* otherPubkey */ property.seller,
+            /* signOutputs */ "single",
+            /* anyoneCanPay */ false,
+            /* sourceSatoshis */ undefined,
+            /* lockingScript */ undefined,
+            /* firstPubkeyIsWallet */ false
+        );
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
         // Hash the public key to get pubKeyHash for P2PKH locking script
         const investorPubKeyHash = Hash.hash160(investorId, "hex") as number[];
-        const ordinalTransferScript = new OrdinalsP2PKH().lock(investorPubKeyHash, assetId, propertyTokenTxid, amount, "transfer");
+        const ordinalTransferScript = new OrdinalsP2PKH().lock(
+            /* address */ investorPubKeyHash,
+            /* assetId */ assetId,
+            /* tokenTxid */ propertyTokenTxid,
+            /* shares */ amount,
+            /* type */ "transfer"
+        );
 
         // Also get the amount of tokens left from the actual ordinalTxLockingscript
         // Then calculate the token change to send back to the original mintTx
@@ -149,11 +165,11 @@ export async function POST(request: Request) {
         const oneOfTwohashForChange = hashFromPubkeys([PublicKey.fromString(property.seller), PublicKey.fromString(serverKey)]);
 
         const changeScript = new OrdinalsP2MS().lock(
-            oneOfTwohashForChange,
-            property.txids.mintTxid.replace(".", "_"),
-            propertyTokenTxid,
-            changeAmount,
-            "transfer",
+            /* oneOfTwoHash */ oneOfTwohashForChange,
+            /* assetId */ property.txids.mintTxid.replace(".", "_"),
+            /* tokenTxid */ propertyTokenTxid,
+            /* shares */ changeAmount,
+            /* type */ "transfer"
         );
 
         // Query to overlay to get the TX beefs
@@ -170,7 +186,7 @@ export async function POST(request: Request) {
 
         // Create new multiSig lockingScript for the payment change UTXO
         const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(serverKey), PublicKey.fromString(property.seller)]);
-        const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
+        const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
         // Subtract 2 satoshis: 1 for ordinal transfer + 1 for ordinal token change
@@ -221,7 +237,14 @@ export async function POST(request: Request) {
 
         // Sign the ordinal input (index 0) and payment input (index 1) against the preimage transaction
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
-        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, property.seller, "single", false, undefined, undefined);
+        const paymentUnlockFrame = new PaymentUtxo().unlock(
+            /* wallet */ wallet,
+            /* otherPubkey */ property.seller,
+            /* signOutputs */ "single",
+            /* anyoneCanPay */ false,
+            /* sourceSatoshis */ undefined,
+            /* lockingScript */ undefined
+        );
         const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Merge the two input beefs required for the inputBEEF

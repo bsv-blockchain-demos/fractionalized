@@ -87,7 +87,13 @@ export async function POST(request: Request) {
         // Create ordinal transfer transaction scripts
         // Hash the public key to get pubKeyHash for P2PKH locking script
         const buyerPubKeyHash = Hash.hash160(buyerId, "hex") as number[];
-        const ordinalTransferScript = new OrdinalsP2PKH().lock(buyerPubKeyHash, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
+        const ordinalTransferScript = new OrdinalsP2PKH().lock(
+            /* address */ buyerPubKeyHash,
+            /* assetId */ share.transferTxid.replace(".", "_"),
+            /* tokenTxid */ property.txids.tokenTxid,
+            /* shares */ share.amount,
+            /* type */ "transfer"
+        );
 
         // Payment unlocking will be signed against a preimage (frame-based)
 
@@ -108,11 +114,24 @@ export async function POST(request: Request) {
             lockingScript: ordinalTransferScript,
         });
 
-        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(wallet, "0", "self", share.investorId, 'single', false, undefined, undefined, true);
+        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(
+            /* wallet */ wallet,
+            /* keyID */ "0",
+            /* counterparty */ "self",
+            /* otherPubkey */ share.investorId,
+            /* signOutputs */ "single",
+            /* anyoneCanPay */ false,
+            /* sourceSatoshis */ undefined,
+            /* lockingScript */ undefined,
+            /* firstPubkeyIsWallet */ true
+        );
         const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
 
         // Create payment unlocking script using the same preimage and input index 1
-        const paymentUnlockFrame = new PaymentUtxo().unlock(wallet, buyerId);
+        const paymentUnlockFrame = new PaymentUtxo().unlock(
+            /* wallet */ wallet,
+            /* otherPubkey */ buyerId
+        );
         const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Create transfer transaction

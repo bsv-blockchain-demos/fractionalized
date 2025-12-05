@@ -143,10 +143,19 @@ export function Marketplace() {
 
             // Create the multisig locking script for the new output
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUB_KEY)]);
-            const ordinalLockingScript = new OrdinalsP2MS().lock(oneOfTwoHash, assetId, tokenTxid, tokens, "transfer");
+            const ordinalLockingScript = new OrdinalsP2MS().lock(
+                /* oneOfTwoHash */ oneOfTwoHash,
+                /* assetId */ assetId,
+                /* tokenTxid */ tokenTxid,
+                /* shares */ tokens,
+                /* type */ "transfer"
+            );
 
             // Build a preimage transaction that mirrors the intended spend for correct ordinal signature
-            const ordinalUnlockFrame = new OrdinalsP2PKH().unlock(userWallet!, "single");
+            const ordinalUnlockFrame = new OrdinalsP2PKH().unlock(
+                /* wallet */ userWallet!,
+                /* signOutputs */ "single"
+            );
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: fullTx,
@@ -257,7 +266,7 @@ export function Marketplace() {
             setPurchaseLoading(true);
             // Create the paymentTX
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUB_KEY), PublicKey.fromString(buyerId)]);
-            const paymentLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
+            const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
             const paymentUtxo = await userWallet!.createAction({
                 description: "Payment",
