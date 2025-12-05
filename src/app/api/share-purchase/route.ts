@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
     const { propertyId, investorId, amount } = await request.json();
+    console.log("InvestorId", investorId)
 
     // Verify the investoryId (requester) is the logged in user
     if (userId !== investorId) {
@@ -36,12 +37,12 @@ export async function POST(request: Request) {
         if (!SERVER_KEY || !STORAGE) {
             return NextResponse.json({ error: "Server wallet not configured" }, { status: 500 });
         }
-        const wallet = await makeWallet("main", SERVER_KEY as string, STORAGE as string);
+        const wallet = await makeWallet("main", STORAGE as string, SERVER_KEY as string);
         if (!wallet) {
             throw new Error("Failed to create wallet");
         }
         const propertyObjectId = new ObjectId(propertyId);
-        if (!ObjectId.isValid(investorId)) {
+        if (typeof investorId !== "string") {
             return NextResponse.json({ error: "Invalid investorId" }, { status: 400 });
         }
 
@@ -78,6 +79,32 @@ export async function POST(request: Request) {
             throw new Error("Property token UTXOs not initialized");
         }
 
+        // Validate that purchase amount doesn't exceed percentToSell
+        const percentToSell = property?.sell?.percentToSell;
+        if (percentToSell != null) {
+            // Check single purchase amount
+            if (amount > percentToSell) {
+                return NextResponse.json(
+                    { error: `Cannot purchase ${amount}% - only ${percentToSell}% is available for sale` },
+                    { status: 400 }
+                );
+            }
+
+            // Check cumulative amount sold
+            const existingShares = await sharesCollection
+                .find({ propertyId: propertyObjectId })
+                .toArray();
+            const totalSold = existingShares.reduce((sum, share) => sum + share.amount, 0);
+            const remainingPercent = percentToSell - totalSold;
+
+            if (amount > remainingPercent) {
+                return NextResponse.json(
+                    { error: `Cannot purchase ${amount}% - only ${remainingPercent.toFixed(2)}% remaining (${totalSold}% already sold of ${percentToSell}% available)` },
+                    { status: 400 }
+                );
+            }
+        }
+
         // Get property token txid to put in the inscribed token (for indentification)
         const propertyTokenTxid = property.txids.tokenTxid;
 
@@ -98,10 +125,12 @@ export async function POST(request: Request) {
         const fullParentTx = Transaction.fromBEEF(txbeef as number[]);
 
         // Create the ordinal unlocking and locking script for transfer (mint spend => treat as first)
-        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", false, 1, undefined, true);
+        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", false, undefined, undefined, false);
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
-        const ordinalTransferScript = new OrdinalsP2PKH().lock(investorId, assetId, propertyTokenTxid, amount, "transfer");
+        // Hash the public key to get pubKeyHash for P2PKH locking script
+        const investorPubKeyHash = Hash.hash160(investorId, "hex") as number[];
+        const ordinalTransferScript = new OrdinalsP2PKH().lock(investorPubKeyHash, assetId, propertyTokenTxid, amount, "transfer");
 
         // Also get the amount of tokens left from the actual ordinalTxLockingscript
         // Then calculate the token change to send back to the original mintTx
@@ -116,7 +145,8 @@ export async function POST(request: Request) {
             protocolID: [0, "fractionalized"],
             keyID: "0",
         });
-        const oneOfTwohashForChange = hashFromPubkeys([PublicKey.fromString(serverKey), PublicKey.fromString(property.seller)]);
+        // IMPORTANT: Order must match original mint in admin.tsx: [user/seller, server]
+        const oneOfTwohashForChange = hashFromPubkeys([PublicKey.fromString(property.seller), PublicKey.fromString(serverKey)]);
 
         const changeScript = new OrdinalsP2MS().lock(
             oneOfTwohashForChange,
@@ -143,7 +173,8 @@ export async function POST(request: Request) {
         const paymentChangeLockingScript = new PaymentUtxo().lock(oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
-        const paymentChangeSats = Number(paymentSourceTX.outputs[paymentVout].satoshis) - 2; // 2 satoshis for fees
+        // Subtract 2 satoshis: 1 for ordinal transfer + 1 for ordinal token change
+        const paymentChangeSats = Number(paymentSourceTX.outputs[paymentVout].satoshis) - 2;
 
         const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
             {
@@ -168,10 +199,12 @@ export async function POST(request: Request) {
         preimageTx.addInput({
             sourceTransaction: fullParentTx,
             sourceOutputIndex: parentVout,
+            sequence: 0xffffffff,
         });
         preimageTx.addInput({
             sourceTransaction: paymentSourceTX,
             sourceOutputIndex: paymentVout,
+            sequence: 0xffffffff,
         });
         preimageTx.addOutput({
             satoshis: 1,

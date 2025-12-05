@@ -12,6 +12,11 @@ export interface PropertyItem {
   annualisedReturn?: string;
   currentValuationUSD?: number;
   grossYield?: string;
+  availablePercent?: number | null;
+  totalSold?: number;
+  sell?: {
+    percentToSell: number;
+  };
 }
 
 export interface PropertyGridProps {
@@ -86,6 +91,14 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
 
                 {/* Investment Metrics */}
                 <div className="space-y-2 text-sm">
+                  {property.sell?.percentToSell != null && property.availablePercent != null && (
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Available shares</span>
+                      <span className="font-medium text-accent-primary">
+                        {property.availablePercent.toFixed(1)}% of {property.sell.percentToSell}%
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-text-secondary">Annualised return</span>
                     <span className="font-medium text-text-primary">{property.annualisedReturn}</span>

@@ -6,7 +6,7 @@ import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
 import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
-import { Transaction, TransactionSignature, Signature } from "@bsv/sdk";
+import { Transaction, TransactionSignature, Signature, Hash } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
 import { toOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
@@ -85,7 +85,9 @@ export async function POST(request: Request) {
         const fullOrdinalTx = Transaction.fromBEEF(ordinalTx.outputs[0].beef as number[]);
 
         // Create ordinal transfer transaction scripts
-        const ordinalTransferScript = new OrdinalsP2PKH().lock(buyerId, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
+        // Hash the public key to get pubKeyHash for P2PKH locking script
+        const buyerPubKeyHash = Hash.hash160(buyerId, "hex") as number[];
+        const ordinalTransferScript = new OrdinalsP2PKH().lock(buyerPubKeyHash, share.transferTxid.replace(".", "_"), property.txids.tokenTxid, share.amount, "transfer");
 
         // Payment unlocking will be signed against a preimage (frame-based)
 
@@ -94,10 +96,12 @@ export async function POST(request: Request) {
         preimageTx.addInput({
             sourceTransaction: fullOrdinalTx,
             sourceOutputIndex: 0,
+            sequence: 0xffffffff,
         });
         preimageTx.addInput({
             sourceTransaction: paymentTX,
             sourceOutputIndex: 0,
+            sequence: 0xffffffff,
         });
         preimageTx.addOutput({
             satoshis: 1,

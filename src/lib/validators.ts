@@ -94,7 +94,7 @@ export const sharesValidator = {
     ],
     properties: {
       propertyId: { bsonType: 'objectId' },
-      investorId: { bsonType: 'objectId' },
+      investorId: { bsonType: 'string' },
       parentTxid: { bsonType: 'string', pattern: outpointPattern },
       transferTxid: { bsonType: 'string', pattern: outpointPattern },
       amount: { bsonType: 'number' },

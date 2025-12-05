@@ -23,6 +23,9 @@ export interface Properties {
     images: string[],
     txids: Record<string, string>,
     seller: string,
+    sell?: {
+        percentToSell: number;
+    },
     proofOfOwnership?: string, // Base64 encoded PDF document
 }
 
@@ -39,7 +42,7 @@ export interface PropertyDescription {
 export interface ShareLock {
     _id: ObjectId;
     propertyId: ObjectId;
-    investorId: ObjectId;
+    investorId: string;
     createdAt: Date;
 }
 

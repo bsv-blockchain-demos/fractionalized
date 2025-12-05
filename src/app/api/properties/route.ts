@@ -136,7 +136,7 @@ function buildFacetPipeline(body: any) {
   if (Object.keys(match).length > 0) {
     facetPipeline.push({ $match: match });
   }
-  
+
   facetPipeline.push({
     $facet: {
       items: [
@@ -145,8 +145,29 @@ function buildFacetPipeline(body: any) {
         { $sort: sort },
         { $skip: skip },
         { $limit: Number(limit) },
+        // Lookup shares to calculate available percent
+        {
+          $lookup: {
+            from: "shares",
+            localField: "_id",
+            foreignField: "propertyId",
+            as: "shares",
+          },
+        },
+        {
+          $addFields: {
+            totalSold: { $sum: "$shares.amount" },
+            availablePercent: {
+              $cond: [
+                { $ne: ["$sell.percentToSell", null] },
+                { $subtract: ["$sell.percentToSell", { $sum: "$shares.amount" }] },
+                null,
+              ],
+            },
+          },
+        },
         { $set: { _id: { $toString: "$_id" } } },
-        { $project: { grossYieldNum: 0, netYieldNum: 0, annualisedReturnNum: 0 } },
+        { $project: { grossYieldNum: 0, netYieldNum: 0, annualisedReturnNum: 0, shares: 0 } },
       ],
       total: [
         ...addNumericStages,

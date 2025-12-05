@@ -101,11 +101,16 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const isSeller = !!sellerIdentifier && !!userPubKey && String(sellerIdentifier).toLowerCase() === String(userPubKey).toLowerCase();
 
     const priceUSD = property.priceUSD;
-    // sanitize custom percent: integers only 1..100
+    const availablePercent = property.availablePercent;
+    const totalSold = property.totalSold || 0;
+    const percentToSell = property.sell?.percentToSell;
+
+    // sanitize custom percent: integers only 1..maxAvailable
+    const maxAvailable = availablePercent != null ? Math.floor(availablePercent) : 100;
     const sanitizedCustom = (() => {
         const n = Math.floor(Number(customPercent || 0));
         if (!isFinite(n)) return 0;
-        return Math.max(1, Math.min(100, n));
+        return Math.max(1, Math.min(maxAvailable, n));
     })();
     const percentFromState = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
     const effectivePercent = percentFromState;
@@ -299,38 +304,56 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                     <div className="text-xs md:text-sm text-red-500">
                         This is a demo application. Investing actions shown here are not real.
                     </div>
+                    {/* Available shares info */}
+                    {percentToSell != null && (
+                        <div className="p-3 rounded-lg bg-bg-tertiary border border-border-subtle text-sm">
+                            <div className="flex justify-between items-center">
+                                <span className="text-text-secondary">Available for purchase:</span>
+                                <span className="font-semibold text-text-primary">
+                                    {availablePercent != null ? availablePercent.toFixed(2) : '0'}% of {percentToSell}%
+                                </span>
+                            </div>
+                            {totalSold > 0 && (
+                                <div className="mt-1 text-xs text-text-secondary">
+                                    ({totalSold.toFixed(2)}% already sold)
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {/* Percent selection */}
                     <div>
                         <div className="text-sm text-text-secondary mb-2">Choose your share (%)</div>
                         <div className="grid grid-cols-3 gap-2">
-                            {presets.map((p) => (
-                                <button
-                                    key={p}
-                                    type="button"
-                                    onClick={() => setSelectedPercent(p)}
-                                    className={[
-                                        'px-3 py-2 rounded border text-sm hover:cursor-pointer',
-                                        selectedPercent === p ? 'bg-accent-primary text-white border-transparent' : 'bg-bg-secondary text-text-primary border-border-subtle'
-                                    ].join(' ')}
-                                >
-                                    {p}%
-                                </button>
-                            ))}
+                            {presets
+                                .filter(p => availablePercent == null || p <= availablePercent)
+                                .map((p) => (
+                                    <button
+                                        key={p}
+                                        type="button"
+                                        onClick={() => setSelectedPercent(p)}
+                                        className={[
+                                            'px-3 py-2 rounded border text-sm hover:cursor-pointer',
+                                            selectedPercent === p ? 'bg-accent-primary text-white border-transparent' : 'bg-bg-secondary text-text-primary border-border-subtle'
+                                        ].join(' ')}
+                                    >
+                                        {p}%
+                                    </button>
+                                ))}
                             <div className="flex items-center gap-2 col-span-3">
                                 <input
                                     type="number"
                                     min={1}
-                                    max={100}
+                                    max={maxAvailable}
                                     step={1}
                                     value={selectedPercent === 'custom' ? sanitizedCustom : ''}
                                     onChange={(e) => {
-                                        // accept only integers 1..100
+                                        // accept only integers 1..maxAvailable
                                         const raw = e.target.value.replace(/[^0-9]/g, '');
-                                        const n = Math.max(1, Math.min(100, Number(raw || 0)));
+                                        const n = Math.max(1, Math.min(maxAvailable, Number(raw || 0)));
                                         setCustomPercent(String(n));
                                         setSelectedPercent('custom');
                                     }}
-                                    placeholder="Custom % (1-100)"
+                                    placeholder={`Custom % (1-${maxAvailable})`}
                                     className="flex-1 px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary"
                                 />
                                 <span className="text-text-secondary">%</span>
@@ -364,7 +387,11 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             </button>
                             <button
                                 type="button"
-                                disabled={(effectivePercent || 0) < 1 || (effectivePercent || 0) > 100}
+                                disabled={
+                                    (effectivePercent || 0) < 1 ||
+                                    (availablePercent != null && (effectivePercent || 0) > availablePercent) ||
+                                    (availablePercent == null && (effectivePercent || 0) > 100)
+                                }
                                 className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm btn-glow border border-transparent"
                                 onClick={handleContinueInvest}
                             >
