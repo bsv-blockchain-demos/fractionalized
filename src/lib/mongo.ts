@@ -25,6 +25,7 @@ export interface Properties {
     seller: string,
     sell?: {
         percentToSell: number;
+        remainingPercent?: number; // Tracks remaining shares available for purchase
     },
     proofOfOwnership?: string, // Base64 encoded PDF document
 }

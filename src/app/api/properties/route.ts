@@ -157,11 +157,18 @@ function buildFacetPipeline(body: any) {
         {
           $addFields: {
             totalSold: { $sum: "$shares.amount" },
+            // Use stored remainingPercent if available, otherwise calculate from shares
             availablePercent: {
               $cond: [
-                { $ne: ["$sell.percentToSell", null] },
-                { $subtract: ["$sell.percentToSell", { $sum: "$shares.amount" }] },
-                null,
+                { $ne: ["$sell.remainingPercent", null] },
+                "$sell.remainingPercent",
+                {
+                  $cond: [
+                    { $ne: ["$sell.percentToSell", null] },
+                    { $subtract: ["$sell.percentToSell", { $sum: "$shares.amount" }] },
+                    null,
+                  ],
+                },
               ],
             },
           },

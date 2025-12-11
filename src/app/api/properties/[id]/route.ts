@@ -22,9 +22,10 @@ export async function GET(
 
     const descriptions = await propertyDescriptionsCollection.findOne({ propertyId: _id });
 
-    // Calculate available shares
+    // Calculate available shares and investors count
     let availablePercent: number | null = null;
     let totalSold = 0;
+    let investorsCount = 0;
     const percentToSell = property.sell?.percentToSell;
 
     if (percentToSell != null) {
@@ -32,7 +33,13 @@ export async function GET(
         .find({ propertyId: _id })
         .toArray();
       totalSold = existingShares.reduce((sum, share) => sum + share.amount, 0);
-      availablePercent = percentToSell - totalSold;
+
+      // Use stored remainingPercent if available, otherwise calculate it
+      availablePercent = property.sell?.remainingPercent ?? (percentToSell - totalSold);
+
+      // Count unique investors
+      const uniqueInvestors = new Set(existingShares.map(share => share.investorId));
+      investorsCount = uniqueInvestors.size;
     }
 
     const out = {
@@ -42,6 +49,7 @@ export async function GET(
       whyInvest: descriptions?.whyInvest || [],
       availablePercent: availablePercent,
       totalSold: totalSold,
+      investors: investorsCount,
     };
 
     return NextResponse.json({ item: out });

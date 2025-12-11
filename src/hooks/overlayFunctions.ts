@@ -8,6 +8,7 @@ const overlay = new LookupResolver({
 });
 
 export const broadcastTX = async (tx: Transaction) => {
+    console.log('Transaction to broadcast: ', tx.toHex())
     // Lookup a service which accepts this type of token
     const tb = new TopicBroadcaster(['tm_fractionalize'], {
         resolver: overlay,

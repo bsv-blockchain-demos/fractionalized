@@ -40,8 +40,10 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     }, [propertyId]);
     
     const handleContinueInvest = async () => {
+        // Determine the investment amount (either preset or custom)
         const amount = selectedPercent === 'custom' ? sanitizedCustom : selectedPercent;
 
+        // Initialize wallet if not already connected
         if (!userWallet) {
             try {
                 await initializeWallet();
@@ -56,6 +58,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             }
         }
 
+        // Send purchase request to API
         const response = await fetch(`/api/share-purchase`, {
             method: 'POST',
             headers: {
@@ -68,11 +71,31 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             }),
         });
         const data = await response.json();
+
+        // Handle API errors
         if (data.error) {
             console.error(data.error);
+            toast.error("Failed to purchase share");
             return;
         }
+
         console.log(data);
+
+        // Update local property state to reflect the purchase
+        setProperty((prev: any) => {
+            const newRemainingPercent = (prev.availablePercent || 0) - Number(amount);
+            return {
+                ...prev,
+                investors: (prev.investors || 0) + 1,
+                availablePercent: newRemainingPercent, // This is the remainingPercent from the API
+                totalSold: (prev.totalSold || 0) + Number(amount),
+                // Update status to funded if all shares are sold
+                ...(newRemainingPercent <= 0 && { status: "funded" })
+            };
+        });
+
+        // Close the modal and show success message
+        setInvestOpen(false);
         toast.success("Share purchased successfully");
     };
 
@@ -101,12 +124,14 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const isSeller = !!sellerIdentifier && !!userPubKey && String(sellerIdentifier).toLowerCase() === String(userPubKey).toLowerCase();
 
     const priceUSD = property.priceUSD;
-    const availablePercent = property.availablePercent;
     const totalSold = property.totalSold || 0;
     const percentToSell = property.sell?.percentToSell;
 
-    // sanitize custom percent: integers only 1..maxAvailable
-    const maxAvailable = availablePercent != null ? Math.floor(availablePercent) : 100;
+    // Use remainingPercent from database (availablePercent is the calculated value from the API)
+    const remainingPercent = property.availablePercent;
+
+    // sanitize custom percent: integers only 1..maxAvailable (based on remaining shares)
+    const maxAvailable = remainingPercent != null ? Math.floor(remainingPercent) : 100;
     const sanitizedCustom = (() => {
         const n = Math.floor(Number(customPercent || 0));
         if (!isFinite(n)) return 0;
@@ -150,9 +175,10 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                                 <button
                                     type="button"
                                     onClick={() => setInvestOpen(true)}
-                                    className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer transition-colors text-sm btn-glow border border-transparent"
+                                    disabled={remainingPercent != null && remainingPercent <= 0}
+                                    className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm btn-glow border border-transparent"
                                 >
-                                    Invest
+                                    {remainingPercent != null && remainingPercent <= 0 ? 'Fully Funded' : 'Invest'}
                                 </button>
                             )}
                         </div>
@@ -310,12 +336,17 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                             <div className="flex justify-between items-center">
                                 <span className="text-text-secondary">Available for purchase:</span>
                                 <span className="font-semibold text-text-primary">
-                                    {availablePercent != null ? availablePercent.toFixed(2) : '0'}% of {percentToSell}%
+                                    {remainingPercent != null ? remainingPercent.toFixed(2) : '0'}% of {percentToSell}%
                                 </span>
                             </div>
                             {totalSold > 0 && (
                                 <div className="mt-1 text-xs text-text-secondary">
                                     ({totalSold.toFixed(2)}% already sold)
+                                </div>
+                            )}
+                            {remainingPercent != null && remainingPercent <= 0 && (
+                                <div className="mt-2 p-2 rounded bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-500">
+                                    This property is fully funded. No shares available for purchase.
                                 </div>
                             )}
                         </div>
@@ -325,7 +356,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                         <div className="text-sm text-text-secondary mb-2">Choose your share (%)</div>
                         <div className="grid grid-cols-3 gap-2">
                             {presets
-                                .filter(p => availablePercent == null || p <= availablePercent)
+                                .filter(p => remainingPercent == null || p <= remainingPercent)
                                 .map((p) => (
                                     <button
                                         key={p}
@@ -389,8 +420,8 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                                 type="button"
                                 disabled={
                                     (effectivePercent || 0) < 1 ||
-                                    (availablePercent != null && (effectivePercent || 0) > availablePercent) ||
-                                    (availablePercent == null && (effectivePercent || 0) > 100)
+                                    (remainingPercent != null && (effectivePercent || 0) > remainingPercent) ||
+                                    (remainingPercent == null && (effectivePercent || 0) > 100)
                                 }
                                 className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm btn-glow border border-transparent"
                                 onClick={handleContinueInvest}

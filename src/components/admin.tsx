@@ -5,7 +5,7 @@ import { InfoTip } from "./info-tip";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
-import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature, Transaction } from "@bsv/sdk";
+import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature, Transaction, SatoshisPerKilobyte } from "@bsv/sdk";
 import { OrdinalsP2PKH } from "../utils/ordinalsP2PKH";
 import { OrdinalsP2MS } from "../utils/ordinalsP2MS";
 import { SERVER_PUBKEY } from "../utils/env";
@@ -244,12 +244,7 @@ export function Admin() {
 
             // Calculate required sats for payment UTXO
             // Estimated at 2 sats in fees per share sold, minimum 3 to ensure changeSats >= 1
-            const requiredSats = Math.max(3, Math.ceil(Number(_data.sell.percentToSell) * 2));
-
-            const changeSats = Number(requiredSats) - 2;
-            if (changeSats < 1) {
-                throw new Error("Insufficient satoshis for payment change output");
-            }
+            const requiredSats = Math.max(3, Math.ceil(Number(_data.sell.percentToSell) * 120));
 
             const paymentTxAction = await userWallet?.createAction({
                 description: "Payment UTXO",
@@ -269,23 +264,6 @@ export function Admin() {
                 throw new Error("Failed to create payment UTXO");
             }
 
-            // Build preimage for payment input and sign with PaymentUtxo frame
-            const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
-            const preimageTx = new Transaction();
-            preimageTx.addInput({
-                sourceTransaction: paymentSourceTX,
-                sequence: 0xffffffff,
-                sourceOutputIndex: 0,
-            });
-            preimageTx.addOutput({
-                satoshis: 1,
-                lockingScript: ordinalLockingScript,
-            });
-            preimageTx.addOutput({
-                satoshis: changeSats,
-                lockingScript: paymentChangeLockingScript,
-            });
-
             const paymentUnlockFrame = new PaymentUtxo().unlock(
                 /* wallet */ userWallet!,
                 /* otherPubkey */ SERVER_PUBKEY,
@@ -295,7 +273,29 @@ export function Admin() {
                 /* lockingScript */ undefined,
                 /* firstPubkeyIsWallet */ false // order: server first, then user to match hash(SERVER + user)
             );
-            const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 0);
+
+            // Build preimage for payment input and sign with PaymentUtxo frame
+            const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
+            const preimageTx = new Transaction();
+            preimageTx.addInput({
+                sourceTransaction: paymentSourceTX,
+                unlockingScriptTemplate: paymentUnlockFrame,
+                sourceOutputIndex: 0,
+            });
+            preimageTx.addOutput({
+                satoshis: 1,
+                lockingScript: ordinalLockingScript,
+            });
+            preimageTx.addOutput({
+                change: true,
+                lockingScript: paymentChangeLockingScript,
+            });
+
+            await preimageTx.fee(new SatoshisPerKilobyte(100))
+            await preimageTx.sign()
+
+            const changeSats = preimageTx.outputs[1].satoshis as number
+            const paymentUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript
 
             // Create the mint transaction
             const actionRes = await userWallet?.createAction({
@@ -483,7 +483,10 @@ export function Admin() {
                 .split(",")
                 .map((s) => s.trim())
                 .filter(Boolean),
-            sell: sellConfig, // include shares configuration from modal
+            sell: {
+                ...sellConfig,
+                remainingPercent: sellConfig.percentToSell, // Initialize remainingPercent to percentToSell
+            },
             proofOfOwnership: form.proofOfOwnership || undefined, // Include base64 PDF if uploaded
         };
 

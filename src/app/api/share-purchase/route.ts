@@ -2,7 +2,7 @@ import { connectToMongo, propertiesCollection, Shares, sharesCollection, locksCo
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
-import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash, PublicKey } from "@bsv/sdk";
+import { Signature, TransactionSignature, Transaction, LockingScript, Beef, Hash, PublicKey, UnlockingScript, SatoshisPerKilobyte } from "@bsv/sdk";
 import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
 import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
@@ -79,27 +79,23 @@ export async function POST(request: Request) {
             throw new Error("Property token UTXOs not initialized");
         }
 
-        // Validate that purchase amount doesn't exceed percentToSell
+        // Validate that purchase amount doesn't exceed available shares
         const percentToSell = property?.sell?.percentToSell;
         if (percentToSell != null) {
-            // Check single purchase amount
-            if (amount > percentToSell) {
-                return NextResponse.json(
-                    { error: `Cannot purchase ${amount}% - only ${percentToSell}% is available for sale` },
-                    { status: 400 }
-                );
+            // Use stored remainingPercent if available, otherwise calculate it
+            let remainingPercent = property?.sell?.remainingPercent;
+            if (remainingPercent == null) {
+                const existingShares = await sharesCollection
+                    .find({ propertyId: propertyObjectId })
+                    .toArray();
+                const totalSold = existingShares.reduce((sum, share) => sum + share.amount, 0);
+                remainingPercent = percentToSell - totalSold;
             }
 
-            // Check cumulative amount sold
-            const existingShares = await sharesCollection
-                .find({ propertyId: propertyObjectId })
-                .toArray();
-            const totalSold = existingShares.reduce((sum, share) => sum + share.amount, 0);
-            const remainingPercent = percentToSell - totalSold;
-
+            // Validate purchase amount against remaining shares
             if (amount > remainingPercent) {
                 return NextResponse.json(
-                    { error: `Cannot purchase ${amount}% - only ${remainingPercent.toFixed(2)}% remaining (${totalSold}% already sold of ${percentToSell}% available)` },
+                    { error: `Cannot purchase ${amount}% - only ${remainingPercent.toFixed(2)}% remaining` },
                     { status: 400 }
                 );
             }
@@ -135,6 +131,15 @@ export async function POST(request: Request) {
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
             /* firstPubkeyIsWallet */ false
+        );
+
+        const paymentUnlockFrame = new PaymentUtxo().unlock(
+            /* wallet */ wallet,
+            /* otherPubkey */ property.seller,
+            /* signOutputs */ "single",
+            /* anyoneCanPay */ false,
+            /* sourceSatoshis */ undefined,
+            /* lockingScript */ undefined
         );
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
@@ -189,8 +194,41 @@ export async function POST(request: Request) {
         const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
-        // Subtract 2 satoshis: 1 for ordinal transfer + 1 for ordinal token change
-        const paymentChangeSats = Number(paymentSourceTX.outputs[paymentVout].satoshis) - 2;
+
+        // Build a preimage transaction mirroring the final spend for correct signatures
+        const preimageTx = new Transaction();
+        preimageTx.addInput({
+            sourceTransaction: fullParentTx,
+            sourceOutputIndex: parentVout,
+            unlockingScriptTemplate: ordinalUnlockingFrame,
+        });
+        preimageTx.addInput({
+            sourceTransaction: paymentSourceTX,
+            sourceOutputIndex: paymentVout,
+            unlockingScriptTemplate: paymentUnlockFrame,
+        });
+        preimageTx.addOutput({
+            satoshis: 1,
+            lockingScript: ordinalTransferScript,
+        });
+        preimageTx.addOutput({
+            satoshis: 1,
+            lockingScript: changeScript,
+        });
+        preimageTx.addOutput({
+            change: true,
+            lockingScript: paymentChangeLockingScript,
+        });
+
+        await preimageTx.fee(new SatoshisPerKilobyte(100))
+        await preimageTx.sign()
+
+        console.log('[Share-Purchase] Transaction to sign: ', preimageTx.toHex())
+
+        const paymentChangeSats = preimageTx.outputs[2].satoshis as number;
+
+        const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript
+        const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript
 
         const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
             {
@@ -209,43 +247,6 @@ export async function POST(request: Request) {
                 lockingScript: paymentChangeLockingScript.toHex(),
             },
         ];
-
-        // Build a preimage transaction mirroring the final spend for correct signatures
-        const preimageTx = new Transaction();
-        preimageTx.addInput({
-            sourceTransaction: fullParentTx,
-            sourceOutputIndex: parentVout,
-            sequence: 0xffffffff,
-        });
-        preimageTx.addInput({
-            sourceTransaction: paymentSourceTX,
-            sourceOutputIndex: paymentVout,
-            sequence: 0xffffffff,
-        });
-        preimageTx.addOutput({
-            satoshis: 1,
-            lockingScript: ordinalTransferScript,
-        });
-        preimageTx.addOutput({
-            satoshis: 1,
-            lockingScript: changeScript,
-        });
-        preimageTx.addOutput({
-            satoshis: paymentChangeSats,
-            lockingScript: paymentChangeLockingScript,
-        });
-
-        // Sign the ordinal input (index 0) and payment input (index 1) against the preimage transaction
-        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
-        const paymentUnlockFrame = new PaymentUtxo().unlock(
-            /* wallet */ wallet,
-            /* otherPubkey */ property.seller,
-            /* signOutputs */ "single",
-            /* anyoneCanPay */ false,
-            /* sourceSatoshis */ undefined,
-            /* lockingScript */ undefined
-        );
-        const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
 
         // Merge the two input beefs required for the inputBEEF
         const beef = new Beef();
@@ -307,6 +308,25 @@ export async function POST(request: Request) {
             createdAt: new Date(),
         }
         const share = await sharesCollection.insertOne(formattedShare);
+
+        // Atomically update remainingPercent and check if fully funded
+        if (percentToSell != null) {
+            const newRemainingPercent = (property?.sell?.remainingPercent ?? percentToSell) - amount;
+            const updateFields: any = {
+                "sell.remainingPercent": newRemainingPercent
+            };
+
+            // Update status to "funded" if all shares are sold
+            if (newRemainingPercent <= 0) {
+                updateFields.status = "funded";
+            }
+
+            await propertiesCollection.updateOne(
+                { _id: propertyObjectId },
+                { $set: updateFields }
+            );
+        }
+
         return NextResponse.json({ share });
     } catch (e) {
         console.error(e);
