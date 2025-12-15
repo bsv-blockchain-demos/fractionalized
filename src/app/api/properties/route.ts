@@ -171,6 +171,14 @@ function buildFacetPipeline(body: any) {
                 },
               ],
             },
+            // Calculate unique investors count from shares
+            investors: {
+              $cond: [
+                { $gt: [{ $size: "$shares" }, 0] },
+                { $size: { $setUnion: ["$shares.investorId", []] } },
+                0,
+              ],
+            },
           },
         },
         { $set: { _id: { $toString: "$_id" } } },
