@@ -27,10 +27,12 @@ export async function traceShareChain(opts: {
   const propertyObjectId = typeof opts.propertyId === "string" ? new ObjectId(opts.propertyId) : opts.propertyId;
 
   const property = await propertiesCollection.findOne({ _id: propertyObjectId });
-  if (!property || !property?.txids?.mintTxid) {
+  // Check for originalMintTxid first, fall back to mintTxid for backward compatibility
+  const mintTxid = property?.txids?.originalMintTxid || property?.txids?.mintTxid;
+  if (!property || !mintTxid) {
     return {
       valid: false,
-      reason: "Property or mintTxid not found",
+      reason: "Property or originalMintTxid not found",
       propertyId: propertyObjectId,
       mintTxid: "",
       startedFrom: opts.leafTransferTxid,
@@ -39,8 +41,6 @@ export async function traceShareChain(opts: {
       hops: [],
     };
   }
-
-  const mintTxid: string = property.txids.mintTxid;
 
   const hops: ChainHop[] = [];
   const visited = new Set<string>();
@@ -64,12 +64,31 @@ export async function traceShareChain(opts: {
     visited.add(current);
 
     // Find the share record whose transferTxid equals current
-    const share = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: current } as any);
+    let share = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: current } as any);
     if (!share) {
-      // If we've reached the mint outpoint, we're done; otherwise invalid chain
+      // If we've reached the mint outpoint, we're done
       if (current === mintTxid) {
         break;
       }
+
+      // Check if this is a change output (output index 1) by looking for a share at output 0
+      const [txid, voutStr] = current.split(/[._]/);
+      const vout = parseInt(voutStr);
+
+      if (vout === 1) {
+        // This might be a change output, check if there's a share at output 0
+        const changeOutputShare = await sharesCollection.findOne({
+          propertyId: propertyObjectId,
+          transferTxid: `${txid}.0`
+        } as any);
+
+        if (changeOutputShare) {
+          // Found the share at output 0, continue chain from its parent
+          current = changeOutputShare.parentTxid as string;
+          continue;
+        }
+      }
+
       return {
         valid: false,
         reason: `Missing share record for outpoint ${current}`,

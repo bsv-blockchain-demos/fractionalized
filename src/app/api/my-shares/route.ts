@@ -25,7 +25,20 @@ export async function POST(request: Request) {
         },
       },
       { $match: { $expr: { $eq: [{ $size: "$children" }, 0] } } },
-      { $project: { children: 0 } },
+      {
+        $lookup: {
+          from: "properties",
+          localField: "propertyId",
+          foreignField: "_id",
+          as: "property",
+        },
+      },
+      {
+        $addFields: {
+          propertyTitle: { $arrayElemAt: ["$property.title", 0] },
+        },
+      },
+      { $project: { children: 0, property: 0 } },
       { $sort: { createdAt: -1 } },
     ];
 

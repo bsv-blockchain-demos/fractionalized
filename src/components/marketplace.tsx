@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MarketSellModal } from "./market-sell-modal";
 import { MarketPurchaseModal } from "./market-purchase-modal";
@@ -10,8 +10,8 @@ import { OrdinalsP2MS } from "../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../hooks/overlayFunctions";
 import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../utils/paymentUtxo";
-import { Hash, Transaction, PublicKey } from "@bsv/sdk";
-import { toTxid, toOutpoint } from "../utils/outpoints";
+import { Hash, Transaction, PublicKey, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
+import { parseOutpoint, toOutpoint } from "../utils/outpoints";
 import { SERVER_PUBKEY } from "../utils/env";
 import toast from "react-hot-toast";
 import { hashFromPubkeys } from "../utils/hashFromPubkeys";
@@ -78,17 +78,20 @@ export function Marketplace() {
         fetchListings();
     }, []);
 
-    const handleNewListing = async (payload: payloadData) => {
+    const handleNewListing = useCallback(async (payload: payloadData) => {
+        console.log('[handleNewListing] Starting with payload:', payload);
         const { shareId, propertyId, pricePerShare, transferTxid, tokenTxid } = payload;
 
         setLoading(true);
 
         try {
             if (!userWallet) {
+                console.log('[handleNewListing] No wallet found, initializing...');
                 try {
                     await initializeWallet();
+                    console.log('[handleNewListing] Wallet initialized successfully');
                 } catch (e) {
-                    console.error('Failed to initialize wallet:', e);
+                    console.error('[handleNewListing] Failed to initialize wallet:', e);
                     toast.error('Failed to connect wallet', {
                         duration: 5000,
                         position: 'top-center',
@@ -99,6 +102,7 @@ export function Marketplace() {
             }
 
             if (!userPubKey) {
+                console.error('[handleNewListing] No user public key available');
                 toast.error("Failed to get public key", {
                     duration: 5000,
                     position: "top-center",
@@ -106,8 +110,10 @@ export function Marketplace() {
                 });
                 return;
             }
+            console.log('[handleNewListing] User pubkey:', userPubKey);
 
             // Verify share ownership
+            console.log('[handleNewListing] Verifying share ownership...');
             const traceResult = await fetch("/api/test-chain", {
                 method: "POST",
                 headers: {
@@ -116,17 +122,21 @@ export function Marketplace() {
                 body: JSON.stringify({ propertyId, leafTransferTxid: transferTxid, investorId: userPubKey }),
             });
             const data = await traceResult.json();
+            console.log('[handleNewListing] Share ownership verification result:', data);
 
             if (!data.valid) {
+                console.error('[handleNewListing] Share ownership verification failed:', data.reason);
                 toast.error(data.reason);
                 return;
             }
 
             // Transfer share to multisig with server
-            const txid = toTxid(transferTxid);
+            console.log('[handleNewListing] Getting transaction for txid:', transferTxid);
+            const { txid, vout } = parseOutpoint(transferTxid);
             const tx = await getTransactionByTxID(txid);
 
             if (!tx) {
+                console.error('[handleNewListing] Failed to get transaction for txid:', txid);
                 toast.error("Failed to get transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -134,14 +144,18 @@ export function Marketplace() {
                 });
                 return;
             }
+            console.log('[handleNewListing] Transaction retrieved successfully');
 
             // Get full transaction
             const fullTx = Transaction.fromBEEF(tx.outputs[0].beef);
-            const tokens = await calcTokenTransfer(fullTx, 0, 0);
+            const tokens = await calcTokenTransfer(fullTx, vout, 0);
+            console.log('[handleNewListing] Tokens calculated:', tokens);
 
             const assetId = transferTxid.replace(".", "_");
+            console.log('[handleNewListing] AssetId:', assetId);
 
             // Create the multisig locking script for the new output
+            console.log('[handleNewListing] Creating multisig locking script...');
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUB_KEY)]);
             const ordinalLockingScript = new OrdinalsP2MS().lock(
                 /* oneOfTwoHash */ oneOfTwoHash,
@@ -150,16 +164,20 @@ export function Marketplace() {
                 /* shares */ tokens,
                 /* type */ "transfer"
             );
+            console.log('[handleNewListing] Multisig locking script created');
 
             // Build a preimage transaction that mirrors the intended spend for correct ordinal signature
+            console.log('[handleNewListing] Building preimage transaction...');
             const ordinalUnlockFrame = new OrdinalsP2PKH().unlock(
                 /* wallet */ userWallet!,
-                /* signOutputs */ "single"
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
             );
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: fullTx,
-                sourceOutputIndex: 0,
+                sourceOutputIndex: vout,
+                unlockingScriptTemplate: ordinalUnlockFrame,
             });
             preimageTx.addOutput({
                 satoshis: 1,
@@ -167,9 +185,14 @@ export function Marketplace() {
             });
 
             // Sign the ordinal input (index 0) against the preimage transaction
-            const ordinalUnlockingScript = await ordinalUnlockFrame.sign(preimageTx, 0);
+            console.log('[handleNewListing] Signing ordinal input...');
+            await preimageTx.fee(new SatoshisPerKilobyte(100));
+            await preimageTx.sign();
+            const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
+            console.log('[handleNewListing] Ordinal input signed');
 
             // Create the transaction
+            console.log('[handleNewListing] Creating listing transaction...');
             const newListingTx = await userWallet!.createAction({
                 description: "New listing",
                 inputBEEF: tx.outputs[0].beef,
@@ -183,7 +206,7 @@ export function Marketplace() {
                 outputs: [
                     {
                         outputDescription: "Share tokens",
-                        satoshis: tokens,
+                        satoshis: 1,
                         lockingScript: ordinalLockingScript.toHex(),
                     },
                 ],
@@ -193,6 +216,7 @@ export function Marketplace() {
             });
 
             if (!newListingTx) {
+                console.error('[handleNewListing] Failed to create transaction');
                 toast.error("Failed to create transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -200,13 +224,17 @@ export function Marketplace() {
                 });
                 return;
             }
+            console.log('[handleNewListing] Transaction created, txid:', newListingTx.txid);
 
             const newListingFullTx = Transaction.fromBEEF(newListingTx.tx as number[]);
 
             // Broadcast the transaction
+            console.log('[handleNewListing] Broadcasting transaction...');
             const broadcastResult = await broadcastTX(newListingFullTx);
+            console.log('[handleNewListing] Broadcast result:', broadcastResult);
 
             if (broadcastResult.status !== "success") {
+                console.error('[handleNewListing] Broadcast failed:', broadcastResult);
                 toast.error("Failed to broadcast transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -216,13 +244,23 @@ export function Marketplace() {
             }
 
             // Update the database
+            const dbPayload = {
+                propertyId,
+                sellerId: userPubKey,
+                amount: tokens,
+                parentTxid: transferTxid,
+                transferTxid: toOutpoint(newListingTx.txid as string, 0),
+                pricePerShare
+            };
+            console.log('[handleNewListing] Updating database with:', dbPayload);
             await fetch("/api/new-listing", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ propertyId, sellerId: userPubKey, amount: tokens, parentTxid: transferTxid, transferTxid: toOutpoint(newListingTx.txid as string, 0), pricePerShare }),
+                body: JSON.stringify(dbPayload),
             });
+            console.log('[handleNewListing] Database updated successfully');
 
             // Close the modal
             setSellOpen(false);
@@ -233,9 +271,11 @@ export function Marketplace() {
                 position: "top-center",
                 id: "listing-success",
             });
+            console.log('[handleNewListing] Listing creation completed successfully');
             setLoading(false);
         } catch (e) {
-            console.error(e);
+            console.error('[handleNewListing] Error occurred:', e);
+            console.error('[handleNewListing] Error stack:', e instanceof Error ? e.stack : 'No stack trace');
             toast.error("Failed to create listing", {
                 duration: 5000,
                 position: "top-center",
@@ -243,7 +283,7 @@ export function Marketplace() {
             });
             setLoading(false);
         }
-    };
+    }, [userWallet, userPubKey, initializeWallet]);
 
     const handlePurchase = async (
         { marketItemId, buyerId }: { marketItemId: string; buyerId: string }
@@ -273,7 +313,7 @@ export function Marketplace() {
                 outputs: [
                     {
                         outputDescription: "Fee Payment",
-                        satoshis: 2,
+                        satoshis: 50,
                         lockingScript: paymentLockingScript.toHex(),
                     },
                 ],

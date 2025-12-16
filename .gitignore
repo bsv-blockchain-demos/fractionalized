@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+/scripts
+
+# listing data files
+listing.json
+listing-*.json
+listing-template.json

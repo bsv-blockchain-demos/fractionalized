@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         if (!property) {
             throw new Error("Property not found");
         }
-        if (!property?.txids?.mintTxid || !property?.txids?.paymentTxid) {
+        if (!property?.txids?.currentOutpoint || !property?.txids?.paymentTxid || !property?.txids?.originalMintTxid) {
             throw new Error("Property token UTXOs not initialized");
         }
 
@@ -106,8 +106,8 @@ export async function POST(request: Request) {
 
         // Payment unlocking will be signed against the preimage (frame-based)
 
-        // Always spend from the original mint outpoint for purchases
-        const currentOrdinalOutpoint = property.txids.mintTxid as string;
+        // Spend from the current outpoint (either original mint or latest change output)
+        const currentOrdinalOutpoint = property.txids.currentOutpoint as string;
         const { txid: parentTxID, vout: parentVout } = parseOutpoint(currentOrdinalOutpoint);
 
         // Use overlay query with parentTxID to get full TX
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
 
         const changeScript = new OrdinalsP2MS().lock(
             /* oneOfTwoHash */ oneOfTwohashForChange,
-            /* assetId */ property.txids.mintTxid.replace(".", "_"),
+            /* assetId */ property.txids.originalMintTxid.replace(".", "_"),
             /* tokenTxid */ propertyTokenTxid,
             /* shares */ changeAmount,
             /* type */ "transfer"
@@ -287,23 +287,30 @@ export async function POST(request: Request) {
             console.log(`Failed to broadcast transaction for ${transferTx.txid}`);
         }
 
-        // The original token tx has changed because tokens have been spent
-        // Update the original token tx
+        // Update the current outpoint to point to the change output for next purchase
+        const newCurrentOutpoint = toOutpoint(transferTx.txid as string, 1);
         const updateRes = await propertiesCollection.updateOne(
             { _id: propertyObjectId },
-            { $set: { "txids.mintTxid": toOutpoint(transferTx.txid as string, 1), "txids.paymentTxid": toOutpoint(transferTx.txid as string, 2) } }
+            {
+                $set: {
+                    "txids.currentOutpoint": newCurrentOutpoint,
+                    "txids.paymentTxid": toOutpoint(transferTx.txid as string, 2),
+                    // Keep mintTxid for backward compatibility
+                    "txids.mintTxid": newCurrentOutpoint,
+                }
+            }
         );
         if (!updateRes.modifiedCount) {
-            throw new Error("Failed to update original token tx");
+            throw new Error("Failed to update current outpoint");
         }
 
-        // Build share record; parent is always the original mint outpoint for purchases
+        // Build share record; parent is the outpoint we spent from (currentOutpoint before update)
         const formattedShare: Shares = {
             _id: new ObjectId(),
             propertyId: propertyObjectId,
             investorId,
             amount,
-            parentTxid: property.txids.mintTxid,
+            parentTxid: currentOrdinalOutpoint,
             transferTxid: toOutpoint(transferTx.txid as string, 0),
             createdAt: new Date(),
         }

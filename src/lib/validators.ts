@@ -14,6 +14,14 @@ export const propertiesValidator = {
             bsonType: 'string',
             pattern: outpointPattern,
           },
+          originalMintTxid: {
+            bsonType: 'string',
+            pattern: outpointPattern,
+          },
+          currentOutpoint: {
+            bsonType: 'string',
+            pattern: outpointPattern,
+          },
           mintTxid: {
             bsonType: 'string',
             pattern: outpointPattern,

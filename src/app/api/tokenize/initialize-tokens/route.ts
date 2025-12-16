@@ -33,12 +33,16 @@ export async function POST(request: Request) {
             console.log(`Failed to broadcast transaction for ${mintTx.txid}`);
         }
 
+        const mintOutpoint = toOutpoint(mintTx.txid, 0);
         const propertyTokens = await propertiesCollection.updateOne(
             { _id: property._id },
             {
                 $set: {
-                    "txids.mintTxid": toOutpoint(mintTx.txid, 0),
+                    "txids.originalMintTxid": mintOutpoint,
+                    "txids.currentOutpoint": mintOutpoint,
                     "txids.paymentTxid": toOutpoint(mintTx.txid, 1),
+                    // Keep mintTxid for backward compatibility
+                    "txids.mintTxid": mintOutpoint,
                 },
             }
         );

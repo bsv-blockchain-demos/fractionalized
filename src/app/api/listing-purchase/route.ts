@@ -6,9 +6,9 @@ import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
 import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
-import { Transaction, TransactionSignature, Signature, Hash } from "@bsv/sdk";
+import { Transaction, TransactionSignature, Signature, Hash, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
-import { toOutpoint } from "../../../utils/outpoints";
+import { toOutpoint, parseOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
 
 const STORAGE_URL = process.env.STORAGE_URL;
@@ -47,10 +47,7 @@ export async function POST(request: Request) {
 
         const propertyObjectId = new ObjectId(property._id);
 
-        if (!property?.txids?.tokenTxid || !property?.txids?.mintTxid) {
-            throw new Error("Property token/payment UTXOs not initialized");
-        }
-        if (!property?.txids?.tokenTxid || !property?.txids?.mintTxid) {
+        if (!property?.txids?.tokenTxid || (!property?.txids?.originalMintTxid && !property?.txids?.mintTxid)) {
             throw new Error("Property token/payment UTXOs not initialized");
         }
 
@@ -76,8 +73,9 @@ export async function POST(request: Request) {
             throw e;
         }
 
-        // Get the ordinal tx
-        const ordinalTx = await getTransactionByTxID(share.transferTxid.split(".")[0]);
+        // Get the ordinal tx and parse the vout
+        const { txid: ordinalTxid, vout: ordinalVout } = parseOutpoint(share.transferTxid);
+        const ordinalTx = await getTransactionByTxID(ordinalTxid);
         if (!ordinalTx) {
             throw new Error("Failed to get transaction by txid");
         }
@@ -97,42 +95,52 @@ export async function POST(request: Request) {
 
         // Payment unlocking will be signed against a preimage (frame-based)
 
-        // Create pre-image transaction for ordinal unlock
-        const preimageTx = new Transaction();
-        preimageTx.addInput({
-            sourceTransaction: fullOrdinalTx,
-            sourceOutputIndex: 0,
-            sequence: 0xffffffff,
-        });
-        preimageTx.addInput({
-            sourceTransaction: paymentTX,
-            sourceOutputIndex: 0,
-            sequence: 0xffffffff,
-        });
-        preimageTx.addOutput({
-            satoshis: 1,
-            lockingScript: ordinalTransferScript,
-        });
-
+        // Create unlocking frames
         const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(
             /* wallet */ wallet,
             /* keyID */ "0",
             /* counterparty */ "self",
             /* otherPubkey */ share.investorId,
             /* signOutputs */ "single",
-            /* anyoneCanPay */ false,
+            /* anyoneCanPay */ true,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
             /* firstPubkeyIsWallet */ true
         );
-        const ordinalUnlockingScript = await ordinalUnlockingFrame.sign(preimageTx, 0);
 
-        // Create payment unlocking script using the same preimage and input index 1
         const paymentUnlockFrame = new PaymentUtxo().unlock(
             /* wallet */ wallet,
-            /* otherPubkey */ buyerId
+            /* otherPubkey */ buyerId,
+            /* signOutputs */ "single",
+            /* anyoneCanPay */ true,
         );
-        const paymentUnlockingScript = await paymentUnlockFrame.sign(preimageTx, 1);
+
+        // Create pre-image transaction for signing
+        const preimageTx = new Transaction();
+        preimageTx.addInput({
+            sourceTransaction: fullOrdinalTx,
+            sourceOutputIndex: ordinalVout,
+            sequence: 0xffffffff,
+            unlockingScriptTemplate: ordinalUnlockingFrame,
+        });
+        preimageTx.addInput({
+            sourceTransaction: paymentTX,
+            sourceOutputIndex: 0,
+            sequence: 0xffffffff,
+            unlockingScriptTemplate: paymentUnlockFrame,
+        });
+        preimageTx.addOutput({
+            satoshis: 1,
+            lockingScript: ordinalTransferScript,
+        });
+
+        // Sign the preimage transaction
+        await preimageTx.fee(new SatoshisPerKilobyte(100));
+        await preimageTx.sign();
+
+        // Extract the unlocking scripts
+        const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
+        const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript;
 
         // Create transfer transaction
         const transferTx = await wallet.createAction({

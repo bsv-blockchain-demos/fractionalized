@@ -21,7 +21,13 @@ export interface Properties {
     },
     features: Record<string, number>,
     images: string[],
-    txids: Record<string, string>,
+    txids: {
+        tokenTxid: string;
+        originalMintTxid?: string; // Immutable original mint transaction
+        currentOutpoint?: string; // Current UTXO for next purchase (change output)
+        paymentTxid?: string;
+        mintTxid?: string; // Deprecated - kept for backward compatibility
+    },
     seller: string,
     sell?: {
         percentToSell: number;

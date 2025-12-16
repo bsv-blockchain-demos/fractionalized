@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         if (!property) {
             throw new Error("Property not found");
         }
-        if (!property?.txids?.tokenTxid || !property?.txids?.mintTxid) {
+        if (!property?.txids?.tokenTxid || (!property?.txids?.originalMintTxid && !property?.txids?.mintTxid)) {
             throw new Error("Property token/payment UTXOs not initialized");
         }
 

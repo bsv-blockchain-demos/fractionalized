@@ -10,6 +10,7 @@ type OwnedShare = {
   propertyId: string;
   amount: number; // percent
   transferTxid: string;
+  propertyTitle?: string;
 };
 
 type Property = {
@@ -69,6 +70,7 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
           propertyId: String(s?.propertyId ?? ""),
           amount: Number(s?.amount ?? 0),
           transferTxid: String(s?.transferTxid ?? ""),
+          propertyTitle: String(s?.propertyTitle ?? ""),
         }));
         setShares(mapped);
         if (mapped.length) setSelectedShareId(mapped[0]._id);
@@ -120,7 +122,7 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Modal panel */}
-      <div className="relative z-10 w-full max-w-lg mx-4 card-glass p-5">
+      <div className="relative z-10 w-full max-w-lg mx-4 bg-bg-secondary border border-border-subtle rounded-xl p-5 shadow-xl">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-text-primary">Sell share</h3>
           <button onClick={onClose} className="text-text-secondary hover:text-text-primary" disabled={loading}>✕</button>
@@ -143,7 +145,7 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
               >
                 {shares.map((s) => (
                   <option key={s._id} value={s._id}>
-                    {s._id.slice(-6)} • {s.amount}%
+                    {s.propertyTitle || s._id.slice(-6)} - {s.amount}%
                   </option>
                 ))}
               </select>
