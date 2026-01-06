@@ -1,6 +1,6 @@
 import { PropertyDetails } from "../../../components/property-details";
 
-export default async function PropertyDetailsPage({ params }: { params: { propertyId: string } }) {
+export default async function PropertyDetailsPage({ params }: { params: Promise<{ propertyId: string }> }) {
     const { propertyId } = await params;
 
     return (
