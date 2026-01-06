@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import React from "react";
-import { type Property } from "../../lib/dummydata";
+import { Properties } from "../../lib/mongo";
 
 export interface SellingListingsProps {
-  selling: Property[];
+  selling: Properties[];
   onListProperty?: () => void;
 }
 
@@ -31,14 +31,19 @@ export default function SellingListings({ selling, onListProperty }: SellingList
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {selling.map((property) => (
-            <Link key={property._id} href={`/properties/${property._id}`} className="block">
+            <Link key={String(property._id)} href={`/properties/${property._id}`} className="block">
               <div className="card-glass p-4">
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="font-semibold text-text-primary">{property.title}</h3>
                   <span className="badge-dark text-xs">Selling</span>
                 </div>
                 <p className="text-xs text-text-secondary mb-2">{property.location}</p>
-                <div className="text-sm text-text-primary">Asking: {formatCurrency(property.priceUSD)}</div>
+                <div className="text-sm text-text-primary mb-2">Asking: {formatCurrency(property.priceUSD)}</div>
+                {property.txids?.tokenTxid && (
+                  <div className="text-xs text-text-secondary font-mono break-all">
+                    Token: {property.txids.tokenTxid}
+                  </div>
+                )}
               </div>
             </Link>
           ))}

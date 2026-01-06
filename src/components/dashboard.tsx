@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { type Property } from "../lib/dummydata";
+import { Properties } from "../lib/mongo";
 import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 import { toast } from "react-hot-toast";
@@ -13,9 +13,9 @@ import PortfolioStats from "./dashboard/PortfolioStats";
 export function Dashboard() {
   // User shares mapped to properties
   const [investedCards, setInvestedCards] = useState<
-    { property: Property; percent: number }[]
+    { property: Properties; percent: number }[]
   >([]);
-  const [selling, setSelling] = useState<Property[]>([]);
+  const [selling, setSelling] = useState<Properties[]>([]);
   const [myListings, setMyListings] = useState<Array<{
     _id: string;
     propertyId: string;
@@ -77,13 +77,13 @@ export function Dashboard() {
               throw new Error(`Property HTTP ${res.status}`);
             }
             const pd = await res.json();
-            return { property: pd?.item as Property, percent: s.amount };
+            return { property: pd?.item as Properties, percent: s.amount };
           })
         );
 
         // Filter out any failed/undefined items just in case
         const valid = props.filter(
-          (p): p is { property: Property; percent: number } => !!p?.property
+          (p): p is { property: Properties; percent: number } => !!p?.property
         );
         setInvestedCards(valid);
       } catch (e: any) {
@@ -165,11 +165,11 @@ export function Dashboard() {
           throw new Error("HTTP " + response.status);
         }
         const data = await response.json();
-        const props: Property[] = data?.items || [];
+        const props: Properties[] = data?.items || [];
 
         // Filter out any failed/undefined items just in case
         const valid = props.filter(
-          (p): p is Property => !!p
+          (p): p is Properties => !!p
         );
         setSelling(valid);
       } catch (e: any) {
@@ -231,7 +231,7 @@ export function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {investedProperties.map(({ property, percent }) => (
-              <Link key={property._id} href={`/properties/${property._id}`} className="block">
+              <Link key={String(property._id)} href={`/properties/${property._id}`} className="block">
                 <div className="card-glass overflow-hidden transition-all group">
                   {/* Header / Image placeholder */}
                   <div className="relative h-40 bg-gradient-to-br from-accent-primary to-accent-hover">
