@@ -13,6 +13,7 @@ type authContextType = {
     setIsAuthenticated: (value: boolean) => void;
     isAuthenticated: boolean;
     checkAuth: () => Promise<boolean>;
+    logout: () => void;
 }
 
 const AuthContext = createContext<authContextType>({
@@ -22,6 +23,7 @@ const AuthContext = createContext<authContextType>({
     setIsAuthenticated: () => { },
     isAuthenticated: false,
     checkAuth: async () => { return false; },
+    logout: () => { },
 });
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
     console.log('AuthContextProvider: Component mounting');
@@ -91,6 +93,15 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
         }
     }, [userWallet]);
 
+    // Logout function to clear all wallet states
+    const logout = useCallback(() => {
+        console.log('logout: Clearing wallet states');
+        setUserWallet(new WalletClient());
+        setUserPubKey(null);
+        setIsAuthenticated(false);
+        console.log('logout: Wallet states cleared');
+    }, []);
+
     // Initialize wallet on mount
     useEffect(() => {
         initializeWallet();
@@ -99,7 +110,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     console.log('AuthContextProvider: Rendering provider with children');
 
     return (
-        <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth }}>
+        <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout }}>
             {children}
         </AuthContext.Provider>
     );

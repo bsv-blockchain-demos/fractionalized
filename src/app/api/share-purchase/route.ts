@@ -127,7 +127,7 @@ export async function POST(request: Request) {
             /* counterparty */ "self",
             /* otherPubkey */ property.seller,
             /* signOutputs */ "single",
-            /* anyoneCanPay */ false,
+            /* anyoneCanPay */ true,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
             /* firstPubkeyIsWallet */ false
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
             /* wallet */ wallet,
             /* otherPubkey */ property.seller,
             /* signOutputs */ "single",
-            /* anyoneCanPay */ false,
+            /* anyoneCanPay */ true,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined
         );

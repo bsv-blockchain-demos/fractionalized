@@ -5,12 +5,9 @@ import { InfoTip } from "./info-tip";
 import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
-import { Hash, Utils, LockingScript, OP, UnlockingScript, PublicKey, Signature, TransactionSignature, Transaction, SatoshisPerKilobyte } from "@bsv/sdk";
-import { OrdinalsP2PKH } from "../utils/ordinalsP2PKH";
-import { OrdinalsP2MS } from "../utils/ordinalsP2MS";
+import { PublicKey } from "@bsv/sdk";
 import { SERVER_PUBKEY } from "../utils/env";
 import { PaymentUtxo } from "../utils/paymentUtxo";
-import { toOutpoint } from "../utils/outpoints";
 import { hashFromPubkeys } from "@/utils/hashFromPubkeys";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
@@ -26,12 +23,13 @@ export function Admin() {
     const [processing, setProcessing] = useState(false);
     const [step1, setStep1] = useState<StepStatus>("idle");
     const [step2, setStep2] = useState<StepStatus>("idle");
+    const [createdPropertyId, setCreatedPropertyId] = useState<string | null>(null);
 
     const { userWallet, userPubKey, initializeWallet, checkAuth } = useAuthContext();
 
     const stepLabels = [
-        "Creating property token...",
-        "Minting shares for property token...",
+        "Creating payment UTXO...",
+        "Creating property and minting tokens...",
     ];
 
     // Refs for focusing fields on validation errors
@@ -120,9 +118,7 @@ export function Admin() {
             toast.error(`Missing required fields: ${nullFields.join(', ')}`);
             return;
         }
-        // Create tokenized transaction from user wallet first
-        // Create the amount of shares the user filled in using the returned tokenized transaction
-        // Transfer the tokens to the server wallet
+
         setProcessing(true);
         setStep1("running");
         setStep2("idle");
@@ -136,6 +132,7 @@ export function Admin() {
                 position: 'top-center',
                 id: 'authentication-error',
             });
+            setProcessing(false);
             return;
         }
 
@@ -145,109 +142,22 @@ export function Admin() {
                 position: 'top-center',
                 id: 'public-key-error',
             });
+            setProcessing(false);
             return;
         }
 
         try {
-            // Step 1: Creating property token...
-            const pubKeyHash = Hash.hash160(userPubKey, "hex") as number[];
-
-            const title = _data.title.trim().toLowerCase();
-            const location = _data.location.trim().toLowerCase();
-            const currentDate = new Date().toISOString();
-            const propertyDataHash = Hash.hash256(
-                Utils.toArray(`${title}-${location}-${currentDate}`, "utf8")
-            );
-
-            const script = new LockingScript();
-            script
-                // Single signature lockingScript (P2PKH)
-                .writeOpCode(OP.OP_DUP)
-                .writeOpCode(OP.OP_HASH160)
-                .writeBin(pubKeyHash)
-                .writeOpCode(OP.OP_EQUALVERIFY)
-                .writeOpCode(OP.OP_CHECKSIGVERIFY)
-                // Unreachable if statement that contains the property data hash to verify
-                .writeOpCode(OP.OP_RETURN)
-                .writeBin(propertyDataHash)
-
-            const response = await userWallet?.createAction({
-                description: "Create property token",
-                outputs: [
-                    {
-                        outputDescription: "Property token",
-                        satoshis: 1,
-                        lockingScript: script.toHex(),
-                    },
-                ],
-                options: {
-                    randomizeOutputs: false,
-                }
-            });
-            console.log({ response });
-            if (!response?.txid) {
-                throw new Error("Failed to create property token");
-            }
-            const sendToken = await fetch("/api/tokenize/new-property-token", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    tx: response,
-                    data: _data,
-                    seller: userPubKey,
-                }),
-            });
-            const sendTokenData = await sendToken.json();
-            console.log({ sendTokenData });
-            if (!sendToken.ok && sendTokenData?.error === "Validation failed") {
-                const arr = Array.isArray(sendTokenData?.details) ? sendTokenData.details : [];
-                const details = arr.join("; ");
-                toast.error(`Validation failed. Please fix: ${details}`, { duration: 6000, position: 'top-center', id: 'validation-failed' });
-                if (arr.length > 0) focusErrorField(arr);
-                setStep1("error");
-                setProcessing(false);
-                return;
-            }
-            if (!sendToken.ok) {
-                throw new Error("Failed to send property token");
-            }
-            setStep1("success");
-            currentStep = 2; // Moving to step 2
-
-            // Step 2: Minting shares for property token...
-            setStep2("running");
-            // Create the ordinal locking script with 1sat inscription
-            // Each token represents 1% ownership; mint the requested percentToSell amount
-            const tokensToMint = Number(_data?.sell?.percentToSell || 0);
-            if (tokensToMint <= 0) {
-                throw new Error("Invalid percentToSell");
-            } else if (tokensToMint > 100) {
-                throw new Error("Percent to sell must be less than or equal to 100");
-            }
-            const hashOfPubkeys = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUBKEY)])
-            const ordinalLockingScript = new OrdinalsP2MS().lock(
-                /* oneOfTwoHash */ hashOfPubkeys,
-                /* assetId */ `${response.txid}_0`,
-                /* tokenTxid */ toOutpoint(response.txid, 0),
-                /* shares */ tokensToMint,
-                /* type */ "deploy+mint"
-            );
-
-            // Create payment UTXO
+            // Step 1: Create payment UTXO
             // Multisig 1 of 2 so server can use funds for transfer fees
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUBKEY), PublicKey.fromString(userPubKey)]);
-
             const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
-            const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
             // Estimated at 2 sats in fees per share sold, minimum 3 to ensure changeSats >= 1
             const requiredSats = Math.max(3, Math.ceil(Number(_data.sell.percentToSell) * 120));
 
             const paymentTxAction = await userWallet?.createAction({
-                description: "Payment UTXO",
+                description: "Payment UTXO for property creation",
                 outputs: [
                     {
                         outputDescription: "Payment outpoint",
@@ -264,89 +174,50 @@ export function Admin() {
                 throw new Error("Failed to create payment UTXO");
             }
 
-            const paymentUnlockFrame = new PaymentUtxo().unlock(
-                /* wallet */ userWallet!,
-                /* otherPubkey */ SERVER_PUBKEY,
-                /* signOutputs */ "single",
-                /* anyoneCanPay */ false,
-                /* sourceSatoshis */ undefined,
-                /* lockingScript */ undefined,
-                /* firstPubkeyIsWallet */ false // order: server first, then user to match hash(SERVER + user)
-            );
+            setStep1("success");
+            currentStep = 2; // Moving to step 2
 
-            // Build preimage for payment input and sign with PaymentUtxo frame
-            const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
-            const preimageTx = new Transaction();
-            preimageTx.addInput({
-                sourceTransaction: paymentSourceTX,
-                unlockingScriptTemplate: paymentUnlockFrame,
-                sourceOutputIndex: 0,
-            });
-            preimageTx.addOutput({
-                satoshis: 1,
-                lockingScript: ordinalLockingScript,
-            });
-            preimageTx.addOutput({
-                change: true,
-                lockingScript: paymentChangeLockingScript,
-            });
+            // Step 2: Send to backend to create property token and mint tokens
+            setStep2("running");
 
-            await preimageTx.fee(new SatoshisPerKilobyte(100))
-            await preimageTx.sign()
-
-            const changeSats = preimageTx.outputs[1].satoshis as number
-            const paymentUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript
-
-            // Create the mint transaction
-            const actionRes = await userWallet?.createAction({
-                description: "Mint shares for property token", 
-                inputBEEF: paymentTxAction?.tx,
-                inputs: [
-                    {
-                        inputDescription: "Payment",
-                        outpoint: toOutpoint(String(paymentTxAction?.txid), 0),
-                        unlockingScript: paymentUnlockingScript.toHex(),
-                    },
-                ],
-                outputs: [
-                    {
-                        outputDescription: "Share tokens",
-                        satoshis: 1,
-                        lockingScript: ordinalLockingScript.toHex(),
-                    },
-                    {
-                        outputDescription: "Payment change",
-                        satoshis: changeSats,
-                        lockingScript: paymentChangeLockingScript.toHex(),
-                    },
-                ],
-                options: {
-                    randomizeOutputs: false,
-                }
-            });
-            console.log({ actionRes });
-            if (!actionRes?.txid) {
-                throw new Error("Failed to mint shares for property token");
-            }
-
-            // Send the mint transaction to the server for storage
-            console.log({ actionRes });
-            const sendMintTx = await fetch("/api/tokenize/initialize-tokens", {
+            const createPropertyResponse = await fetch("/api/tokenize/create-property", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    mintTx: actionRes,
-                    propertyTokenTxid: toOutpoint(response.txid, 0),
+                    data: _data,
+                    paymentTxAction,
+                    seller: userPubKey,
                 }),
             });
-            const sendMintTxData = await sendMintTx.json();
-            console.log({ sendMintTxData });
-            if (!sendMintTxData?.success) {
-                throw new Error("Failed to mint shares for property token");
+
+            const createPropertyData = await createPropertyResponse.json();
+            console.log({ createPropertyData });
+
+            if (!createPropertyResponse.ok && createPropertyData?.error === "Validation failed") {
+                const arr = Array.isArray(createPropertyData?.details) ? createPropertyData.details : [];
+                const details = arr.join("; ");
+                toast.error(`Validation failed. Please fix: ${details}`, { duration: 6000, position: 'top-center', id: 'validation-failed' });
+                if (arr.length > 0) focusErrorField(arr);
+                setStep2("error");
+                setProcessing(false);
+                return;
             }
+
+            if (!createPropertyResponse.ok) {
+                throw new Error(createPropertyData?.error || "Failed to create property");
+            }
+
             setStep2("success");
+            // Store the created property ID for navigation
+            if (createPropertyData?.data?.insertedId) {
+                setCreatedPropertyId(createPropertyData.data.insertedId);
+            }
+            toast.success('Property created successfully!', {
+                duration: 5000,
+                position: 'top-center',
+            });
         } catch (e) {
             // If any error occurs, mark the current running step as error
             console.error("Error during tokenization process:", e);
@@ -529,7 +400,44 @@ export function Admin() {
                 );
             }, [processing, step1, step2])}
 
-            <form onSubmit={onSubmit} className="space-y-6">
+            {/* Loading state - show spinner while processing */}
+            {processing && (
+                <div className="flex flex-col items-center justify-center py-20">
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-accent-primary"></div>
+                    <p className="mt-4 text-text-secondary">Creating your property token...</p>
+                </div>
+            )}
+
+            {/* Success state - show success message with link */}
+            {!processing && step2 === "success" && createdPropertyId && (
+                <div className="card-elevated text-center py-12">
+                    <div className="text-4xl mb-4 text-green-500">✓</div>
+                    <h2 className="text-2xl font-bold text-text-primary mb-2">Property Created Successfully!</h2>
+                    <p className="text-text-secondary mb-6">Your property token has been minted and is now available on the blockchain.</p>
+                    <div className="flex items-center justify-center gap-4">
+                        <a
+                            href={`/properties/${createdPropertyId}`}
+                            className="inline-block px-6 py-3 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors btn-glow"
+                        >
+                            View Property
+                        </a>
+                        <button
+                            onClick={() => {
+                                setStep1("idle");
+                                setStep2("idle");
+                                setCreatedPropertyId(null);
+                            }}
+                            className="px-6 py-3 rounded-lg border border-border-subtle bg-bg-primary text-text-primary hover:bg-bg-secondary transition-colors"
+                        >
+                            Create Another
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Form - show only when not processing and not completed */}
+            {!processing && step2 !== "success" && (
+                <form onSubmit={onSubmit} className="space-y-6">
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Basic Info</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -786,7 +694,7 @@ export function Admin() {
                 </div>
 
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
-                    <h2 className="text-lg font-semibold mb-3 text-text-primary">What's In (Counts)</h2>
+                    <h2 className="text-lg font-semibold mb-3 text-text-primary">What&apos;s In (Counts)</h2>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {Object.keys(form.features).map((k) => (
                             <div key={k}>
@@ -882,6 +790,7 @@ export function Admin() {
                     </div>
                 </div>
             </form>
+            )}
 
             <SellSharesModal
                 isOpen={isSellOpen}

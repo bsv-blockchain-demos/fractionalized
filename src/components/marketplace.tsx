@@ -49,8 +49,10 @@ export function Marketplace() {
     const [sort, setSort] = useState<keyof typeof sortFns>("relevance");
     const [sellOpen, setSellOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [sellSuccess, setSellSuccess] = useState(false);
     const [purchaseOpen, setPurchaseOpen] = useState(false);
     const [purchaseLoading, setPurchaseLoading] = useState(false);
+    const [purchaseSuccess, setPurchaseSuccess] = useState(false);
     const [purchaseItem, setPurchaseItem] = useState<{
         id: string;
         name: string;
@@ -262,15 +264,8 @@ export function Marketplace() {
             });
             console.log('[handleNewListing] Database updated successfully');
 
-            // Close the modal
-            setSellOpen(false);
-
-            // Show success message
-            toast.success("Listing created successfully", {
-                duration: 5000,
-                position: "top-center",
-                id: "listing-success",
-            });
+            // Show success state instead of closing modal
+            setSellSuccess(true);
             console.log('[handleNewListing] Listing creation completed successfully');
             setLoading(false);
         } catch (e) {
@@ -346,7 +341,8 @@ export function Marketplace() {
                 });
                 throw new Error(data.error);
             }
-            setPurchaseOpen(false);
+            // Show success state instead of closing modal
+            setPurchaseSuccess(true);
         } catch (e) {
             console.error(e);
             toast.error("Failed to purchase", {
@@ -483,7 +479,11 @@ export function Marketplace() {
             <MarketSellModal
                 open={sellOpen}
                 loading={loading}
-                onClose={() => setSellOpen(false)}
+                success={sellSuccess}
+                onClose={() => {
+                    setSellOpen(false);
+                    setSellSuccess(false);
+                }}
                 onListed={(payload) => {
                     handleNewListing(payload);
                 }}
@@ -493,8 +493,12 @@ export function Marketplace() {
             <MarketPurchaseModal
                 open={purchaseOpen}
                 loading={purchaseLoading}
+                success={purchaseSuccess}
                 item={purchaseItem}
-                onClose={() => setPurchaseOpen(false)}
+                onClose={() => {
+                    setPurchaseOpen(false);
+                    setPurchaseSuccess(false);
+                }}
                 onBuy={handlePurchase}
             />
         </div>

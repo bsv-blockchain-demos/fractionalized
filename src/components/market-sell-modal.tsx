@@ -21,9 +21,10 @@ type Property = {
   tokenTxid: string;
 };
 
-export function MarketSellModal({ open, loading, onClose, onListed }: {
+export function MarketSellModal({ open, loading, success, onClose, onListed }: {
   open: boolean;
   loading: boolean;
+  success: boolean;
   onClose: () => void;
   onListed: (payload: {
     shareId: string;
@@ -119,14 +120,42 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={() => !loading && !success && onClose()} />
 
       {/* Modal panel */}
       <div className="relative z-10 w-full max-w-lg mx-4 bg-bg-secondary border border-border-subtle rounded-xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-text-primary">Sell share</h3>
-          <button onClick={onClose} className="text-text-secondary hover:text-text-primary" disabled={loading}>✕</button>
-        </div>
+        {/* Success state */}
+        {success && (
+          <div className="text-center py-8">
+            <div className="text-5xl mb-4 text-green-500">✓</div>
+            <h3 className="text-xl font-bold text-text-primary mb-2">Listing Created!</h3>
+            <p className="text-text-secondary mb-6">
+              Your share is now listed on the marketplace
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <a
+                href="/marketplace"
+                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors btn-glow"
+              >
+                View Marketplace
+              </a>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary hover:bg-bg-secondary transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Form state */}
+        {!success && (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-text-primary">Sell share</h3>
+              <button onClick={onClose} className="text-text-secondary hover:text-text-primary" disabled={loading}>✕</button>
+            </div>
 
         {loadingData ? (
           <div className="text-sm text-text-secondary">Loading your shares...</div>
@@ -202,7 +231,6 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
                     tokenTxid: property.tokenTxid,
                   };
                   onListed(payload);
-                  onClose();
                 }}
                 disabled={loading}
                 className="px-3 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white btn-glow disabled:opacity-60"
@@ -213,13 +241,15 @@ export function MarketSellModal({ open, loading, onClose, onListed }: {
           </div>
         )}
 
-        {loading && (
-          <div className="absolute inset-0 rounded-xl bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex items-center gap-3 text-text-primary">
-              <Spinner size={20} />
-              <span>Processing your listing...</span>
-            </div>
-          </div>
+            {loading && (
+              <div className="absolute inset-0 rounded-xl bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center">
+                <div className="flex items-center gap-3 text-text-primary">
+                  <Spinner size={20} />
+                  <span>Processing your listing...</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

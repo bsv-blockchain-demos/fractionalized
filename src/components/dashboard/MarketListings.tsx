@@ -37,7 +37,7 @@ export default function MarketListings({ loading, items }: MarketListingsProps) 
       </div>
       {(!items || items.length === 0) ? (
         <div className="p-4 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-text-secondary">
-          You don't have any listings yet.
+          You don&apos;t have any listings yet.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -17,12 +17,14 @@ export type PurchaseItem = {
 export function MarketPurchaseModal({
   open,
   loading,
+  success,
   item,
   onClose,
   onBuy,
 }: {
   open: boolean;
   loading: boolean;
+  success: boolean;
   item: PurchaseItem | null;
   onClose: () => void;
   onBuy: (payload: { marketItemId: string; buyerId: string; }) => void;
@@ -39,20 +41,48 @@ export function MarketPurchaseModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={() => !loading && onClose()} />
+      <div className="absolute inset-0 bg-black/40" onClick={() => !loading && !success && onClose()} />
 
       {/* Modal panel */}
       <div className="relative z-10 w-full max-w-md mx-4 card-glass p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-text-primary">Confirm purchase</h3>
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="text-text-secondary hover:text-text-primary disabled:opacity-60"
-          >
-            ✕
-          </button>
-        </div>
+        {/* Success state */}
+        {success && (
+          <div className="text-center py-8">
+            <div className="text-5xl mb-4 text-green-500">✓</div>
+            <h3 className="text-xl font-bold text-text-primary mb-2">Purchase Successful!</h3>
+            <p className="text-text-secondary mb-6">
+              You now own {item.sellAmount}% of {item.name}
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <a
+                href={`/properties/${item.propertyId}`}
+                className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors btn-glow"
+              >
+                View Property
+              </a>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary hover:bg-bg-secondary transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Form state */}
+        {!success && (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-text-primary">Confirm purchase</h3>
+              <button
+                onClick={onClose}
+                disabled={loading}
+                className="text-text-secondary hover:text-text-primary disabled:opacity-60"
+              >
+                ✕
+              </button>
+            </div>
 
         {/* Property summary */}
         <div className="bg-bg-tertiary border border-border-subtle rounded-lg p-3 mb-4">
@@ -102,13 +132,15 @@ export function MarketPurchaseModal({
           </button>
         </div>
 
-        {loading && (
-          <div className="absolute inset-0 rounded-xl bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex items-center gap-3 text-text-primary">
-              <Spinner size={20} />
-              <span>Processing your purchase...</span>
-            </div>
-          </div>
+            {loading && (
+              <div className="absolute inset-0 rounded-xl bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center">
+                <div className="flex items-center gap-3 text-text-primary">
+                  <Spinner size={20} />
+                  <span>Processing your purchase...</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

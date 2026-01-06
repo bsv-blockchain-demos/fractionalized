@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuthContext } from "../context/walletContext";
 
 export function Navbar() {
     const pathname = usePathname();
     const router = useRouter();
+    const { logout } = useAuthContext();
 
     const isActive = (href: string) => {
         if (href === "/") return pathname === "/";
@@ -19,6 +21,8 @@ export function Navbar() {
             });
 
             if (response.ok) {
+                // Clear wallet context states
+                logout();
                 router.push("/login");
             }
         } catch (error) {

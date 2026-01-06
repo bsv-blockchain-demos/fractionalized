@@ -45,3 +45,5 @@ next-env.d.ts
 listing.json
 listing-*.json
 listing-template.json
+
+failedbeefs.txt
