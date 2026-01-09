@@ -14,6 +14,8 @@ const STORAGE_URL = process.env.STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
 
 export async function POST(request: Request) {
+    console.log('[TIMING] ===== TOKENIZE ROUTE START =====');
+    const routeStart = Date.now();
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
@@ -105,22 +107,31 @@ export async function POST(request: Request) {
     }
 
     try {
+        console.log('[TIMING] Starting MongoDB connection...');
+        const mongoStart = Date.now();
         await connectToMongo();
+        console.log(`[TIMING] MongoDB connected in ${Date.now() - mongoStart}ms`);
 
         if (!SERVER_PRIVATE_KEY || !STORAGE_URL) {
             return NextResponse.json({ error: "Server wallet not configured" }, { status: 500 });
         }
 
+        console.log('[TIMING] Starting wallet creation...');
+        const walletStart = Date.now();
         const wallet = await makeWallet("main", STORAGE_URL as string, SERVER_PRIVATE_KEY as string);
         if (!wallet) {
             throw new Error("Failed to create wallet");
         }
+        console.log(`[TIMING] Wallet created in ${Date.now() - walletStart}ms`);
 
         // Get server public key
+        console.log('[TIMING] Getting server public key...');
+        const pubKeyStart = Date.now();
         const { publicKey: serverPubKey } = await wallet.getPublicKey({
             protocolID: [0, "fractionalized"],
             keyID: "0",
         });
+        console.log(`[TIMING] Got server public key in ${Date.now() - pubKeyStart}ms`);
 
         // Create property token using server wallet but with user's pubKeyHash
         const title = data.title.trim().toLowerCase();
@@ -144,6 +155,8 @@ export async function POST(request: Request) {
             .writeOpCode(OP.OP_RETURN)
             .writeBin(propertyDataHash)
 
+        console.log('[TIMING] Starting property token createAction...');
+        const createPropertyStart = Date.now();
         const response = await wallet.createAction({
             description: "Create property token",
             outputs: [
@@ -157,6 +170,7 @@ export async function POST(request: Request) {
                 randomizeOutputs: false,
             }
         });
+        console.log(`[TIMING] Property token createAction completed in ${Date.now() - createPropertyStart}ms`);
 
         if (!response?.txid) {
             throw new Error("Failed to create property token");
@@ -193,18 +207,20 @@ export async function POST(request: Request) {
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
 
-        // Create payment unlock frame
+        // Create payment unlock frame (used for both preimage and final signing)
         const paymentUnlockFrame = new PaymentUtxo().unlock(
             /* wallet */ wallet,
             /* otherPubkey */ seller,
-            /* signOutputs */ "single",
-            /* anyoneCanPay */ true,
+            /* signOutputs */ "all",
+            /* anyoneCanPay */ false,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
             /* firstPubkeyIsWallet */ true // order: server first, then user
         );
 
-        // Build preimage for payment input and sign with PaymentUtxo frame
+        // Build preimage for payment input to calculate change satoshis
+        console.log('[TIMING] Starting preimage transaction build and sign...');
+        const preimageStart = Date.now();
         const preimageTx = new Transaction();
         preimageTx.addInput({
             sourceTransaction: paymentSourceTX,
@@ -222,11 +238,14 @@ export async function POST(request: Request) {
 
         await preimageTx.fee(new SatoshisPerKilobyte(100))
         await preimageTx.sign()
+        console.log(`[TIMING] Preimage transaction completed in ${Date.now() - preimageStart}ms`);
 
         const changeSats = preimageTx.outputs[1].satoshis as number
-        const paymentUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript
+        console.log(`[TIMING] Calculated change satoshis: ${changeSats}`);
 
-        // Create the mint transaction
+        // Create the mint transaction with unlockingScriptLength instead of actual unlocking script
+        console.log('[TIMING] Starting mint createAction with unlockingScriptLength...');
+        const createActionStart = Date.now();
         const actionRes = await wallet.createAction({
             description: "Mint shares for property token",
             inputBEEF: paymentTxAction?.tx,
@@ -234,7 +253,7 @@ export async function POST(request: Request) {
                 {
                     inputDescription: "Payment",
                     outpoint: toOutpoint(String(paymentTxAction?.txid), 0),
-                    unlockingScript: paymentUnlockingScript.toHex(),
+                    unlockingScriptLength: 142, // PaymentUtxo estimateLength
                 },
             ],
             outputs: [
@@ -253,30 +272,70 @@ export async function POST(request: Request) {
                 randomizeOutputs: false,
             }
         });
+        console.log(`[TIMING] Mint createAction completed in ${Date.now() - createActionStart}ms`);
 
-        if (!actionRes?.txid) {
+        if (!actionRes?.signableTransaction) {
+            throw new Error("Failed to create signable transaction");
+        }
+
+        const reference = actionRes.signableTransaction.reference;
+        const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
+
+        // Add unlocking script template to the payment input (reuse same frame)
+        console.log('[TIMING] Starting final transaction signing...');
+        const finalSignStart = Date.now();
+        txToSign.inputs[0].unlockingScriptTemplate = paymentUnlockFrame;
+        txToSign.inputs[0].sourceTransaction = paymentSourceTX;
+
+        // Sign the complete transaction
+        await txToSign.sign();
+        console.log(`[TIMING] Final transaction sign completed in ${Date.now() - finalSignStart}ms`);
+
+        // Extract the unlocking script
+        const unlockingScript = txToSign.inputs[0].unlockingScript?.toHex();
+        if (!unlockingScript) {
+            throw new Error("Missing unlocking script for payment input");
+        }
+
+        // Sign the action with the actual unlocking script
+        console.log('[TIMING] Starting signAction...');
+        const signActionStart = Date.now();
+        const signedAction = await wallet.signAction({
+            reference,
+            spends: {
+                "0": { unlockingScript }
+            }
+        });
+        console.log(`[TIMING] signAction completed in ${Date.now() - signActionStart}ms`);
+
+        if (!signedAction?.txid) {
             throw new Error("Failed to mint shares for property token");
         }
 
         // Broadcast the mint transaction to the Overlay
-        const mintTx = Transaction.fromBEEF(actionRes.tx as number[]);
+        console.log('[TIMING] Starting overlay broadcast...');
+        const broadcastStart = Date.now();
+        const mintTx = Transaction.fromBEEF(signedAction.tx as number[]);
         const overlayResponse = await broadcastTX(mintTx);
+        console.log(`[TIMING] Overlay broadcast completed in ${Date.now() - broadcastStart}ms`);
 
         if (overlayResponse.status !== "success") {
-            console.log(`Failed to broadcast transaction for ${actionRes.txid}`);
+            console.log(`Failed to broadcast transaction for ${signedAction.txid}`);
         }
 
         // Save property data to database
+        console.log('[TIMING] Starting database operations...');
+        const dbStart = Date.now();
         const { description, whyInvest, ...rest } = data || {};
 
-        const mintOutpoint = toOutpoint(actionRes.txid, 0);
+        const mintOutpoint = toOutpoint(signedAction.txid, 0);
         const formattedPropertyData: Properties = {
             ...rest,
             txids: {
                 tokenTxid: propertyTokenTxid,
                 originalMintTxid: mintOutpoint,
                 currentOutpoint: mintOutpoint,
-                paymentTxid: toOutpoint(actionRes.txid, 1),
+                paymentTxid: toOutpoint(signedAction.txid, 1),
                 mintTxid: mintOutpoint, // For backward compatibility
             },
             seller,
@@ -306,6 +365,9 @@ export async function POST(request: Request) {
             // If the description insert fails, we won't fail the whole operation; log and proceed
             console.warn("Failed to insert property description:", e);
         }
+
+        console.log(`[TIMING] Database operations completed in ${Date.now() - dbStart}ms`);
+        console.log(`[TIMING] ===== TOTAL ROUTE TIME: ${Date.now() - routeStart}ms =====`);
 
         return NextResponse.json({ success: true, status: 200, data: propertyInsert });
     } catch (e) {
