@@ -191,18 +191,19 @@ export function Marketplace() {
             await preimageTx.fee(new SatoshisPerKilobyte(100));
             await preimageTx.sign();
             const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
+            const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
             console.log('[handleNewListing] Ordinal input signed');
 
-            // Create the transaction
+            // Create the transaction with unlockingScriptLength
             console.log('[handleNewListing] Creating listing transaction...');
-            const newListingTx = await userWallet!.createAction({
+            const actionRes = await userWallet!.createAction({
                 description: "New listing",
                 inputBEEF: tx.outputs[0].beef,
                 inputs: [
                     {
                         inputDescription: "Share",
                         outpoint: transferTxid,
-                        unlockingScript: ordinalUnlockingScript.toHex(),
+                        unlockingScriptLength: ordinalUnlockingScriptLength,
                     },
                 ],
                 outputs: [
@@ -217,8 +218,49 @@ export function Marketplace() {
                 },
             });
 
-            if (!newListingTx) {
-                console.error('[handleNewListing] Failed to create transaction');
+            if (!actionRes?.signableTransaction) {
+                console.error('[handleNewListing] Failed to create signable transaction');
+                toast.error("Failed to create transaction", {
+                    duration: 5000,
+                    position: "top-center",
+                    id: "transaction-error",
+                });
+                return;
+            }
+
+            const reference = actionRes.signableTransaction.reference;
+            const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
+
+            // Add unlocking script template to input (reuse frame from preimage)
+            txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockFrame;
+            txToSign.inputs[0].sourceTransaction = fullTx;
+
+            // Sign the complete transaction
+            await txToSign.sign();
+
+            // Extract the unlocking script
+            const finalOrdinalUnlockingScript = txToSign.inputs[0].unlockingScript?.toHex();
+
+            if (!finalOrdinalUnlockingScript) {
+                console.error('[handleNewListing] Missing unlocking script');
+                toast.error("Failed to create transaction", {
+                    duration: 5000,
+                    position: "top-center",
+                    id: "transaction-error",
+                });
+                return;
+            }
+
+            // Sign the action with the actual unlocking script
+            const newListingTx = await userWallet!.signAction({
+                reference,
+                spends: {
+                    "0": { unlockingScript: finalOrdinalUnlockingScript }
+                }
+            });
+
+            if (!newListingTx?.txid) {
+                console.error('[handleNewListing] Failed to sign transaction');
                 toast.error("Failed to create transaction", {
                     duration: 5000,
                     position: "top-center",

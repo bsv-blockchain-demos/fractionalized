@@ -227,8 +227,11 @@ export async function POST(request: Request) {
 
         const paymentChangeSats = preimageTx.outputs[2].satoshis as number;
 
-        const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript
-        const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript
+        // Get unlocking script lengths from preimage transaction
+        const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
+        const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript;
+        const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
+        const paymentUnlockingScriptLength = paymentUnlockingScript.toHex().length / 2;
 
         const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
             {
@@ -253,20 +256,20 @@ export async function POST(request: Request) {
         beef.mergeBeef(ordParentTx.outputs[0].beef);
         beef.mergeBeef(paymentTx.outputs[0].beef);
 
-        // Create the transfer transaction
-        const transferTx = await wallet.createAction({
+        // Create the transfer transaction with unlockingScriptLength
+        const actionRes = await wallet.createAction({
             description: "Transfer share",
             inputBEEF: beef.toBinary(),
             inputs: [
                 {
                     inputDescription: "Ordinal transfer",
                     outpoint: currentOrdinalOutpoint,
-                    unlockingScript: ordinalUnlockingScript.toHex(),
+                    unlockingScriptLength: ordinalUnlockingScriptLength,
                 },
                 {
                     inputDescription: "Payment",
                     outpoint: property.txids.paymentTxid,
-                    unlockingScript: paymentUnlockingScript.toHex(),
+                    unlockingScriptLength: paymentUnlockingScriptLength,
                 }
             ],
             outputs,
@@ -275,8 +278,41 @@ export async function POST(request: Request) {
             }
         })
 
-        if (!transferTx) {
-            throw new Error("Failed to create transfer transaction");
+        if (!actionRes?.signableTransaction) {
+            throw new Error("Failed to create signable transaction");
+        }
+
+        const reference = actionRes.signableTransaction.reference;
+        const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
+
+        // Add unlocking script templates to inputs (reuse frames from preimage)
+        txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockingFrame;
+        txToSign.inputs[0].sourceTransaction = fullParentTx;
+        txToSign.inputs[1].unlockingScriptTemplate = paymentUnlockFrame;
+        txToSign.inputs[1].sourceTransaction = paymentSourceTX;
+
+        // Sign the complete transaction
+        await txToSign.sign();
+
+        // Extract the unlocking scripts
+        const finalOrdinalUnlockingScript = txToSign.inputs[0].unlockingScript?.toHex();
+        const finalPaymentUnlockingScript = txToSign.inputs[1].unlockingScript?.toHex();
+
+        if (!finalOrdinalUnlockingScript || !finalPaymentUnlockingScript) {
+            throw new Error("Missing unlocking scripts");
+        }
+
+        // Sign the action with the actual unlocking scripts
+        const transferTx = await wallet.signAction({
+            reference,
+            spends: {
+                "0": { unlockingScript: finalOrdinalUnlockingScript },
+                "1": { unlockingScript: finalPaymentUnlockingScript }
+            }
+        });
+
+        if (!transferTx?.txid) {
+            throw new Error("Failed to sign transfer transaction");
         }
 
         // Broadcast the transfer transaction to the Overlay for later lookup

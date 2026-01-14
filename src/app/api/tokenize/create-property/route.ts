@@ -220,6 +220,7 @@ export async function POST(request: Request) {
 
         // Build preimage for payment input to calculate change satoshis
         console.log('[TIMING] Starting preimage transaction build and sign...');
+        console.log("Payment unlock frame before signing: ", paymentUnlockFrame);
         const preimageStart = Date.now();
         const preimageTx = new Transaction();
         preimageTx.addInput({
@@ -238,6 +239,7 @@ export async function POST(request: Request) {
 
         await preimageTx.fee(new SatoshisPerKilobyte(100))
         await preimageTx.sign()
+        console.log("Payment unlock frame after signing: ", paymentUnlockFrame);
         console.log(`[TIMING] Preimage transaction completed in ${Date.now() - preimageStart}ms`);
 
         const changeSats = preimageTx.outputs[1].satoshis as number
