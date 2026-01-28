@@ -275,6 +275,7 @@ export async function POST(request: Request) {
             outputs,
             options: {
                 randomizeOutputs: false,
+                acceptDelayedBroadcast: false,
             }
         })
 

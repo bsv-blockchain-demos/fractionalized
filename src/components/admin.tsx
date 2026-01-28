@@ -167,6 +167,7 @@ export function Admin() {
                 ],
                 options: {
                     randomizeOutputs: false,
+                    acceptDelayedBroadcast: false,
                 }
             });
 

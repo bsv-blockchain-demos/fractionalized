@@ -208,6 +208,7 @@ describe('PaymentUtxo', () => {
       ],
       options: {
         randomizeOutputs: false,
+        acceptDelayedBroadcast: false,
         trustSelf: 'known', // Trust the BEEF we provide since it's a mock transaction
       }
     })

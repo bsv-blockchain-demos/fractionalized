@@ -168,6 +168,7 @@ export async function POST(request: Request) {
             ],
             options: {
                 randomizeOutputs: false,
+                acceptDelayedBroadcast: false,
             }
         });
         console.log(`[TIMING] Property token createAction completed in ${Date.now() - createPropertyStart}ms`);
@@ -272,6 +273,7 @@ export async function POST(request: Request) {
             ],
             options: {
                 randomizeOutputs: false,
+                acceptDelayedBroadcast: false,
             }
         });
         console.log(`[TIMING] Mint createAction completed in ${Date.now() - createActionStart}ms`);

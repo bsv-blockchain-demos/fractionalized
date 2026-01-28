@@ -215,6 +215,7 @@ export function Marketplace() {
                 ],
                 options: {
                     randomizeOutputs: false,
+                    acceptDelayedBroadcast: false,
                 },
             });
 
@@ -356,6 +357,7 @@ export function Marketplace() {
                 ],
                 options: {
                     randomizeOutputs: false,
+                    acceptDelayedBroadcast: false,
                 },
             });
 

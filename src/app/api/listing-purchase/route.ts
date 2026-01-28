@@ -174,6 +174,7 @@ export async function POST(request: Request) {
             ],
             options: {
                 randomizeOutputs: false,
+                acceptDelayedBroadcast: false,
             }
         });
 
