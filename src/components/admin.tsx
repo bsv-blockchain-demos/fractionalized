@@ -263,7 +263,7 @@ export function Admin() {
             LivingRoom: 0,
             Studio: 0,
         } as Record<string, number>,
-        images: "", // comma-separated URLs
+        images: [""], // Array of image URLs
         proofOfOwnership: "", // Base64 encoded PDF
     });
 
@@ -281,6 +281,18 @@ export function Admin() {
         }));
     const updateFeature = (key: string, value: number) =>
         setForm((f) => ({ ...f, features: { ...f.features, [key]: value } }));
+
+    const updateImage = (idx: number, value: string) =>
+        setForm((f) => ({
+            ...f,
+            images: f.images.map((img, i) => (i === idx ? value : img)),
+        }));
+
+    const addImage = () =>
+        setForm((f) => ({ ...f, images: [...f.images, ""] }));
+
+    const removeImage = (idx: number) =>
+        setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
 
     const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -352,7 +364,6 @@ export function Admin() {
             },
             features: form.features,
             images: form.images
-                .split(",")
                 .map((s) => s.trim())
                 .filter(Boolean),
             sell: {
@@ -700,13 +711,33 @@ export function Admin() {
                         {Object.keys(form.features).map((k) => (
                             <div key={k}>
                                 <label className="block text-sm mb-1 text-text-secondary">{k}</label>
-                                <input
-                                    type="number"
-                                    min={0}
-                                    className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
-                                    value={form.features[k]}
-                                    onChange={(e) => updateFeature(k, Number(e.target.value || 0))}
-                                />
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        className="flex-1 px-2 py-1.5 text-sm rounded border border-border-subtle bg-bg-primary text-text-primary focus:border-accent-primary focus:outline-none"
+                                        value={form.features[k]}
+                                        onChange={(e) => updateFeature(k, Math.max(0, Number(e.target.value || 0)))}
+                                    />
+                                    <div className="flex gap-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => updateFeature(k, form.features[k] + 1)}
+                                            className="w-8 h-8 flex items-center justify-center rounded border border-border-subtle bg-bg-primary text-text-primary hover:bg-accent-primary hover:border-accent-primary hover:text-white transition-all duration-200 text-lg font-semibold"
+                                            aria-label={`Increase ${k} count`}
+                                        >
+                                            +
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateFeature(k, Math.max(0, form.features[k] - 1))}
+                                            className="w-8 h-8 flex items-center justify-center rounded border border-border-subtle bg-bg-primary text-text-primary hover:bg-accent-primary hover:border-accent-primary hover:text-white transition-all duration-200 text-lg font-semibold"
+                                            aria-label={`Decrease ${k} count`}
+                                        >
+                                            −
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -714,13 +745,38 @@ export function Admin() {
 
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Images</h2>
-                    <label className="block text-sm mb-1 text-text-secondary">Image URLs (comma-separated)</label>
-                    <input
-                        className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary"
-                        value={form.images}
-                        onChange={(e) => updateField("images", e.target.value)}
-                        placeholder="/images/foo.jpg, /images/bar.jpg"
-                    />
+                    <div className="space-y-3">
+                        {form.images.map((img, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    className="flex-1 px-3 py-2 rounded border border-border-subtle bg-bg-primary text-text-primary focus:border-accent-primary focus:outline-none"
+                                    value={img}
+                                    onChange={(e) => updateImage(idx, e.target.value)}
+                                    placeholder="/images/property.jpg or https://example.com/image.jpg"
+                                />
+                                {form.images.length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeImage(idx)}
+                                        className="px-3 py-2 rounded border border-border-subtle bg-bg-secondary text-text-primary text-sm hover:cursor-pointer hover:bg-red-500 hover:border-red-500 hover:text-white transition-all duration-200"
+                                        aria-label="Remove image URL"
+                                    >
+                                        Remove
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                        <div>
+                            <button
+                                type="button"
+                                className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary text-sm btn-glow"
+                                onClick={addImage}
+                            >
+                                Add image
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Shares to sell configuration */}

@@ -168,7 +168,7 @@ export async function POST(request: Request) {
             ],
             options: {
                 randomizeOutputs: false,
-                acceptDelayedBroadcast: false,
+                // No acceptDelayedBroadcast needed - this output is just a reference token, not spent immediately
             }
         });
         console.log(`[TIMING] Property token createAction completed in ${Date.now() - createPropertyStart}ms`);
