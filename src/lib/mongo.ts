@@ -4,63 +4,63 @@ dotenv.config();
 import { propertiesValidator, sharesValidator, propertyDescriptionsValidator, marketItemsValidator } from "./validators";
 
 export interface Properties {
-    _id: ObjectId;
-    title: string;
-    location: string;
-    priceUSD: number;
-    investors: number;
-    status: string;
-    annualisedReturn: string;
-    currentValuationUSD: number;
-    grossYield: string;
-    netYield: string;
-    investmentBreakdown: {
-        purchaseCost: number;
-        transactionCost: number;
-        runningCost: number;
-    },
-    features: Record<string, number>,
-    images: string[],
-    txids: {
-        tokenTxid: string;
-        originalMintTxid?: string; // Immutable original mint transaction
-        currentOutpoint?: string; // Current UTXO for next purchase (change output)
-        paymentTxid?: string;
-        mintTxid?: string; // Deprecated - kept for backward compatibility
-    },
-    seller: string,
-    sell?: {
-        percentToSell: number;
-        remainingPercent?: number; // Tracks remaining shares available for purchase
-    },
-    proofOfOwnership?: string, // Base64 encoded PDF document
+  _id: ObjectId;
+  title: string;
+  location: string;
+  priceUSD: number;
+  investors: number;
+  status: string;
+  annualisedReturn: string;
+  currentValuationUSD: number;
+  grossYield: string;
+  netYield: string;
+  investmentBreakdown: {
+    purchaseCost: number;
+    transactionCost: number;
+    runningCost: number;
+  },
+  features: Record<string, number>,
+  images: string[],
+  txids: {
+    tokenTxid: string;
+    originalMintTxid?: string; // Immutable original mint transaction
+    currentOutpoint?: string; // Current UTXO for next purchase (change output)
+    paymentTxid?: string;
+    mintTxid?: string; // Deprecated - kept for backward compatibility
+  },
+  seller: string,
+  sell?: {
+    percentToSell: number;
+    remainingPercent?: number; // Tracks remaining shares available for purchase
+  },
+  proofOfOwnership?: string, // Base64 encoded PDF document
 }
 
 export interface PropertyDescription {
-    _id?: ObjectId;
-    propertyId: ObjectId;
-    description: {
-        details: string;
-        features: string[];
-    };
-    whyInvest?: { title: string; text: string }[];
+  _id?: ObjectId;
+  propertyId: ObjectId;
+  description: {
+    details: string;
+    features: string[];
+  };
+  whyInvest?: { title: string; text: string }[];
 }
 
 export interface ShareLock {
-    _id: ObjectId;
-    propertyId: ObjectId;
-    investorId: string;
-    createdAt: Date;
+  _id: ObjectId;
+  propertyId: ObjectId;
+  investorId: string;
+  createdAt: Date;
 }
 
 export interface Shares {
-    _id: ObjectId;
-    propertyId: ObjectId;
-    investorId: string;
-    parentTxid: string;
-    transferTxid: string;
-    amount: number;
-    createdAt: Date;
+  _id: ObjectId;
+  propertyId: ObjectId;
+  investorId: string;
+  parentTxid: string;
+  transferTxid: string;
+  amount: number;
+  createdAt: Date;
 }
 
 export interface MarketItem {
@@ -74,11 +74,38 @@ export interface MarketItem {
   sold?: boolean; // sold
 };
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Please add your MONGODB_URI to .env file');
+// Extract database name from URI
+function getDatabaseNameFromUri(connectionUri: string): string {
+  try {
+    // Parse the URI to extract the database name
+    const url = new URL(connectionUri.replace('mongodb+srv://', 'http://').replace('mongodb://', 'http://'));
+    const dbName = url.pathname.slice(1).split('?')[0]; // Remove leading '/' and query params
+
+    if (!dbName) {
+      throw new Error('Database name not found in MONGODB_URI. Please include the database name in the connection string (e.g., mongodb+srv://user:pass@cluster.mongodb.net/supplychain)');
+    }
+
+    return dbName;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Database name not found')) {
+      throw error;
+    }
+    throw new Error('Failed to parse MONGODB_URI. Please ensure it is a valid MongoDB connection string with a database name.');
+  }
 }
 
-const uri = process.env.MONGODB_URI;
+// Lazy initialization - only get env vars when actually connecting
+function getMongoConfig() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('MONGODB_URI is not defined in environment variables');
+  }
+  const dbName = getDatabaseNameFromUri(uri);
+  return { uri, dbName };
+}
+
+// Client will be initialized on first connection
+let client: MongoClient | null = null;
 
 // Connection options with pooling configuration
 const options = {
@@ -92,23 +119,7 @@ const options = {
   maxIdleTimeMS: 30000, // Close connections that have been idle for 30 seconds
 };
 
-// Global cached connection (persists across serverless function invocations)
-declare global {
-  var mongoClientPromise: Promise<MongoClient> | undefined;
-}
-
-let clientPromise: Promise<MongoClient>;
-
-// Use global caching in both development and production to prevent connection leaks
-// This ensures the same connection is reused across serverless function invocations
-if (!global.mongoClientPromise) {
-  const client = new MongoClient(uri, options);
-  global.mongoClientPromise = client.connect();
-  console.log('Creating new MongoDB client connection');
-}
-clientPromise = global.mongoClientPromise;
-
-// Database and collections
+// Database and collections (initialized on first connection)
 let db: Db;
 let propertiesCollection: Collection<Properties>;
 let sharesCollection: Collection<Shares>;
@@ -116,16 +127,40 @@ let locksCollection: Collection<ShareLock>;
 let propertyDescriptionsCollection: Collection<PropertyDescription>;
 let marketItemsCollection: Collection<MarketItem>;
 
+// Track if we're currently connecting to prevent race conditions
+let connectingPromise: Promise<void> | null = null;
+
 // Connect to MongoDB
 async function connectToMongo() {
-  if (!db) {
-    try {
-      /// Use the cached client promise
-      const client = await clientPromise;
-      console.log("🔌 Initializing MongoDB database connection...");
+  // If already connected, return immediately
+  if (db) {
+    return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
+  }
 
-      // Initialize database
-      db = client.db();
+  // If currently connecting, wait for that to finish
+  if (connectingPromise) {
+    await connectingPromise;
+    return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
+  }
+
+  // Start new connection
+  connectingPromise = (async () => {
+    try {
+      // Get config only when actually connecting
+      const { uri, dbName } = getMongoConfig();
+
+      // Initialize client if not already done
+      if (!client) {
+        client = new MongoClient(uri, options);
+        await client.connect();
+        console.log("Connected to MongoDB!");
+      } else {
+        // Reuse existing client if already connected
+        console.log("Reusing existing MongoDB connection");
+      }
+
+      // Initialize database and collections
+      db = client.db(dbName);
       // Ensure collections exist with validators applied
       const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name));
 
@@ -212,7 +247,7 @@ async function connectToMongo() {
       locksCollection = db.collection("share_locks");
       propertyDescriptionsCollection = db.collection("property_descriptions");
       marketItemsCollection = db.collection("market_items");
-      
+
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
       // Ensure unique tokenTxid only when present (partial unique index)
@@ -227,7 +262,7 @@ async function connectToMongo() {
           (i.key && (i.key["txids.tokenTxid"] === 1 || i.key["txids.TokenTxid"] === 1) && i.name !== desiredIndexName)
         ));
         for (const idx of conflictingIndexes) {
-          try { await propertiesCollection.dropIndex(idx.name); } catch {}
+          try { await propertiesCollection.dropIndex(idx.name); } catch { }
         }
         await propertiesCollection.createIndex(
           { "txids.tokenTxid": 1 },
@@ -254,33 +289,37 @@ async function connectToMongo() {
       await locksCollection.createIndex({ propertyId: 1, investorId: 1 }, { unique: true });
       // Market items unique per (propertyId, shareId)
       await marketItemsCollection.createIndex({ propertyId: 1, sellerId: 1 });
-      
+
       // Note: _id is automatically unique in MongoDB, no need for custom id field
-      
+
       console.log("MongoDB indexes created successfully");
     } catch (error) {
       console.error("Error connecting to MongoDB:", error);
+      connectingPromise = null; // Reset on error so retry is possible
       throw error;
+    } finally {
+      connectingPromise = null; // Clear the connecting promise
     }
-  }
+  })();
+
+  await connectingPromise;
   return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
 }
 
-const client = await clientPromise;
-
-// Connect immediately when this module is imported
-await connectToMongo();
-
-// Handle application shutdown
-process.on('SIGINT', async () => {
-  try {
-    await client.close();
-    console.log('MongoDB connection closed.');
-    process.exit(0);
-  } catch (error) {
-    console.error('Error during MongoDB shutdown:', error);
-    process.exit(1);
-  }
-});
+// Handle application shutdown (only in non-serverless environments)
+if (typeof process !== 'undefined' && process.on) {
+  process.on('SIGINT', async () => {
+    try {
+      if (client) {
+        await client.close();
+        console.log('MongoDB connection closed.');
+      }
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during MongoDB shutdown:', error);
+      process.exit(1);
+    }
+  });
+}
 
 export { connectToMongo, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };

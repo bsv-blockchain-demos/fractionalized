@@ -351,7 +351,7 @@ export function Marketplace() {
                 outputs: [
                     {
                         outputDescription: "Fee Payment",
-                        satoshis: 50,
+                        satoshis: 80,
                         lockingScript: paymentLockingScript.toHex(),
                     },
                 ],

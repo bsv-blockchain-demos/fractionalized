@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
 import { ObjectId } from "mongodb";
+import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
 import { requireAuth } from "../../../utils/apiAuth";
 
 export async function GET(request: Request) {

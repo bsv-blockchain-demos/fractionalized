@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 import toast from "react-hot-toast";
@@ -20,6 +20,83 @@ type Property = {
   priceUSD: number;
   tokenTxid: string;
 };
+
+// Custom dropdown component for share selection
+function CustomShareDropdown({
+  shares,
+  selectedShareId,
+  onSelect,
+  disabled
+}: {
+  shares: OwnedShare[];
+  selectedShareId: string;
+  onSelect: (id: string) => void;
+  disabled: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const selectedShare = shares.find(s => s._id === selectedShareId);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
+        className="w-full px-3 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary flex items-center justify-between hover:border-accent-subtle focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+      >
+        <span className="text-left">
+          {selectedShare ? `${selectedShare.propertyTitle || selectedShare._id.slice(-6)} - ${selectedShare.amount}%` : 'Select a share'}
+        </span>
+        <svg
+          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 rounded-lg border border-border-subtle bg-bg-secondary shadow-lg max-h-60 overflow-auto">
+          {shares.map((share) => (
+            <button
+              key={share._id}
+              type="button"
+              onClick={() => {
+                onSelect(share._id);
+                setIsOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-left hover:bg-bg-tertiary transition-colors ${
+                share._id === selectedShareId
+                  ? 'bg-accent-primary/10 text-accent-primary font-medium'
+                  : 'text-text-primary'
+              }`}
+            >
+              {share.propertyTitle || share._id.slice(-6)} - {share.amount}%
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function MarketSellModal({ open, loading, success, onClose, onListed }: {
   open: boolean;
@@ -166,18 +243,12 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
             {/* Share selection */}
             <div>
               <label className="block text-xs text-text-secondary mb-1">Select share</label>
-              <select
-                value={selectedShareId}
-                onChange={(e) => setSelectedShareId(e.target.value)}
+              <CustomShareDropdown
+                shares={shares}
+                selectedShareId={selectedShareId}
+                onSelect={setSelectedShareId}
                 disabled={loading}
-                className="w-full rounded-lg border border-border-subtle bg-bg-primary text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/30 disabled:opacity-60"
-              >
-                {shares.map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {s.propertyTitle || s._id.slice(-6)} - {s.amount}%
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             {/* Property context */}

@@ -115,34 +115,8 @@ export async function POST(request: Request) {
             /* anyoneCanPay */ true,
         );
 
-        // Create pre-image transaction for signing
-        const preimageTx = new Transaction();
-        preimageTx.addInput({
-            sourceTransaction: fullOrdinalTx,
-            sourceOutputIndex: ordinalVout,
-            sequence: 0xffffffff,
-            unlockingScriptTemplate: ordinalUnlockingFrame,
-        });
-        preimageTx.addInput({
-            sourceTransaction: paymentTX,
-            sourceOutputIndex: 0,
-            sequence: 0xffffffff,
-            unlockingScriptTemplate: paymentUnlockFrame,
-        });
-        preimageTx.addOutput({
-            satoshis: 1,
-            lockingScript: ordinalTransferScript,
-        });
-
-        // Sign the preimage transaction
-        await preimageTx.fee(new SatoshisPerKilobyte(100));
-        await preimageTx.sign();
-
-        // Extract the unlocking scripts and get their lengths
-        const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
-        const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript;
-        const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
-        const paymentUnlockingScriptLength = paymentUnlockingScript.toHex().length / 2;
+        const ordinalUnlockingScriptLength = await ordinalUnlockingFrame.estimateLength();
+        const paymentUnlockingScriptLength = await paymentUnlockFrame.estimateLength();
 
         // Merge the two input beefs required for the inputBEEF
         const beef = new Beef();

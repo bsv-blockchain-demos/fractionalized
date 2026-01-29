@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     try {
         await connectToMongo();
 
-        if (!ObjectId.isValid(propertyId) || !ObjectId.isValid(sellerId)) {
+        if (!ObjectId.isValid(propertyId)) {
             return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
         }
         if (typeof amount !== 'number' || amount <= 0) {

@@ -96,7 +96,8 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 const newRemainingPercent = (prev.availablePercent || 0) - Number(amount);
                 return {
                     ...prev,
-                    investors: (prev.investors || 0) + 1,
+                    // Only increment investor count if this is a new investor
+                    investors: (prev.investors || 0) + (data.isNewInvestor ? 1 : 0),
                     availablePercent: newRemainingPercent,
                     totalSold: (prev.totalSold || 0) + Number(amount),
                     // Update status to funded if all shares are sold

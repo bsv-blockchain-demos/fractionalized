@@ -341,6 +341,13 @@ export async function POST(request: Request) {
             throw new Error("Failed to update current outpoint");
         }
 
+        // Check if this investor already has shares for this property
+        const existingInvestorShares = await sharesCollection.findOne({
+            propertyId: propertyObjectId,
+            investorId,
+        });
+        const isNewInvestor = !existingInvestorShares;
+
         // Build share record; parent is the outpoint we spent from (currentOutpoint before update)
         const formattedShare: Shares = {
             _id: new ObjectId(),
@@ -353,7 +360,7 @@ export async function POST(request: Request) {
         }
         const share = await sharesCollection.insertOne(formattedShare);
 
-        // Atomically update remainingPercent and check if fully funded
+        // Atomically update remainingPercent, investor count, and check if fully funded
         if (percentToSell != null) {
             const newRemainingPercent = (property?.sell?.remainingPercent ?? percentToSell) - amount;
             const updateFields: any = {
@@ -365,13 +372,25 @@ export async function POST(request: Request) {
                 updateFields.status = "funded";
             }
 
+            // Increment investor count only if this is a new investor
+            const updateOperation: any = { $set: updateFields };
+            if (isNewInvestor) {
+                updateOperation.$inc = { investors: 1 };
+            }
+
             await propertiesCollection.updateOne(
                 { _id: propertyObjectId },
-                { $set: updateFields }
+                updateOperation
+            );
+        } else if (isNewInvestor) {
+            // If no percentToSell tracking, still increment investor count for new investors
+            await propertiesCollection.updateOne(
+                { _id: propertyObjectId },
+                { $inc: { investors: 1 } }
             );
         }
 
-        return NextResponse.json({ share });
+        return NextResponse.json({ share, isNewInvestor });
     } catch (e) {
         console.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
