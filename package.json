@@ -17,7 +17,7 @@
     "broadcast-failed-listing-file": "tsx scripts/broadcast-failed-listing-file.ts"
   },
   "dependencies": {
-    "@bsv/sdk": "^1.8.3",
+    "@bsv/sdk": "^1.9.2",
     "@bsv/wallet-toolbox": "^1.6.30",
     "@bsv/wallet-toolbox-client": "^1.6.30",
     "dotenv": "^17.2.2",
