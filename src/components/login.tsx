@@ -4,11 +4,12 @@ import { useState, useCallback } from "react";
 import { useAuthContext } from "../context/walletContext";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { createNonce } from "@bsv/sdk";
 
 export function Login() {
     console.log('Login component: Mounting');
     const [loading, setLoading] = useState(false);
-    const { initializeWallet, checkAuth, userPubKey } = useAuthContext();
+    const { initializeWallet, checkAuth, userPubKey, userWallet } = useAuthContext();
     console.log('Login component: Hooks initialized, userPubKey:', userPubKey);
     const router = useRouter();
 
@@ -44,12 +45,17 @@ export function Login() {
             }
             console.log('handleLogin: userPubKey found:', userPubKey);
 
+            // Generate ECDH nonce proving the user controls the wallet private key
+            const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY!;
+            const { publicKey: walletIdentityKey } = await userWallet.getPublicKey({ identityKey: true });
+            const nonce = await createNonce(userWallet, SERVER_PUBKEY);
+
             // Ask server to set JWT cookie
             console.log('handleLogin: Making fetch request to /api/auth/login with userPubKey:', userPubKey);
             const res = await fetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ request: "login", userPubKey }),
+                body: JSON.stringify({ request: "login", userPubKey, nonce, walletIdentityKey }),
             });
             console.log('handleLogin: Fetch response status:', res.status);
             const data = await res.json().catch(() => ({}));
@@ -83,7 +89,7 @@ export function Login() {
             console.log('handleLogin: Setting loading to false');
             setLoading(false);
         }
-    }, [initializeWallet, checkAuth, userPubKey, router]);
+    }, [initializeWallet, checkAuth, userPubKey, userWallet, router]);
 
     return (
         <div className="container mx-auto px-4 py-12">
