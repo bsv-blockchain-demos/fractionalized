@@ -46,7 +46,7 @@ export function Login() {
             console.log('handleLogin: userPubKey found:', userPubKey);
 
             // Generate ECDH nonce proving the user controls the wallet private key
-            const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_PUBKEY!;
+            const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_IDENTITYKEY!;
             const { publicKey: walletIdentityKey } = await userWallet.getPublicKey({ identityKey: true });
             const nonce = await createNonce(userWallet, SERVER_PUBKEY);
 
