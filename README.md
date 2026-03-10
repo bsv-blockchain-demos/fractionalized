@@ -75,7 +75,7 @@ Set the following env vars (for local dev, you can use a `.env` file):
 
 - `MONGODB_URI`
 - `SERVER_PRIVATE_KEY` (server wallet private key, hex)
-- `NEXT_PUBLIC_SERVER_PUBKEY` (server wallet public key, compressed hex)
+- `NEXT_PUBLIC_SERVER_PUBLIC_KEY` (server wallet public key, compressed hex)
 - `STORAGE_URL` (wallet-toolbox storage URL)
 - `JWT_SECRET` (used to sign the `verified` cookie)
 

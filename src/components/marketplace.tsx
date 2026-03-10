@@ -12,11 +12,11 @@ import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../utils/paymentUtxo";
 import { Hash, Transaction, PublicKey, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
 import { parseOutpoint, toOutpoint } from "../utils/outpoints";
-import { SERVER_PUBKEY } from "../utils/env";
+import { SERVER_PUBLIC_KEY } from "../utils/env";
 import toast from "react-hot-toast";
 import { hashFromPubkeys } from "../utils/hashFromPubkeys";
 
-const SERVER_PUB_KEY = SERVER_PUBKEY;
+const SERVER_PUB_KEY = SERVER_PUBLIC_KEY;
 
 type ApiListing = {
     _id: string;

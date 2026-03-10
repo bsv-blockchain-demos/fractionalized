@@ -46,9 +46,9 @@ export function Login() {
             console.log('handleLogin: userPubKey found:', userPubKey);
 
             // Generate ECDH nonce proving the user controls the wallet private key
-            const SERVER_PUBKEY = process.env.NEXT_PUBLIC_SERVER_IDENTITYKEY!;
+            const SERVER_IDENTITY = process.env.NEXT_PUBLIC_SERVER_IDENTITY_KEY!;
             const { publicKey: walletIdentityKey } = await userWallet.getPublicKey({ identityKey: true });
-            const nonce = await createNonce(userWallet, SERVER_PUBKEY);
+            const nonce = await createNonce(userWallet, SERVER_IDENTITY);
 
             // Ask server to set JWT cookie
             console.log('handleLogin: Making fetch request to /api/auth/login with userPubKey:', userPubKey);
