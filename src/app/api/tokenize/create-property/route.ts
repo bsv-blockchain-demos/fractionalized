@@ -10,7 +10,7 @@ import { PaymentUtxo } from "../../../../utils/paymentUtxo";
 import { hashFromPubkeys } from "../../../../utils/hashFromPubkeys";
 import { broadcastTX } from "../../../../hooks/overlayFunctions";
 
-const STORAGE_URL = process.env.STORAGE_URL;
+const STORAGE_URL = process.env.WALLET_STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
 
 export async function POST(request: Request) {

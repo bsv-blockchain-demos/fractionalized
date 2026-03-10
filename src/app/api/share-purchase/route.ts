@@ -12,7 +12,7 @@ import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
 import { hashFromPubkeys } from "../../../utils/hashFromPubkeys";
 
-const STORAGE = process.env.STORAGE_URL;
+const STORAGE = process.env.WALLET_STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
 
 export async function POST(request: Request) {

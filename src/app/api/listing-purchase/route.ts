@@ -11,7 +11,7 @@ import { traceShareChain } from "../../../utils/shareChain";
 import { toOutpoint, parseOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
 
-const STORAGE_URL = process.env.STORAGE_URL;
+const STORAGE_URL = process.env.WALLET_STORAGE_UR;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
 
 export async function POST(request: Request) {

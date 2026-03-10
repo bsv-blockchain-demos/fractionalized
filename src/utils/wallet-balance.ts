@@ -1,11 +1,11 @@
 import { makeWallet } from '@bsv/wallet-helper'
 
-const { SERVER_PRIVATE_KEY, STORAGE_URL, BSV_NETWORK } = process.env
+const { SERVER_PRIVATE_KEY, WALLET_STORAGE_URL, BSV_NETWORK } = process.env
 
 export async function checkWalletBalance(): Promise<number> {
   const chain = (BSV_NETWORK ?? 'main') as 'main' | 'test'
   const privateKey = SERVER_PRIVATE_KEY! as string
-  const storageURL = STORAGE_URL! as string
+  const storageURL = WALLET_STORAGE_URL! as string
 
   const wallet = await makeWallet(chain, storageURL, privateKey)
 
