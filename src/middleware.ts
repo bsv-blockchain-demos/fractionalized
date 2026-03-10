@@ -13,7 +13,7 @@ export async function middleware(req: NextRequest) {
   const token = (req.cookies.get("verified") as RequestCookie)?.value;
 
   // Public routes (don't require auth)
-  const publicPaths = ["/login"];
+  const publicPaths = ["/login", "/ready", "/health"];
   const isPublic = publicPaths.some((path) => req.nextUrl.pathname.startsWith(path));
 
   if (isPublic) {
