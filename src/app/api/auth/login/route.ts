@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SignJWT } from "jose";
 import { createSecretKey } from "crypto";
-import { verifyNonce } from "@bsv/sdk";
 import protoWallet from "@/lib/protoWallet";
+import { authServer } from "@/lib/authProof";
+import { consumeNonce } from "@/lib/authNonceStore";
 
 const SECRET = process.env.JWT_SECRET as string;
 
@@ -13,16 +14,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ message: 'Invalid request' }, { status: 400 });
     }
 
-    const { userPubKey, nonce, walletIdentityKey } = body;
+    const { userPubKey, proof, walletIdentityKey } = body;
 
-    if (!nonce || !walletIdentityKey) {
-        return NextResponse.json({ message: 'Missing nonce or walletIdentityKey' }, { status: 400 });
+    if (!proof || !walletIdentityKey) {
+        return NextResponse.json({ message: 'Missing proof or walletIdentityKey' }, { status: 400 });
     }
 
-    // Verify the user controls the private key for walletIdentityKey (proof of key ownership)
-    const nonceValid = await verifyNonce(nonce, protoWallet as any, walletIdentityKey);
-    if (!nonceValid) {
-        return NextResponse.json({ message: 'Invalid nonce' }, { status: 401 });
+    // Signed-proof check — expiry-bound, single-use proof of key ownership
+    const proofResult = await authServer.verifyAuthProof(protoWallet, proof, 'login', { consumeNonce });
+    if (!proofResult.valid || proofResult.identityKey !== walletIdentityKey) {
+        return NextResponse.json({ message: proofResult.error ?? 'Proof identity mismatch' }, { status: 401 });
     }
 
     // After successful response create JWT cookie
