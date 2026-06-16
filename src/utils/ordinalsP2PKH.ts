@@ -13,6 +13,9 @@ import {
      PublicKey
  } from "@bsv/sdk";
 import { calculatePreimage } from "./preimage";
+import type { Derivation } from "./tokenDerivation";
+
+const LEGACY_DERIVATION: Derivation = { protocolID: [0, "fractionalized"], keyID: "0", counterparty: "self" };
 
 export class OrdinalsP2PKH implements ScriptTemplate {
 
@@ -65,7 +68,8 @@ export class OrdinalsP2PKH implements ScriptTemplate {
             .writeOpCode(OP.OP_EQUALVERIFY)
             .writeOpCode(OP.OP_CHECKSIG)
             .writeOpCode(OP.OP_RETURN)
-            .writeBin(Utils.toArray(tokenTxid, "hex"));
+            // OP_RETURN identifier: property outpoint as txid_vout (utf8)
+            .writeBin(Utils.toArray(tokenTxid.replace(/\./g, "_"), "utf8"));
 
         return lockingScript;
     }
@@ -76,42 +80,27 @@ export class OrdinalsP2PKH implements ScriptTemplate {
         anyoneCanPay = false,
         sourceSatoshis?: number,
         lockingScript?: Script,
+        derivation: Derivation = LEGACY_DERIVATION,
     ): {
         sign: (tx: Transaction, inputIndex: number) => Promise<UnlockingScript>;
         estimateLength: () => Promise<number>;
     } {
         return {
             sign: async (tx: Transaction, inputIndex: number) => {
-                 const { preimage, signatureScope } = calculatePreimage(tx, inputIndex, signOutputs, anyoneCanPay, sourceSatoshis, lockingScript);
-
-                // include the pattern from BRC-29
+                const { preimage, signatureScope } = calculatePreimage(tx, inputIndex, signOutputs, anyoneCanPay, sourceSatoshis, lockingScript);
                 const { signature } = await wallet.createSignature({
                     hashToDirectlySign: Hash.hash256(preimage),
-                    protocolID: [0, "fractionalized"],
-                    keyID: "0",
-                    counterparty: 'self'
+                    protocolID: derivation.protocolID, keyID: derivation.keyID, counterparty: derivation.counterparty,
                 })
-
-                console.log({ signature })
-
                 const { publicKey } = await wallet.getPublicKey({
-                    protocolID: [0, "fractionalized"],
-                    keyID: "0",
-                    counterparty: 'self'
+                    protocolID: derivation.protocolID, keyID: derivation.keyID,
+                    counterparty: derivation.counterparty, forSelf: derivation.counterparty !== 'self',
                 })
-
                 const rawSignature = Signature.fromDER(signature, 'hex')
-                const sig = new TransactionSignature(
-                    rawSignature.r,
-                    rawSignature.s,
-                    signatureScope
-                );
+                const sig = new TransactionSignature(rawSignature.r, rawSignature.s, signatureScope);
                 const unlockScript = new UnlockingScript();
                 unlockScript.writeBin(sig.toChecksigFormat());
-                unlockScript.writeBin(
-                    PublicKey.fromString(publicKey).encode(true) as number[]
-                );
-
+                unlockScript.writeBin(PublicKey.fromString(publicKey).encode(true) as number[]);
                 return unlockScript;
             },
             estimateLength: async () => 108,

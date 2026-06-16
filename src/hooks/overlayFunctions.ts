@@ -8,16 +8,16 @@ const overlay = new LookupResolver({
 });
 
 export const broadcastTX = async (tx: Transaction) => {
-    console.log('Transaction to broadcast: ', tx.toHex())
-    // Lookup a service which accepts this type of token
-    const tb = new TopicBroadcaster(['tm_fractionalize'], {
-        resolver: overlay,
-    })
-
-    // Send the tx to that overlay.
-    const overlayResponse = await tx.broadcast(tb)
-    console.log("Overlay response: ", overlayResponse);
-    return overlayResponse;
+    const txid = tx.id('hex');
+    try {
+        const tb = new TopicBroadcaster(['tm_fractionalize'], { resolver: overlay });
+        const overlayResponse = await tx.broadcast(tb);
+        console.log("Overlay response: ", overlayResponse);
+        return { status: 'success' as const, txid, overlayResponse };
+    } catch (e) {
+        console.warn(`Overlay broadcast failed for ${txid} (non-fatal):`, e);
+        return { status: 'failed' as const, txid };
+    }
 }
 
 export async function getTransactionByTxID(txid: string) {

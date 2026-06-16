@@ -13,7 +13,10 @@ import {
      PublicKey,
      ScriptChunk
  } from "@bsv/sdk";
+import type { WalletProtocol } from "@bsv/sdk";
 import { calculatePreimage } from "./preimage";
+
+const LEGACY_PROTOCOL: WalletProtocol = [0, "fractionalized"];
 
 export class OrdinalsP2MS implements ScriptTemplate {
 
@@ -70,7 +73,8 @@ export class OrdinalsP2MS implements ScriptTemplate {
                 .writeOpCode(OP.OP_2)
                 .writeOpCode(OP.OP_CHECKMULTISIG)
                 .writeOpCode(OP.OP_RETURN)
-                .writeBin(Utils.toArray(tokenTxid, "hex"));
+                // OP_RETURN identifier: property outpoint as txid_vout (utf8)
+                .writeBin(Utils.toArray(tokenTxid.replace(/\./g, "_"), "utf8"));
         
         return lockingScript;
     }
@@ -85,6 +89,7 @@ export class OrdinalsP2MS implements ScriptTemplate {
         sourceSatoshis?: number,
         lockingScript?: Script,
         firstPubkeyIsWallet: boolean = true,
+        protocolID: WalletProtocol = LEGACY_PROTOCOL,
     ): {
         sign: (tx: Transaction, inputIndex: number) => Promise<UnlockingScript>;
         estimateLength: () => Promise<number>;
@@ -96,21 +101,17 @@ export class OrdinalsP2MS implements ScriptTemplate {
                 // include the pattern from BRC-29
                 const { signature } = await wallet.createSignature({
                     hashToDirectlySign: Hash.hash256(preimage),
-                    protocolID: [0, "fractionalized"],
+                    protocolID,
                     keyID,
                     counterparty
                 })
 
-                console.log({ signature })
-
                 const { publicKey } = await wallet.getPublicKey({
-                    protocolID: [0, "fractionalized"],
+                    protocolID,
                     keyID,
                     counterparty,
                     forSelf: true
                 })
-
-                console.log({ 'wallet.getPublicKey': publicKey })
 
                 const rawSignature = Signature.fromDER(signature, 'hex')
                 const sig = new TransactionSignature(

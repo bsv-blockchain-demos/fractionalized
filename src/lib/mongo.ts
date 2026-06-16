@@ -27,6 +27,11 @@ export interface Properties {
     currentOutpoint?: string; // Current UTXO for next purchase (change output)
     paymentTxid?: string;
     mintTxid?: string; // Deprecated - kept for backward compatibility
+    currentKeyId?: string;
+    currentCounterparty?: string;
+    currentCounterpartyDerivedKey?: string;
+    currentOrder?: 'self-first' | 'self-second';
+    currentBeef?: string; // base64 carry-forward of the tx that created currentOutpoint
   },
   seller: string,
   sell?: {
@@ -61,6 +66,10 @@ export interface Shares {
   transferTxid: string;
   amount: number;
   createdAt: Date;
+  keyId?: string;
+  counterparty?: string;
+  counterpartyDerivedKey?: string;
+  order?: 'self-first' | 'self-second';
 }
 
 export interface MarketItem {
@@ -73,6 +82,14 @@ export interface MarketItem {
   createdAt: Date; // created at
   sold?: boolean; // sold
 };
+
+export interface ListingBeef {
+  _id?: ObjectId;
+  listingId: string;       // market_items _id as string
+  ordLockOutpoint: string; // the multisig outpoint
+  beef: string;            // base64
+  createdAt: Date;
+}
 
 // Extract database name from URI
 function getDatabaseNameFromUri(connectionUri: string): string {
@@ -126,6 +143,7 @@ let sharesCollection: Collection<Shares>;
 let locksCollection: Collection<ShareLock>;
 let propertyDescriptionsCollection: Collection<PropertyDescription>;
 let marketItemsCollection: Collection<MarketItem>;
+let listingBeefsCollection: Collection<ListingBeef>;
 
 // Track if we're currently connecting to prevent race conditions
 let connectingPromise: Promise<void> | null = null;
@@ -134,13 +152,13 @@ let connectingPromise: Promise<void> | null = null;
 async function connectToMongo() {
   // If already connected, return immediately
   if (db) {
-    return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
+    return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection, listingBeefsCollection };
   }
 
   // If currently connecting, wait for that to finish
   if (connectingPromise) {
     await connectingPromise;
-    return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
+    return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection, listingBeefsCollection };
   }
 
   // Start new connection
@@ -241,12 +259,18 @@ async function connectToMongo() {
         await db.createCollection("share_locks");
       }
 
+      // listing_beefs (no validator needed)
+      if (!existing.has("listing_beefs")) {
+        await db.createCollection("listing_beefs");
+      }
+
       // Get typed collection handles
       propertiesCollection = db.collection("properties");
       sharesCollection = db.collection("shares");
       locksCollection = db.collection("share_locks");
       propertyDescriptionsCollection = db.collection("property_descriptions");
       marketItemsCollection = db.collection("market_items");
+      listingBeefsCollection = db.collection("listing_beefs");
 
       // Create indexes for better performance
       await propertiesCollection.createIndex({ "_id": 1 });
@@ -289,6 +313,8 @@ async function connectToMongo() {
       await locksCollection.createIndex({ propertyId: 1, investorId: 1 }, { unique: true });
       // Market items unique per (propertyId, shareId)
       await marketItemsCollection.createIndex({ propertyId: 1, sellerId: 1 });
+      // Listing beefs unique per listingId
+      await listingBeefsCollection.createIndex({ listingId: 1 }, { unique: true });
 
       // Note: _id is automatically unique in MongoDB, no need for custom id field
 
@@ -303,7 +329,7 @@ async function connectToMongo() {
   })();
 
   await connectingPromise;
-  return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
+  return { db, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection, listingBeefsCollection };
 }
 
 // Handle application shutdown (only in non-serverless environments)
@@ -322,4 +348,4 @@ if (typeof process !== 'undefined' && process.on) {
   });
 }
 
-export { connectToMongo, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection };
+export { connectToMongo, propertiesCollection, sharesCollection, locksCollection, propertyDescriptionsCollection, marketItemsCollection, listingBeefsCollection };
