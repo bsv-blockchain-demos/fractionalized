@@ -9,6 +9,18 @@ import { toast } from "react-hot-toast";
 import SellingListings from "./dashboard/SellingListings";
 import MarketListings from "./dashboard/MarketListings";
 import PortfolioStats from "./dashboard/PortfolioStats";
+import { OrdinalsP2MS } from "../utils/ordinalsP2MS";
+import { OrdinalsP2PKH } from "../utils/ordinalsP2PKH";
+import { broadcastTX } from "../hooks/overlayFunctions";
+import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
+import { Hash, Transaction, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
+import { parseOutpoint, toOutpoint } from "../utils/outpoints";
+import { SERVER_PUBLIC_KEY } from "../utils/env";
+import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from "../utils/tokenDerivation";
+import { internalizeToBasket } from "../utils/internalizeToBasket";
+import { decodeBeef, encodeBeef } from "../utils/beefEncoding";
+
+const SERVER_PUB_KEY = SERVER_PUBLIC_KEY;
 
 export function Dashboard() {
   // User shares mapped to properties
@@ -23,7 +35,12 @@ export function Dashboard() {
     location: string;
     sellAmount: number;
     pricePerShare: number;
+    listingNonce?: string;
+    listingOutpoint?: string;
+    listingBeef?: string;
+    tokenTxid?: string;
   }>>([]);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
   const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
@@ -129,6 +146,10 @@ export function Dashboard() {
           location: String(i?.location ?? "Unknown"),
           sellAmount: Number(i?.sellAmount ?? 0),
           pricePerShare: Number(i?.pricePerShare ?? 0),
+          listingNonce: i?.listingNonce ? String(i.listingNonce) : undefined,
+          listingOutpoint: i?.listingOutpoint ? String(i.listingOutpoint) : undefined,
+          listingBeef: i?.listingBeef ? String(i.listingBeef) : undefined,
+          tokenTxid: i?.tokenTxid ? String(i.tokenTxid) : undefined,
         })));
       } catch (e) {
         console.error(e);
@@ -182,6 +203,181 @@ export function Dashboard() {
     fetchSellingProperties();
     // Re-run if the user identity changes
   }, [userWallet, userPubKey, initializeWallet]);
+
+  // Cancel a listing: reclaim the share from the multisig(seller+server) back to the seller's
+  // own self-custody P2PKH. The seller builds + signs the spend client-side.
+  const handleCancelListing = async (item: {
+    _id: string;
+    propertyId: string;
+    sellAmount: number;
+    listingNonce?: string;
+    listingOutpoint?: string;
+    listingBeef?: string;
+    tokenTxid?: string;
+  }) => {
+    if (cancellingId) return;
+    if (!item.listingNonce || !item.listingOutpoint || !item.listingBeef || !item.tokenTxid) {
+      toast.error("This listing can't be cancelled automatically (missing listing data)", {
+        duration: 5000, position: "top-center", id: "cancel-error",
+      });
+      return;
+    }
+
+    setCancellingId(item._id);
+    try {
+      if (!userWallet) {
+        try {
+          await initializeWallet();
+        } catch (e) {
+          console.error("Failed to initialize wallet:", e);
+          toast.error("Failed to connect wallet", { duration: 5000, position: "top-center", id: "wallet-connect-error" });
+          return;
+        }
+      }
+      if (!userPubKey) {
+        toast.error("Failed to get public key", { duration: 5000, position: "top-center", id: "public-key-error" });
+        return;
+      }
+
+      const listingOutpoint = item.listingOutpoint;
+      const { vout: listingVout } = parseOutpoint(listingOutpoint);
+
+      // Source tx for the listing multisig output (from the backed-up BEEF).
+      const fullListingTx = Transaction.fromBEEF(decodeBeef(item.listingBeef));
+      // Token amount carried by the multisig output (amount=0 => full balance of that output).
+      const shares = await calcTokenTransfer(fullListingTx, listingVout, 0);
+
+      // Derive both multisig child keys (seller signs with sellerChild; serverChild rebuilds the script).
+      const { selfKey: sellerChild, counterpartyKey: serverChild } = await deriveMultisigPair(
+        userWallet!, SERVER_PUB_KEY, item.listingNonce,
+      );
+
+      // Reclaim output: seller's own derived P2PKH (fresh nonce) — same shape as any held share.
+      const cancelNonce = generateNonce();
+      const ownKey = await deriveOwnKey(userWallet!, SERVER_PUB_KEY, cancelNonce);
+      const reclaimLockingScript = new OrdinalsP2PKH().lock(
+        /* address */ Hash.hash160(ownKey, "hex") as number[],
+        /* assetId */ listingOutpoint.replace(".", "_"),
+        /* tokenTxid */ item.tokenTxid,
+        /* shares */ shares,
+        /* type */ "transfer",
+      );
+
+      // Unlock the listing multisig AS THE SELLER (seller is FIRST in committed [seller, server]).
+      const ordinalUnlockFrame = new OrdinalsP2MS().unlock(
+        /* wallet */ userWallet!,
+        /* keyID */ item.listingNonce,
+        /* counterparty */ SERVER_PUB_KEY,
+        /* otherPubkey */ serverChild,
+        /* signOutputs */ "single",
+        /* anyoneCanPay */ true,
+        /* sourceSatoshis */ undefined,
+        /* lockingScript */ undefined,
+        /* firstPubkeyIsWallet */ true,
+        /* protocolID */ TOKEN_PROTOCOL,
+      );
+
+      // Preimage tx mirroring the intended spend for the correct ordinal signature.
+      const preimageTx = new Transaction();
+      preimageTx.addInput({
+        sourceTransaction: fullListingTx,
+        sourceOutputIndex: listingVout,
+        unlockingScriptTemplate: ordinalUnlockFrame,
+      });
+      preimageTx.addOutput({ satoshis: 1, lockingScript: reclaimLockingScript });
+      await preimageTx.fee(new SatoshisPerKilobyte(100));
+      await preimageTx.sign();
+      const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
+      const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
+
+      const actionRes = await userWallet!.createAction({
+        description: "Cancel listing",
+        inputBEEF: decodeBeef(item.listingBeef),
+        inputs: [
+          {
+            inputDescription: "Listing share",
+            outpoint: listingOutpoint,
+            unlockingScriptLength: ordinalUnlockingScriptLength,
+          },
+        ],
+        outputs: [
+          {
+            outputDescription: "Reclaimed share",
+            satoshis: 1,
+            lockingScript: reclaimLockingScript.toHex(),
+          },
+        ],
+        options: { randomizeOutputs: false, acceptDelayedBroadcast: false },
+      });
+
+      if (!actionRes?.signableTransaction) {
+        toast.error("Failed to create transaction", { duration: 5000, position: "top-center", id: "cancel-error" });
+        return;
+      }
+
+      const reference = actionRes.signableTransaction.reference;
+      const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
+      txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockFrame;
+      txToSign.inputs[0].sourceTransaction = fullListingTx;
+      await txToSign.sign();
+      const finalOrdinalUnlockingScript = txToSign.inputs[0].unlockingScript?.toHex();
+      if (!finalOrdinalUnlockingScript) {
+        toast.error("Failed to create transaction", { duration: 5000, position: "top-center", id: "cancel-error" });
+        return;
+      }
+
+      const cancelTx = await userWallet!.signAction({
+        reference,
+        spends: { "0": { unlockingScript: finalOrdinalUnlockingScript } },
+      });
+      if (!cancelTx?.txid) {
+        toast.error("Failed to sign transaction", { duration: 5000, position: "top-center", id: "cancel-error" });
+        return;
+      }
+
+      // Broadcast to overlay (non-fatal).
+      const cancelFullTx = Transaction.fromBEEF(cancelTx.tx as number[]);
+      await broadcastTX(cancelFullTx);
+
+      // Persist: record reclaimed share, remove the listing + its BEEF backup.
+      const res = await fetch("/api/cancel-listing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          marketItemId: item._id,
+          returnTxid: toOutpoint(cancelTx.txid as string, 0),
+          cancelBeef: encodeBeef(cancelTx.tx as number[]),
+          cancelNonce,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err?.error || "Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
+        return;
+      }
+
+      // Internalize the reclaimed P2PKH (output 0) into the seller's basket.
+      try {
+        await internalizeToBasket(
+          userWallet!,
+          cancelTx.tx as number[],
+          [{ outputIndex: 0, keyId: cancelNonce, counterparty: SERVER_PUB_KEY, tags: ["type:share"] }],
+          "Reclaim listed share",
+        );
+      } catch (e) {
+        console.error("[handleCancelListing] Failed to internalize reclaimed share:", e);
+      }
+
+      // Remove from local UI (listing is no longer active).
+      setMyListings((prev) => prev.filter((l) => l._id !== item._id));
+      toast.success("Listing cancelled", { duration: 4000, position: "top-center", id: "cancel-success" });
+    } catch (e) {
+      console.error("[handleCancelListing] Error:", e);
+      toast.error("Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const investedProperties = investedCards;
 
@@ -286,7 +482,12 @@ export function Dashboard() {
       <div className="section-divider" />
 
       {/* Your Market Listings */}
-      <MarketListings loading={loadingMyListings} items={myListings} />
+      <MarketListings
+        loading={loadingMyListings}
+        items={myListings}
+        onCancel={handleCancelListing}
+        cancellingId={cancellingId}
+      />
 
       <div className="section-divider" />
 

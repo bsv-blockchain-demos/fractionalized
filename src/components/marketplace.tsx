@@ -15,6 +15,9 @@ import { parseOutpoint, toOutpoint } from "../utils/outpoints";
 import { SERVER_PUBLIC_KEY } from "../utils/env";
 import toast from "react-hot-toast";
 import { hashFromPubkeys } from "../utils/hashFromPubkeys";
+import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from "../utils/tokenDerivation";
+import { internalizeToBasket } from "../utils/internalizeToBasket";
+import { encodeBeef, decodeBeef } from "../utils/beefEncoding";
 
 const SERVER_PUB_KEY = SERVER_PUBLIC_KEY;
 
@@ -35,6 +38,9 @@ type payloadData = {
     pricePerShare: number;
     transferTxid: string;
     tokenTxid: string;
+    // Share P2PKH derivation (absent for legacy shares).
+    keyId?: string;
+    counterparty?: string;
 };
 
 const sortFns: Record<string, (a: ApiListing, b: ApiListing) => number> = {
@@ -82,7 +88,7 @@ export function Marketplace() {
 
     const handleNewListing = useCallback(async (payload: payloadData) => {
         console.log('[handleNewListing] Starting with payload:', payload);
-        const { shareId, propertyId, pricePerShare, transferTxid, tokenTxid } = payload;
+        const { shareId, propertyId, pricePerShare, transferTxid, tokenTxid, keyId: shareKeyId, counterparty: shareCounterparty } = payload;
 
         setLoading(true);
 
@@ -156,9 +162,13 @@ export function Marketplace() {
             const assetId = transferTxid.replace(".", "_");
             console.log('[handleNewListing] AssetId:', assetId);
 
-            // Create the multisig locking script for the new output
+            // Derive both listing-multisig child keys (seller signs with sellerChild; serverChild rebuilds the script).
+            const listingNonce = generateNonce();
+            const { selfKey: sellerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_PUB_KEY, listingNonce);
+
+            // Multisig lock for the new output, committed order [seller, server].
             console.log('[handleNewListing] Creating multisig locking script...');
-            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userPubKey), PublicKey.fromString(SERVER_PUB_KEY)]);
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerChild), PublicKey.fromString(serverChild)]);
             const ordinalLockingScript = new OrdinalsP2MS().lock(
                 /* oneOfTwoHash */ oneOfTwoHash,
                 /* assetId */ assetId,
@@ -168,13 +178,22 @@ export function Marketplace() {
             );
             console.log('[handleNewListing] Multisig locking script created');
 
-            // Build a preimage transaction that mirrors the intended spend for correct ordinal signature
+            // Unlock the seller's P2PKH share with its recorded derivation (counterparty=server); legacy share => default unlock.
             console.log('[handleNewListing] Building preimage transaction...');
-            const ordinalUnlockFrame = new OrdinalsP2PKH().unlock(
-                /* wallet */ userWallet!,
-                /* signOutputs */ "single",
-                /* anyoneCanPay */ true,
-            );
+            const ordinalUnlockFrame = shareKeyId
+                ? new OrdinalsP2PKH().unlock(
+                    /* wallet */ userWallet!,
+                    /* signOutputs */ "single",
+                    /* anyoneCanPay */ true,
+                    /* sourceSatoshis */ undefined,
+                    /* lockingScript */ undefined,
+                    /* derivation */ { protocolID: TOKEN_PROTOCOL, keyID: shareKeyId, counterparty: shareCounterparty as string },
+                )
+                : new OrdinalsP2PKH().unlock(
+                    /* wallet */ userWallet!,
+                    /* signOutputs */ "single",
+                    /* anyoneCanPay */ true,
+                );
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: fullTx,
@@ -288,24 +307,53 @@ export function Marketplace() {
                 return;
             }
 
-            // Update the database
+            // Record the listing: BEEF backup + derivation for the server.
             const dbPayload = {
                 propertyId,
                 sellerId: userPubKey,
                 amount: tokens,
                 parentTxid: transferTxid,
                 transferTxid: toOutpoint(newListingTx.txid as string, 0),
-                pricePerShare
+                pricePerShare,
+                listingBeef: encodeBeef(newListingTx.tx as number[]),
+                listingNonce,
+                sellerChild,
+                serverChild,
             };
             console.log('[handleNewListing] Updating database with:', dbPayload);
-            await fetch("/api/new-listing", {
+            const dbRes = await fetch("/api/new-listing", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify(dbPayload),
             });
+            if (!dbRes.ok) {
+                const err = await dbRes.json().catch(() => ({}));
+                console.error('[handleNewListing] new-listing failed:', err);
+                toast.error(err?.error || "Failed to record listing", {
+                    duration: 5000,
+                    position: "top-center",
+                    id: "listing-error",
+                });
+                return;
+            }
             console.log('[handleNewListing] Database updated successfully');
+
+            // Record the listing output in the seller's basket (seller's perspective: counterparty=server, order self-first).
+            await internalizeToBasket(
+                userWallet!,
+                newListingTx.tx as number[],
+                [{
+                    outputIndex: 0,
+                    keyId: listingNonce,
+                    counterparty: SERVER_PUB_KEY,
+                    counterpartyDerivedKey: serverChild,
+                    order: 'self-first',
+                    tags: ['type:share'],
+                }],
+                "List share (seller side)",
+            );
 
             // Show success state instead of closing modal
             setSellSuccess(true);
@@ -385,6 +433,26 @@ export function Marketplace() {
                 });
                 throw new Error(data.error);
             }
+
+            // Internalize the purchased share output into the buyer's wallet basket.
+            if (data?.received) {
+                try {
+                    await internalizeToBasket(
+                        userWallet!,
+                        decodeBeef(data.received.atomicBeef),
+                        [{
+                            outputIndex: data.received.outputIndex,
+                            keyId: data.received.keyId,
+                            counterparty: data.received.counterparty,
+                            tags: ['type:share'],
+                        }],
+                        "Receive purchased share",
+                    );
+                } catch (e) {
+                    console.error('[handlePurchase] Failed to internalize purchased share:', e);
+                }
+            }
+
             // Show success state instead of closing modal
             setPurchaseSuccess(true);
         } catch (e) {

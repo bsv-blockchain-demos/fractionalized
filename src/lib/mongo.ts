@@ -26,12 +26,15 @@ export interface Properties {
     originalMintTxid?: string; // Immutable original mint transaction
     currentOutpoint?: string; // Current UTXO for next purchase (change output)
     paymentTxid?: string;
-    mintTxid?: string; // Deprecated - kept for backward compatibility
-    currentKeyId?: string;
-    currentCounterparty?: string;
-    currentCounterpartyDerivedKey?: string;
-    currentOrder?: 'self-first' | 'self-second';
-    currentBeef?: string; // base64 carry-forward of the tx that created currentOutpoint
+    mintTxid?: string; // Deprecated - kept for backward compatibility (read fallback only)
+  },
+  // How to spend `txids.currentOutpoint`: per-output type-42 derivation + carry-forward BEEF.
+  currentDerivation?: {
+    keyId: string;
+    counterparty: string;
+    counterpartyDerivedKey: string;
+    order: 'self-first' | 'self-second';
+    beef: string; // base64 of the tx that created currentOutpoint
   },
   seller: string,
   sell?: {
@@ -81,12 +84,17 @@ export interface MarketItem {
   pricePerShare: number; // price per share
   createdAt: Date; // created at
   sold?: boolean; // sold
+  // Listing multisig(seller+server) derivation, server's perspective (spends deriving against seller).
+  keyId?: string;
+  counterparty?: string;          // sellerId identity key
+  counterpartyDerivedKey?: string; // sellerChild
+  order?: 'self-first' | 'self-second';
 };
 
 export interface ListingBeef {
   _id?: ObjectId;
   listingId: string;       // market_items _id as string
-  ordLockOutpoint: string; // the multisig outpoint
+  listingOutpoint: string; // the listing multisig outpoint
   beef: string;            // base64
   createdAt: Date;
 }
