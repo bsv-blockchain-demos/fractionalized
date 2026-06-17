@@ -398,6 +398,7 @@ export function Marketplace() {
 
             // Show success state instead of closing modal
             setSellSuccess(true);
+            toast.success("Share listed for sale", { duration: 4000, position: "top-center", id: "list-success" });
             console.log('[handleNewListing] Listing creation completed successfully');
             setLoading(false);
         } catch (e) {
@@ -499,6 +500,7 @@ export function Marketplace() {
 
             // Show success state instead of closing modal
             setPurchaseSuccess(true);
+            toast.success("Share purchased", { duration: 4000, position: "top-center", id: "purchase-success" });
         } catch (e) {
             console.error(e);
             toast.error("Failed to purchase", {

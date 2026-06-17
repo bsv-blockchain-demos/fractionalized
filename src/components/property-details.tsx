@@ -131,6 +131,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
 
             // Show success state
             setInvestSuccess(true);
+            toast.success("Share purchased", { duration: 4000, position: "top-center", id: "invest-success" });
         } catch (e) {
             console.error('Investment error:', e);
             toast.error('Failed to complete investment');

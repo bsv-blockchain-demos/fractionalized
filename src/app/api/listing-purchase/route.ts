@@ -5,7 +5,7 @@ import { makeWallet } from "../../../lib/serverWallet";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
 import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
-import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
+import { broadcastTX } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature, Hash, SatoshisPerKilobyte, UnlockingScript, Beef } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
 import { toOutpoint, parseOutpoint } from "../../../utils/outpoints";
