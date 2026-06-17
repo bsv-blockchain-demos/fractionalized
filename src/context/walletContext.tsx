@@ -26,13 +26,9 @@ const AuthContext = createContext<authContextType>({
     logout: () => { },
 });
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
-    console.log('AuthContextProvider: Component mounting');
     const [userWallet, setUserWallet] = useState<authContextType['userWallet']>(new WalletClient());
-    console.log('AuthContextProvider: userWallet initialized');
     const [userPubKey, setUserPubKey] = useState<authContextType['userPubKey']>(null);
-    console.log('AuthContextProvider: userPubKey initialized');
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-    console.log('AuthContextProvider: isAuthenticated initialized');
 
     const checkAuth = useCallback(async (): Promise<boolean> => {
         console.log('checkAuth: Starting authentication check');
@@ -106,8 +102,6 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     useEffect(() => {
         initializeWallet();
     }, [initializeWallet]);
-
-    console.log('AuthContextProvider: Rendering provider with children');
 
     return (
         <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout }}>

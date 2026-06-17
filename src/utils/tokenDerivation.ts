@@ -34,6 +34,22 @@ export async function deriveRecipientKey(
 }
 
 /**
+ * Derive your OWN child public key against a counterparty at a nonce (you can sign with it).
+ * Used to lock a reclaimed/self-custody output back to yourself: the matching holding then
+ * unlocks with forSelf:true, counterparty = that same identity key.
+ */
+export async function deriveOwnKey(
+  wallet: WalletInterface,
+  counterpartyIdentityKey: string,
+  nonce: string,
+): Promise<string> {
+  const { publicKey } = await wallet.getPublicKey({
+    protocolID: TOKEN_PROTOCOL, keyID: nonce, counterparty: counterpartyIdentityKey, forSelf: true,
+  });
+  return publicKey;
+}
+
+/**
  * Derive BOTH child public keys for a 1-of-2 multisig(self + party) at one nonce.
  * `selfKey` is yours (you can sign with it); `counterpartyKey` is the other party's
  * (needed to rebuild the script hash at spend time).

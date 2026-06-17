@@ -7,6 +7,8 @@ import { InvestModal } from './invest-modal';
 import { useFeatureDisplay } from '../hooks/useFeatureDisplay';
 import { toast } from 'react-hot-toast';
 import { useAuthContext } from '../context/walletContext';
+import { internalizeToBasket } from '../utils/internalizeToBasket';
+import { decodeBeef } from '../utils/beefEncoding';
 
 // Extended property type that includes computed fields from the API
 type PropertyWithDetails = Properties & {
@@ -89,6 +91,28 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             }
 
             console.log(data);
+
+            // Internalize the purchased share output into the investor's wallet basket
+            if (data?.received) {
+                try {
+                    await internalizeToBasket(
+                        userWallet!,
+                        decodeBeef(data.received.atomicBeef),
+                        [{
+                            outputIndex: data.received.outputIndex,
+                            keyId: data.received.keyId,
+                            counterparty: data.received.counterparty,
+                            tags: ['type:share'],
+                        }],
+                        "Receive purchased share",
+                    );
+                    // [DEV] TEMP — verify buyer basket; remove before final commit
+                    const _b = await userWallet!.listOutputs({ basket: 'fractionalized.tokens' });
+                    console.log('[DEV] buyer basket:', _b.totalOutputs, _b.outputs?.map((o: any) => o.outpoint));
+                } catch (e) {
+                    console.warn("Failed to internalize purchased share into wallet basket:", e);
+                }
+            }
 
             // Update local property state to reflect the purchase
             setProperty((prev) => {

@@ -359,12 +359,13 @@ export async function POST(request: Request) {
                 originalMintTxid: mintOutpoint,
                 currentOutpoint: mintOutpoint,
                 paymentTxid: toOutpoint(signedAction.txid, 1),
-                mintTxid: mintOutpoint, // For backward compatibility
-                currentKeyId: mintNonce,
-                currentCounterparty: seller,
-                currentCounterpartyDerivedKey: sellerChild,
-                currentOrder: 'self-second',
-                currentBeef: encodeBeef(atomicBeef),
+            },
+            currentDerivation: {
+                keyId: mintNonce,
+                counterparty: seller,
+                counterpartyDerivedKey: sellerChild,
+                order: 'self-second',
+                beef: encodeBeef(atomicBeef),
             },
             seller,
         };
