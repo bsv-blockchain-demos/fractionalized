@@ -11,7 +11,7 @@ import { traceShareChain } from "../../../utils/shareChain";
 import { toOutpoint, parseOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
 import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
-import { generateNonce, deriveRecipientKey, getIdentityKey, TOKEN_PROTOCOL } from "../../../utils/tokenDerivation";
+import { generateNonce, deriveRecipientKey, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../utils/tokenDerivation";
 import { encodeBeef } from "../../../utils/beefEncoding";
 
 const STORAGE_URL = process.env.WALLET_STORAGE_URL;
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
-    const { marketItemId, buyerId, paymentTX } = await request.json();
+    const { marketItemId, buyerId, paymentNonce, paymentTX } = await request.json();
 
     // Verify the investoryId (requester) is the logged in user
     if (userId !== buyerId) {
@@ -126,11 +126,20 @@ export async function POST(request: Request) {
                 /* firstPubkeyIsWallet */ true
             );
 
+        // Spend the buyer's fee payment via its derived key.
+        // Client locked [buyerChild, serverChild] (buyer first) => server is self-second (firstPubkeyIsWallet=false).
+        const { counterpartyKey: buyerPaymentChild } = await deriveMultisigPair(wallet, buyerId, paymentNonce);
         const paymentUnlockFrame = new PaymentUtxo().unlock(
             /* wallet */ wallet,
-            /* otherPubkey */ buyerId,
+            /* keyID */ paymentNonce,
+            /* counterparty */ buyerId,
+            /* otherPubkey */ buyerPaymentChild,
             /* signOutputs */ "single",
             /* anyoneCanPay */ true,
+            /* sourceSatoshis */ undefined,
+            /* lockingScript */ undefined,
+            /* firstPubkeyIsWallet */ false,
+            /* protocolID */ TOKEN_PROTOCOL,
         );
 
         const ordinalUnlockingScriptLength = await ordinalUnlockingFrame.estimateLength();

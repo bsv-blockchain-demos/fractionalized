@@ -6,9 +6,10 @@ import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
 import { PublicKey } from "@bsv/sdk";
-import { SERVER_PUBLIC_KEY } from "../utils/env";
+import { SERVER_IDENTITY_KEY } from "../utils/env";
 import { PaymentUtxo } from "../utils/paymentUtxo";
 import { hashFromPubkeys } from "@/utils/hashFromPubkeys";
+import { generateNonce, deriveMultisigPair } from "../utils/tokenDerivation";
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef } from "../utils/beefEncoding";
 
@@ -150,8 +151,11 @@ export function Admin() {
 
         try {
             // Step 1: Create payment UTXO
-            // Multisig 1 of 2 so server can use funds for transfer fees
-            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUBLIC_KEY), PublicKey.fromString(userPubKey)]);
+            // Multisig 1 of 2 so server can use funds for transfer fees.
+            // Per-output type-42 derived keys; committed order [user, server] (server self-second on spend).
+            const paymentNonce = generateNonce();
+            const { selfKey: userChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, paymentNonce);
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userChild), PublicKey.fromString(serverChild)]);
             const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
@@ -191,6 +195,7 @@ export function Admin() {
                 body: JSON.stringify({
                     data: _data,
                     paymentTxAction,
+                    paymentNonce,
                     seller: userPubKey,
                 }),
             });

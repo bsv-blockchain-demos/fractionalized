@@ -9,7 +9,7 @@ import { OrdinalsP2MS } from "../../../../utils/ordinalsP2MS";
 import { PaymentUtxo } from "../../../../utils/paymentUtxo";
 import { hashFromPubkeys } from "../../../../utils/hashFromPubkeys";
 import { broadcastTX } from "../../../../hooks/overlayFunctions";
-import { generateNonce, deriveMultisigPair, getIdentityKey } from "../../../../utils/tokenDerivation";
+import { generateNonce, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../../utils/tokenDerivation";
 import { internalizeToBasket } from "../../../../utils/internalizeToBasket";
 import { encodeBeef } from "../../../../utils/beefEncoding";
 
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
-    const { data, paymentTxAction, seller } = await request.json();
+    const { data, paymentTxAction, paymentNonce, seller } = await request.json();
 
     // Identity check: token user must match seller
     if (seller !== userId) {
@@ -127,15 +127,6 @@ export async function POST(request: Request) {
         }
         console.log(`[TIMING] Wallet created in ${Date.now() - walletStart}ms`);
 
-        // Get server public key
-        console.log('[TIMING] Getting server public key...');
-        const pubKeyStart = Date.now();
-        const { publicKey: serverPubKey } = await wallet.getPublicKey({
-            protocolID: [0, "fractionalized"],
-            keyID: "0",
-        });
-        console.log(`[TIMING] Got server public key in ${Date.now() - pubKeyStart}ms`);
-
         // Create property token using server wallet but with user's pubKeyHash
         const title = data.title.trim().toLowerCase();
         const location = data.location.trim().toLowerCase();
@@ -205,8 +196,11 @@ export async function POST(request: Request) {
             /* type */ "deploy+mint"
         );
 
-        // Create payment change locking script (multisig 1 of 2 so server can use funds for transfer fees)
-        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(serverPubKey), PublicKey.fromString(seller)]);
+        // Payment CHANGE: derived 1-of-2 multisig (server + seller) at a fresh nonce.
+        // Committed order [seller, server] => server is self-second on its next spend.
+        const changePaymentNonce = generateNonce();
+        const { selfKey: serverChangeChild, counterpartyKey: sellerChangeChild } = await deriveMultisigPair(wallet, seller, changePaymentNonce);
+        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerChangeChild), PublicKey.fromString(serverChangeChild)]);
         const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
         // Parse payment transaction
@@ -216,15 +210,21 @@ export async function POST(request: Request) {
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
 
+        // Spend the client-locked prefund payment via its derived key.
+        // Client locked [userChild, serverChild] (user first) => server is self-second (firstPubkeyIsWallet=false).
+        const { counterpartyKey: userPaymentChild } = await deriveMultisigPair(wallet, seller, paymentNonce);
         // Create payment unlock frame (used for both preimage and final signing)
         const paymentUnlockFrame = new PaymentUtxo().unlock(
             /* wallet */ wallet,
-            /* otherPubkey */ seller,
+            /* keyID */ paymentNonce,
+            /* counterparty */ seller,
+            /* otherPubkey */ userPaymentChild,
             /* signOutputs */ "all",
             /* anyoneCanPay */ false,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
-            /* firstPubkeyIsWallet */ true // order: server first, then user
+            /* firstPubkeyIsWallet */ false, // order: user first, then server
+            /* protocolID */ TOKEN_PROTOCOL,
         );
 
         // Build preimage for payment input to calculate change satoshis
@@ -366,6 +366,12 @@ export async function POST(request: Request) {
                 counterpartyDerivedKey: sellerChild,
                 order: 'self-second',
                 beef: encodeBeef(atomicBeef),
+            },
+            paymentDerivation: {
+                keyId: changePaymentNonce,
+                counterparty: seller,
+                counterpartyDerivedKey: sellerChangeChild,
+                order: 'self-second',
             },
             seller,
         };

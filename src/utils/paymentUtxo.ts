@@ -12,7 +12,10 @@ import {
   Hash,
   ScriptChunk,
 } from "@bsv/sdk";
+import type { WalletProtocol } from "@bsv/sdk";
 import { calculatePreimage } from "./preimage";
+
+const LEGACY_PROTOCOL: WalletProtocol = [0, "fractionalized"];
 
 export class PaymentUtxo implements ScriptTemplate {
 
@@ -37,12 +40,15 @@ export class PaymentUtxo implements ScriptTemplate {
 
   unlock(
     wallet: WalletInterface,
+    keyID: string,
+    counterparty: string,
     otherPubkey: string, //  the non-wallet pubkey
     signOutputs: "all" | "none" | "single" = "all",
     anyoneCanPay = false,
     sourceSatoshis?: number,
     lockingScript?: Script,
     firstPubkeyIsWallet: boolean = true,
+    protocolID: WalletProtocol = LEGACY_PROTOCOL,
   ): {
     sign: (tx: Transaction, inputIndex: number) => Promise<UnlockingScript>;
     estimateLength: () => Promise<number>;
@@ -54,15 +60,16 @@ export class PaymentUtxo implements ScriptTemplate {
         // BRC-29 pattern
         const { signature } = await wallet.createSignature({
           hashToDirectlySign: Hash.hash256(preimage),
-          protocolID: [0, "fractionalized"],
-          keyID: "0",
-          counterparty: "self",
+          protocolID,
+          keyID,
+          counterparty,
         });
 
         const { publicKey } = await wallet.getPublicKey({
-          protocolID: [0, "fractionalized"],
-          keyID: "0",
-          counterparty: "self",
+          protocolID,
+          keyID,
+          counterparty,
+          forSelf: true,
         });
 
         const raw = Signature.fromDER(signature, "hex");

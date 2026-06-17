@@ -36,6 +36,13 @@ export interface Properties {
     order: 'self-first' | 'self-second';
     beef: string; // base64 of the tx that created currentOutpoint
   },
+  // How to spend the payment-change UTXO (txids.paymentTxid): per-output type-42 derivation.
+  paymentDerivation?: {
+    keyId: string;
+    counterparty: string;            // user (seller) identity key
+    counterpartyDerivedKey: string;  // user's derived child
+    order: 'self-first' | 'self-second';
+  },
   seller: string,
   sell?: {
     percentToSell: number;

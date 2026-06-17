@@ -127,14 +127,33 @@ export async function POST(request: Request) {
                 "single", true, undefined, undefined, cur.order === 'self-first', TOKEN_PROTOCOL)
             : new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", true, undefined, undefined, false);
 
-        const paymentUnlockFrame = new PaymentUtxo().unlock(
-            /* wallet */ wallet,
-            /* otherPubkey */ property.seller,
-            /* signOutputs */ "single",
-            /* anyoneCanPay */ true,
-            /* sourceSatoshis */ undefined,
-            /* lockingScript */ undefined
-        );
+        // Payment unlock: recorded type-42 derivation, else legacy static key.
+        // Legacy lock was [server, seller] (server first => firstPubkeyIsWallet=true).
+        const pd = property.paymentDerivation;
+        const paymentUnlockFrame = pd?.keyId
+            ? new PaymentUtxo().unlock(
+                /* wallet */ wallet,
+                /* keyID */ pd.keyId,
+                /* counterparty */ pd.counterparty,
+                /* otherPubkey */ pd.counterpartyDerivedKey,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ pd.order === 'self-first',
+                /* protocolID */ TOKEN_PROTOCOL,
+            )
+            : new PaymentUtxo().unlock(
+                /* wallet */ wallet,
+                /* keyID */ "0",
+                /* counterparty */ "self",
+                /* otherPubkey */ property.seller,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ true,
+            );
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
         // Derive a per-output child key for the investor (only they can derive the matching private key)
@@ -160,11 +179,6 @@ export async function POST(request: Request) {
         // On the final sale (buying all remaining shares) there is no ordinal change.
         const hasOrdinalChange = changeAmount > 0;
 
-        // Only allow change if it's from the original mint outpoint.
-        const { publicKey: serverKey } = await wallet.getPublicKey({
-            protocolID: [0, "fractionalized"],
-            keyID: "0",
-        });
         // Ordinal change: derived 1-of-2 multisig (server + seller).
         const changeNonce = generateNonce();
         const { selfKey: serverChangeChild, counterpartyKey: sellerChangeChild } = await deriveMultisigPair(wallet, property.seller, changeNonce);
@@ -186,8 +200,11 @@ export async function POST(request: Request) {
             throw new Error("Failed to get transaction by txid");
         }
 
-        // Create new multiSig lockingScript for the payment change UTXO
-        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(serverKey), PublicKey.fromString(property.seller)]);
+        // Payment CHANGE: derived 1-of-2 multisig (server + seller) at a FRESH nonce.
+        // Committed order [seller, server] => server is self-second on its next spend.
+        const changePaymentNonce = generateNonce();
+        const { selfKey: serverPaymentChangeChild, counterpartyKey: sellerPaymentChangeChild } = await deriveMultisigPair(wallet, property.seller, changePaymentNonce);
+        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerPaymentChangeChild), PublicKey.fromString(serverPaymentChangeChild)]);
         const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
@@ -356,6 +373,12 @@ export async function POST(request: Request) {
         // Final sale (no ordinal change): leave currentOutpoint as-is; status → funded below.
         if (hasPaymentChange) {
             set["txids.paymentTxid"] = toOutpoint(transferTx.txid as string, paymentChangeIndex);
+            set["paymentDerivation"] = {
+                keyId: changePaymentNonce,
+                counterparty: property.seller,
+                counterpartyDerivedKey: sellerPaymentChangeChild,
+                order: 'self-second',
+            };
         }
         if (Object.keys(set).length > 0) {
             await propertiesCollection.updateOne({ _id: propertyObjectId }, { $set: set });

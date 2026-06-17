@@ -63,12 +63,10 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
             console.log('initializeWallet: Wallet authenticated, setting isAuthenticated to true');
             setIsAuthenticated(true);
 
-            console.log('initializeWallet: Fetching public key');
-            const { publicKey } = await userWallet.getPublicKey({
-                protocolID: [0, "fractionalized"],
-                keyID: "0",
-            });
-            console.log('initializeWallet: publicKey fetched:', publicKey);
+            console.log('initializeWallet: Fetching identity key');
+            // Identity key (not a derived key) — type-42 derivation is rooted in it.
+            const { publicKey } = await userWallet.getPublicKey({ identityKey: true });
+            console.log('initializeWallet: identity key fetched:', publicKey);
 
             // Only update state once everything is fetched
             console.log('initializeWallet: Setting userPubKey');

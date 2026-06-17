@@ -12,14 +12,13 @@ import { calcTokenTransfer } from "../hooks/calcTokenTransfer";
 import { PaymentUtxo } from "../utils/paymentUtxo";
 import { Hash, Transaction, PublicKey, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
 import { parseOutpoint, toOutpoint } from "../utils/outpoints";
-import { SERVER_PUBLIC_KEY } from "../utils/env";
+import { SERVER_IDENTITY_KEY } from "../utils/env";
 import toast from "react-hot-toast";
 import { hashFromPubkeys } from "../utils/hashFromPubkeys";
 import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from "../utils/tokenDerivation";
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { encodeBeef, decodeBeef } from "../utils/beefEncoding";
-
-const SERVER_PUB_KEY = SERVER_PUBLIC_KEY;
+import { useCancelListing, CancelListingItem } from "../hooks/useCancelListing";
 
 type ApiListing = {
     _id: string;
@@ -70,21 +69,63 @@ export function Marketplace() {
     } | null>(null);
 
     const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+    const { cancelListing, cancellingId } = useCancelListing();
 
     const [items, setItems] = useState<ApiListing[]>([]);
 
-    useEffect(() => {
-        async function fetchListings() {
-            try {
-                const res = await fetch("/api/listings");
-                const data = await res.json();
-                setItems(Array.isArray(data?.items) ? data.items : []);
-            } catch (e) {
-                console.error(e);
-            }
+    const fetchListings = useCallback(async () => {
+        try {
+            const res = await fetch("/api/listings");
+            const data = await res.json();
+            setItems(Array.isArray(data?.items) ? data.items : []);
+        } catch (e) {
+            console.error(e);
         }
-        fetchListings();
     }, []);
+
+    useEffect(() => {
+        fetchListings();
+    }, [fetchListings]);
+
+    // Cancel a listing the viewer owns. /api/listings lacks the cancel derivation data,
+    // so fetch the seller's own listings to map the entry into a CancelListingItem first.
+    const handleCancelOwnListing = useCallback(async (item: ApiListing) => {
+        try {
+            const res = await fetch("/api/my-listings", { method: "POST" });
+            if (!res.ok) {
+                throw new Error("HTTP " + res.status);
+            }
+            const data = await res.json();
+            const myItems: any[] = Array.isArray(data?.items) ? data.items : [];
+            const found = myItems.find((i) => String(i?._id) === String(item._id));
+            if (!found) {
+                toast.error("Could not find your listing to cancel", {
+                    duration: 5000, position: "top-center", id: "cancel-error",
+                });
+                return;
+            }
+
+            const cancelItem: CancelListingItem = {
+                _id: String(found._id),
+                propertyId: String(found.propertyId ?? item.propertyId),
+                sellAmount: Number(found.sellAmount ?? item.sellAmount),
+                listingNonce: found.listingNonce ? String(found.listingNonce) : undefined,
+                listingOutpoint: found.listingOutpoint ? String(found.listingOutpoint) : undefined,
+                listingBeef: found.listingBeef ? String(found.listingBeef) : undefined,
+                tokenTxid: found.tokenTxid ? String(found.tokenTxid) : undefined,
+            };
+
+            const ok = await cancelListing(cancelItem);
+            if (ok) {
+                setItems((prev) => prev.filter((l) => l._id !== item._id));
+            }
+        } catch (e) {
+            console.error("[handleCancelOwnListing] Error:", e);
+            toast.error("Failed to cancel listing", {
+                duration: 5000, position: "top-center", id: "cancel-error",
+            });
+        }
+    }, [cancelListing]);
 
     const handleNewListing = useCallback(async (payload: payloadData) => {
         console.log('[handleNewListing] Starting with payload:', payload);
@@ -164,7 +205,7 @@ export function Marketplace() {
 
             // Derive both listing-multisig child keys (seller signs with sellerChild; serverChild rebuilds the script).
             const listingNonce = generateNonce();
-            const { selfKey: sellerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_PUB_KEY, listingNonce);
+            const { selfKey: sellerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, listingNonce);
 
             // Multisig lock for the new output, committed order [seller, server].
             console.log('[handleNewListing] Creating multisig locking script...');
@@ -347,7 +388,7 @@ export function Marketplace() {
                 [{
                     outputIndex: 0,
                     keyId: listingNonce,
-                    counterparty: SERVER_PUB_KEY,
+                    counterparty: SERVER_IDENTITY_KEY,
                     counterpartyDerivedKey: serverChild,
                     order: 'self-first',
                     tags: ['type:share'],
@@ -390,8 +431,11 @@ export function Marketplace() {
             }
 
             setPurchaseLoading(true);
-            // Create the paymentTX
-            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUB_KEY), PublicKey.fromString(buyerId)]);
+            // Create the paymentTX with a per-output type-42 derived 1-of-2 multisig (buyer + server).
+            // Committed order [buyer, server] => server is self-second when it spends the fee.
+            const paymentNonce = generateNonce();
+            const { selfKey: buyerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, paymentNonce);
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(buyerChild), PublicKey.fromString(serverChild)]);
             const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
             const paymentUtxo = await userWallet!.createAction({
@@ -422,7 +466,7 @@ export function Marketplace() {
             const response = await fetch("/api/listing-purchase", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ marketItemId, buyerId, paymentTX: paymentUtxo }),
+                body: JSON.stringify({ marketItemId, buyerId, paymentNonce, paymentTX: paymentUtxo }),
             });
             const data = await response.json();
             if (response.status !== 200) {
@@ -521,7 +565,10 @@ export function Marketplace() {
             <div className="section-divider" />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filtered.map((item) => (
+                {filtered.map((item) => {
+                  const isSeller = !!userPubKey && String(item.sellerId).toLowerCase() === String(userPubKey).toLowerCase();
+                  const isCancelling = cancellingId === item._id;
+                  return (
                     <div
                         key={item._id}
                         className="card-glass group bg-bg-secondary border border-border-subtle rounded-xl overflow-hidden hover:shadow-md transition-shadow"
@@ -535,8 +582,11 @@ export function Marketplace() {
 
                         <div className="p-4 space-y-3">
                             <div>
-                                <h3 className="text-lg font-semibold text-text-primary leading-snug">
+                                <h3 className="text-lg font-semibold text-text-primary leading-snug flex items-center gap-2">
                                     {item.name}
+                                    {isSeller && (
+                                        <span className="badge-dark text-xs font-normal text-accent-primary">Your sale</span>
+                                    )}
                                 </h3>
                                 <p className="text-sm text-text-secondary">{item.location}</p>
                             </div>
@@ -557,28 +607,40 @@ export function Marketplace() {
                                 >
                                     View
                                 </Link>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setPurchaseItem({
-                                            id: item._id,
-                                            name: item.name,
-                                            location: item.location,
-                                            sellAmount: item.sellAmount,
-                                            pricePerShare: item.pricePerShare,
-                                            propertyId: item.propertyId,
-                                            sellerId: item.sellerId,
-                                        });
-                                        setPurchaseOpen(true);
-                                    }}
-                                    className="flex-1 text-center bg-accent-primary hover:bg-accent-primary/90 text-white rounded-lg px-3 py-2 transition-colors btn-glow"
-                                >
-                                    Buy
-                                </button>
+                                {isSeller ? (
+                                    <button
+                                        type="button"
+                                        disabled={isCancelling || !!cancellingId}
+                                        onClick={() => handleCancelOwnListing(item)}
+                                        className="flex-1 text-center bg-bg-primary hover:bg-bg-primary/80 text-red-400 hover:text-red-300 border border-border-subtle rounded-lg px-3 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed btn-glow"
+                                    >
+                                        {isCancelling ? "Cancelling..." : "Cancel"}
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPurchaseItem({
+                                                id: item._id,
+                                                name: item.name,
+                                                location: item.location,
+                                                sellAmount: item.sellAmount,
+                                                pricePerShare: item.pricePerShare,
+                                                propertyId: item.propertyId,
+                                                sellerId: item.sellerId,
+                                            });
+                                            setPurchaseOpen(true);
+                                        }}
+                                        className="flex-1 text-center bg-accent-primary hover:bg-accent-primary/90 text-white rounded-lg px-3 py-2 transition-colors btn-glow"
+                                    >
+                                        Buy
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
-                ))}
+                  );
+                })}
             </div>
 
             {filtered.length === 0 && (
