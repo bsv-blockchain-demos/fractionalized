@@ -1,24 +1,27 @@
-import { connectToMongo, propertiesCollection, sharesCollection, locksCollection, Shares, marketItemsCollection } from "../../../lib/mongo";
+import { connectToMongo, propertiesCollection, sharesCollection, locksCollection, Shares, marketItemsCollection, listingBeefsCollection } from "../../../lib/mongo";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { makeWallet } from "../../../lib/serverWallet";
 import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { OrdinalsP2PKH } from "../../../utils/ordinalsP2PKH";
 import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
-import { broadcastTX, getTransactionByTxID } from "../../../hooks/overlayFunctions";
+import { broadcastTX } from "../../../hooks/overlayFunctions";
 import { Transaction, TransactionSignature, Signature, Hash, SatoshisPerKilobyte, UnlockingScript, Beef } from "@bsv/sdk";
 import { traceShareChain } from "../../../utils/shareChain";
 import { toOutpoint, parseOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
+import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
+import { generateNonce, deriveRecipientKey, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../utils/tokenDerivation";
+import { encodeBeef } from "../../../utils/beefEncoding";
 
-const STORAGE_URL = process.env.WALLET_STORAGE_UR;
+const STORAGE_URL = process.env.WALLET_STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
-    const { marketItemId, buyerId, paymentTX } = await request.json();
+    const { marketItemId, buyerId, paymentNonce, paymentTX } = await request.json();
 
     // Verify the investoryId (requester) is the logged in user
     if (userId !== buyerId) {
@@ -73,18 +76,20 @@ export async function POST(request: Request) {
             throw e;
         }
 
-        // Get the ordinal tx and parse the vout
+        // Resolve the listing's source tx from the DB backup (listing_beefs), falling back to overlay.
         const { txid: ordinalTxid, vout: ordinalVout } = parseOutpoint(share.transferTxid);
-        const ordinalTx = await getTransactionByTxID(ordinalTxid);
-        if (!ordinalTx) {
-            throw new Error("Failed to get transaction by txid");
-        }
+        const beefDoc = await listingBeefsCollection.findOne({ listingId: marketItemId });
+        const fullOrdinalTx = await fetchTokenSourceTx(share.transferTxid, beefDoc?.beef);
 
-        const fullOrdinalTx = Transaction.fromBEEF(ordinalTx.outputs[0].beef as number[]);
+        const serverIdentityKey = await getIdentityKey(wallet);
+
+        // Derive the buyer's P2PKH key at a fresh nonce (server is sender; only buyer can derive priv).
+        const buyNonce = generateNonce();
+        const buyerChild = await deriveRecipientKey(wallet, buyerId, buyNonce);
 
         // Create ordinal transfer transaction scripts
-        // Hash the public key to get pubKeyHash for P2PKH locking script
-        const buyerPubKeyHash = Hash.hash160(buyerId, "hex") as number[];
+        // Lock to the buyer's DERIVED P2PKH key hash.
+        const buyerPubKeyHash = Hash.hash160(buyerChild, "hex") as number[];
         const ordinalTransferScript = new OrdinalsP2PKH().lock(
             /* address */ buyerPubKeyHash,
             /* assetId */ share.transferTxid.replace(".", "_"),
@@ -95,24 +100,46 @@ export async function POST(request: Request) {
 
         // Payment unlocking will be signed against a preimage (frame-based)
 
-        // Create unlocking frames
-        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(
+        // Server spends the listing multisig by deriving against the seller; legacy listings use the self/0 form.
+        const ordinalUnlockingFrame = marketItem.keyId
+            ? new OrdinalsP2MS().unlock(
+                /* wallet */ wallet,
+                /* keyID */ marketItem.keyId,
+                /* counterparty */ marketItem.counterparty as string,
+                /* otherPubkey */ marketItem.counterpartyDerivedKey as string,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ marketItem.order === 'self-first',
+                /* protocolID */ TOKEN_PROTOCOL,
+            )
+            : new OrdinalsP2MS().unlock(
+                /* wallet */ wallet,
+                /* keyID */ "0",
+                /* counterparty */ "self",
+                /* otherPubkey */ share.investorId,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ true
+            );
+
+        // Spend the buyer's fee payment via its derived key.
+        // Client locked [buyerChild, serverChild] (buyer first) => server is self-second (firstPubkeyIsWallet=false).
+        const { counterpartyKey: buyerPaymentChild } = await deriveMultisigPair(wallet, buyerId, paymentNonce);
+        const paymentUnlockFrame = new PaymentUtxo().unlock(
             /* wallet */ wallet,
-            /* keyID */ "0",
-            /* counterparty */ "self",
-            /* otherPubkey */ share.investorId,
+            /* keyID */ paymentNonce,
+            /* counterparty */ buyerId,
+            /* otherPubkey */ buyerPaymentChild,
             /* signOutputs */ "single",
             /* anyoneCanPay */ true,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
-            /* firstPubkeyIsWallet */ true
-        );
-
-        const paymentUnlockFrame = new PaymentUtxo().unlock(
-            /* wallet */ wallet,
-            /* otherPubkey */ buyerId,
-            /* signOutputs */ "single",
-            /* anyoneCanPay */ true,
+            /* firstPubkeyIsWallet */ false,
+            /* protocolID */ TOKEN_PROTOCOL,
         );
 
         const ordinalUnlockingScriptLength = await ordinalUnlockingFrame.estimateLength();
@@ -120,7 +147,7 @@ export async function POST(request: Request) {
 
         // Merge the two input beefs required for the inputBEEF
         const beef = new Beef();
-        beef.mergeBeef(ordinalTx.outputs[0].beef);
+        beef.mergeBeef(fullOrdinalTx.toBEEF());
         beef.mergeBeef(paymentTX.tx);
 
         // Create transfer transaction with unlockingScriptLength
@@ -197,7 +224,7 @@ export async function POST(request: Request) {
             throw new Error("Failed to broadcast transfer transaction");
         }
 
-        // Update shares collection
+        // Update shares collection. Buyer's P2PKH: keyId=buyNonce, counterparty=server (buyer unlocks against server).
         const formattedShare: Shares = {
             _id: new ObjectId(),
             propertyId: propertyObjectId,
@@ -206,11 +233,16 @@ export async function POST(request: Request) {
             parentTxid: share.transferTxid,
             transferTxid: toOutpoint(transferTx.txid as string, 0),
             createdAt: new Date(),
+            keyId: buyNonce,
+            counterparty: serverIdentityKey,
         };
         const shareRes = await sharesCollection.insertOne(formattedShare);
         if (!shareRes.insertedId) {
             throw new Error("Failed to create share");
         }
+
+        // Listing consumed: drop its BEEF backup.
+        await listingBeefsCollection.deleteOne({ listingId: marketItemId });
 
         // Update listing
         const listingRes = await marketItemsCollection.updateOne({ _id: new ObjectId(marketItemId) }, { $set: { sold: true } }, { upsert: true });
@@ -218,7 +250,15 @@ export async function POST(request: Request) {
             throw new Error("Failed to update listing");
         }
 
-        return NextResponse.json({ status: "success" }, { status: 200 });
+        return NextResponse.json({
+            status: "success",
+            received: {
+                atomicBeef: encodeBeef(transferTx.tx as number[]),
+                outputIndex: 0,
+                keyId: buyNonce,
+                counterparty: serverIdentityKey,
+            },
+        }, { status: 200 });
     } catch (e) {
         console.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -6,9 +6,12 @@ import { SellSharesModal, type SellSharesConfig } from "./admin-sell-modal";
 import { useAuthContext } from "../context/walletContext";
 import { toast } from "react-hot-toast";
 import { PublicKey } from "@bsv/sdk";
-import { SERVER_PUBLIC_KEY } from "../utils/env";
+import { SERVER_IDENTITY_KEY } from "../utils/env";
 import { PaymentUtxo } from "../utils/paymentUtxo";
 import { hashFromPubkeys } from "@/utils/hashFromPubkeys";
+import { generateNonce, deriveMultisigPair } from "../utils/tokenDerivation";
+import { internalizeToBasket } from "../utils/internalizeToBasket";
+import { decodeBeef } from "../utils/beefEncoding";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -148,8 +151,11 @@ export function Admin() {
 
         try {
             // Step 1: Create payment UTXO
-            // Multisig 1 of 2 so server can use funds for transfer fees
-            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(SERVER_PUBLIC_KEY), PublicKey.fromString(userPubKey)]);
+            // Multisig 1 of 2 so server can use funds for transfer fees.
+            // Per-output type-42 derived keys; committed order [user, server] (server self-second on spend).
+            const paymentNonce = generateNonce();
+            const { selfKey: userChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, paymentNonce);
+            const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userChild), PublicKey.fromString(serverChild)]);
             const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
             // Calculate required sats for payment UTXO
@@ -189,6 +195,7 @@ export function Admin() {
                 body: JSON.stringify({
                     data: _data,
                     paymentTxAction,
+                    paymentNonce,
                     seller: userPubKey,
                 }),
             });
@@ -211,6 +218,31 @@ export function Admin() {
             }
 
             setStep2("success");
+
+            // Internalize the minted multisig output into the seller's own wallet basket
+            if (createPropertyData?.received) {
+                try {
+                    await internalizeToBasket(
+                        userWallet!,
+                        decodeBeef(createPropertyData.received.atomicBeef),
+                        [{
+                            outputIndex: createPropertyData.received.outputIndex,
+                            keyId: createPropertyData.received.keyId,
+                            counterparty: createPropertyData.received.counterparty,
+                            counterpartyDerivedKey: createPropertyData.received.counterpartyDerivedKey,
+                            order: createPropertyData.received.order,
+                            tags: ['type:share'],
+                        }],
+                        "Receive minted shares",
+                    );
+                    // [DEV] TEMP — verify seller basket
+                    const _b = await userWallet!.listOutputs({ basket: 'fractionalized.tokens' });
+                    console.log('[DEV] seller basket:', _b.totalOutputs, _b.outputs?.map((o: any) => o.outpoint));
+                } catch (internalizeError) {
+                    console.warn("Failed to internalize minted output into seller basket — property was created but wallet basket entry is missing:", internalizeError);
+                }
+            }
+
             // Store the created property ID for navigation
             if (createPropertyData?.data?.insertedId) {
                 setCreatedPropertyId(createPropertyData.data.insertedId);
@@ -293,6 +325,64 @@ export function Admin() {
 
     const removeImage = (idx: number) =>
         setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
+
+    const showDevTools = process.env.NODE_ENV === "development";
+ 
+    const fillWithTestData = () => {
+        const now = Date.now();
+        const randInt = (min: number, max: number) => Math.floor(min + Math.random() * (max - min + 1));
+        const pick = <T,>(arr: T[]) => arr[randInt(0, arr.length - 1)];
+    
+        setForm((f) => {
+            const testId = randInt(1000, 9999);
+            const title = `Test Property ${testId}`.slice(0, MAX_TITLE);
+            const location = `${pick(["Dubai Marina", "Downtown", "Business Bay", "JBR", "Palm Jumeirah"])} | ${pick(["Apartment", "Studio", "Villa"])}`.slice(0, MAX_LOCATION);
+    
+            const price = randInt(120000, 950000);
+            const valuation = price + randInt(10000, 250000);
+    
+            const features = Object.fromEntries(
+                Object.keys(f.features).map((k) => [k, randInt(0, 5)])
+            ) as Record<string, number>;
+    
+            return {
+                ...f,
+                title,
+                location,
+                status: pick(["open", "upcoming", "funded"] as Status[]),
+                investors: String(randInt(0, 100)),
+                priceUSD: String(price),
+                currentValuationUSD: String(valuation),
+                annualisedReturn: `${(Math.random() * 12 + 3).toFixed(2)}%`,
+                grossYield: `${(Math.random() * 8 + 2).toFixed(2)}%`,
+                netYield: `${(Math.random() * 6 + 1).toFixed(2)}%`,
+                investmentBreakdown: {
+                    purchaseCost: String(randInt(1500, 12000)),
+                    transactionCost: String(randInt(500, 8000)),
+                    runningCost: String(randInt(300, 6000)),
+                },
+                whyInvest: [
+                    {
+                        title: "Stable income".slice(0, MAX_WHY_TITLE),
+                        text: `Projected rental demand with conservative assumptions. (${testId})`.slice(0, MAX_WHY_TEXT),
+                    },
+                    {
+                        title: "Prime location".slice(0, MAX_WHY_TITLE),
+                        text: "Close to amenities and transport, supporting long-term occupancy.".slice(0, MAX_WHY_TEXT),
+                    },
+                ],
+                descriptionDetails: (
+                    `A well-maintained property for demo testing. Ref ${testId}. ` +
+                    `Numbers are generated locally to speed up repeated create-property testing.`
+                ).slice(0, MAX_DETAILS),
+                descriptionFeatures: "Pool, Gym, Parking, Security, Balcony",
+                features,
+                proofOfOwnership: "",
+            };
+        });
+    
+        setSellConfig({ percentToSell: 1 });
+    };
 
     const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -449,6 +539,17 @@ export function Admin() {
 
             {/* Form - show only when not processing and not completed */}
             {!processing && step2 !== "success" && (
+                <>
+                {showDevTools && (
+                    <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary hover:bg-bg-secondary hover:cursor-pointer transition-colors text-sm btn-glow"
+                        onClick={fillWithTestData}
+                        disabled={processing}
+                    >
+                        Generate
+                    </button>
+                )}
                 <form onSubmit={onSubmit} className="space-y-6">
                 <div className="rounded-xl border border-border-subtle bg-bg-secondary p-4">
                     <h2 className="text-lg font-semibold mb-3 text-text-primary">Basic Info</h2>
@@ -827,7 +928,7 @@ export function Admin() {
                             )}
                         </div>
                         <div className="text-xs text-text-secondary">
-                            Max file size: 5MB. File will be securely stored as base64 encoded data.
+                            Max file size: 5MB. File will be securely stored as encoded data.
                         </div>
                     </div>
                 </div>
@@ -847,6 +948,7 @@ export function Admin() {
                     </div>
                 </div>
             </form>
+            </>
             )}
 
             <SellSharesModal

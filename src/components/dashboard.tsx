@@ -9,6 +9,7 @@ import { toast } from "react-hot-toast";
 import SellingListings from "./dashboard/SellingListings";
 import MarketListings from "./dashboard/MarketListings";
 import PortfolioStats from "./dashboard/PortfolioStats";
+import { useCancelListing } from "../hooks/useCancelListing";
 
 export function Dashboard() {
   // User shares mapped to properties
@@ -23,12 +24,17 @@ export function Dashboard() {
     location: string;
     sellAmount: number;
     pricePerShare: number;
+    listingNonce?: string;
+    listingOutpoint?: string;
+    listingBeef?: string;
+    tokenTxid?: string;
   }>>([]);
 
   const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
   const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
   const [loadingMyListings, setLoadingMyListings] = useState<boolean>(false);
   const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+  const { cancelListing, cancellingId } = useCancelListing();
 
   useEffect(() => {
     const fetchInvestedProperties = async () => {
@@ -129,6 +135,10 @@ export function Dashboard() {
           location: String(i?.location ?? "Unknown"),
           sellAmount: Number(i?.sellAmount ?? 0),
           pricePerShare: Number(i?.pricePerShare ?? 0),
+          listingNonce: i?.listingNonce ? String(i.listingNonce) : undefined,
+          listingOutpoint: i?.listingOutpoint ? String(i.listingOutpoint) : undefined,
+          listingBeef: i?.listingBeef ? String(i.listingBeef) : undefined,
+          tokenTxid: i?.tokenTxid ? String(i.tokenTxid) : undefined,
         })));
       } catch (e) {
         console.error(e);
@@ -182,6 +192,23 @@ export function Dashboard() {
     fetchSellingProperties();
     // Re-run if the user identity changes
   }, [userWallet, userPubKey, initializeWallet]);
+
+  // Cancel a listing via the shared hook, then optimistically remove it from the UI.
+  const handleCancelListing = (item: {
+    _id: string;
+    propertyId: string;
+    sellAmount: number;
+    listingNonce?: string;
+    listingOutpoint?: string;
+    listingBeef?: string;
+    tokenTxid?: string;
+  }) => {
+    cancelListing(item).then((ok) => {
+      if (ok) {
+        setMyListings((prev) => prev.filter((l) => l._id !== item._id));
+      }
+    });
+  };
 
   const investedProperties = investedCards;
 
@@ -286,7 +313,12 @@ export function Dashboard() {
       <div className="section-divider" />
 
       {/* Your Market Listings */}
-      <MarketListings loading={loadingMyListings} items={myListings} />
+      <MarketListings
+        loading={loadingMyListings}
+        items={myListings}
+        onCancel={handleCancelListing}
+        cancellingId={cancellingId}
+      />
 
       <div className="section-divider" />
 

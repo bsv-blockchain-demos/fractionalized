@@ -11,6 +11,10 @@ import { PaymentUtxo } from "../../../utils/paymentUtxo";
 import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
 import { requireAuth } from "../../../utils/apiAuth";
 import { hashFromPubkeys } from "../../../utils/hashFromPubkeys";
+import { generateNonce, deriveMultisigPair, deriveRecipientKey, getIdentityKey, TOKEN_PROTOCOL } from "../../../utils/tokenDerivation";
+import { internalizeToBasket } from "../../../utils/internalizeToBasket";
+import { encodeBeef } from "../../../utils/beefEncoding";
+import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
 
 const STORAGE = process.env.WALLET_STORAGE_URL;
 const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -106,45 +110,57 @@ export async function POST(request: Request) {
 
         // Payment unlocking will be signed against the preimage (frame-based)
 
+        // Server's root identity key (counterparty value recipients/parties derive against)
+        const serverIdentityKey = await getIdentityKey(wallet);
+
         // Spend from the current outpoint (either original mint or latest change output)
         const currentOrdinalOutpoint = property.txids.currentOutpoint as string;
         const { txid: parentTxID, vout: parentVout } = parseOutpoint(currentOrdinalOutpoint);
 
-        // Use overlay query with parentTxID to get full TX
-        const response = await getTransactionByTxID(parentTxID);
-        const txbeef = response?.outputs[0].beef;
+        // Resolve the ordinal source tx via carry-forward BEEF (falls back to overlay inside helper)
+        const fullParentTx = await fetchTokenSourceTx(currentOrdinalOutpoint, property.currentDerivation?.beef);
 
-        if (!response || !txbeef) {
-            throw new Error("Failed to get transaction by txid");
-        }
+        // Ordinal unlock: recorded type-42 derivation, else legacy.
+        const cur = property.currentDerivation;
+        const ordinalUnlockingFrame = cur?.keyId
+            ? new OrdinalsP2MS().unlock(wallet, cur.keyId, cur.counterparty, cur.counterpartyDerivedKey,
+                "single", true, undefined, undefined, cur.order === 'self-first', TOKEN_PROTOCOL)
+            : new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", true, undefined, undefined, false);
 
-        const fullParentTx = Transaction.fromBEEF(txbeef as number[]);
-
-        // Create the ordinal unlocking and locking script for transfer (mint spend => treat as first)
-        const ordinalUnlockingFrame = new OrdinalsP2MS().unlock(
-            /* wallet */ wallet,
-            /* keyID */ "0",
-            /* counterparty */ "self",
-            /* otherPubkey */ property.seller,
-            /* signOutputs */ "single",
-            /* anyoneCanPay */ true,
-            /* sourceSatoshis */ undefined,
-            /* lockingScript */ undefined,
-            /* firstPubkeyIsWallet */ false
-        );
-
-        const paymentUnlockFrame = new PaymentUtxo().unlock(
-            /* wallet */ wallet,
-            /* otherPubkey */ property.seller,
-            /* signOutputs */ "single",
-            /* anyoneCanPay */ true,
-            /* sourceSatoshis */ undefined,
-            /* lockingScript */ undefined
-        );
+        // Payment unlock: recorded type-42 derivation, else legacy static key.
+        // Legacy lock was [server, seller] (server first => firstPubkeyIsWallet=true).
+        const pd = property.paymentDerivation;
+        const paymentUnlockFrame = pd?.keyId
+            ? new PaymentUtxo().unlock(
+                /* wallet */ wallet,
+                /* keyID */ pd.keyId,
+                /* counterparty */ pd.counterparty,
+                /* otherPubkey */ pd.counterpartyDerivedKey,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ pd.order === 'self-first',
+                /* protocolID */ TOKEN_PROTOCOL,
+            )
+            : new PaymentUtxo().unlock(
+                /* wallet */ wallet,
+                /* keyID */ "0",
+                /* counterparty */ "self",
+                /* otherPubkey */ property.seller,
+                /* signOutputs */ "single",
+                /* anyoneCanPay */ true,
+                /* sourceSatoshis */ undefined,
+                /* lockingScript */ undefined,
+                /* firstPubkeyIsWallet */ true,
+            );
 
         const assetId = currentOrdinalOutpoint.replace(".", "_");
-        // Hash the public key to get pubKeyHash for P2PKH locking script
-        const investorPubKeyHash = Hash.hash160(investorId, "hex") as number[];
+        // Derive a per-output child key for the investor (only they can derive the matching private key)
+        const transferNonce = generateNonce();
+        const investorChild = await deriveRecipientKey(wallet, investorId, transferNonce);
+        // Lock to the investor's derived child key.
+        const investorPubKeyHash = Hash.hash160(investorChild, "hex") as number[];
         const ordinalTransferScript = new OrdinalsP2PKH().lock(
             /* address */ investorPubKeyHash,
             /* assetId */ assetId,
@@ -160,14 +176,14 @@ export async function POST(request: Request) {
         if (changeAmount < 0) {
             throw new Error("Not enough tokens to purchase");
         }
+        // On the final sale (buying all remaining shares) there is no ordinal change.
+        const hasOrdinalChange = changeAmount > 0;
 
-        // Only allow change if it's from the original mint outpoint
-        const { publicKey: serverKey } = await wallet.getPublicKey({
-            protocolID: [0, "fractionalized"],
-            keyID: "0",
-        });
-        // IMPORTANT: Order must match original mint in admin.tsx: [user/seller, server]
-        const oneOfTwohashForChange = hashFromPubkeys([PublicKey.fromString(property.seller), PublicKey.fromString(serverKey)]);
+        // Ordinal change: derived 1-of-2 multisig (server + seller).
+        const changeNonce = generateNonce();
+        const { selfKey: serverChangeChild, counterpartyKey: sellerChangeChild } = await deriveMultisigPair(wallet, property.seller, changeNonce);
+        // Concat order [seller, server] (must match spend).
+        const oneOfTwohashForChange = hashFromPubkeys([PublicKey.fromString(sellerChangeChild), PublicKey.fromString(serverChangeChild)]);
 
         const changeScript = new OrdinalsP2MS().lock(
             /* oneOfTwoHash */ oneOfTwohashForChange,
@@ -177,20 +193,18 @@ export async function POST(request: Request) {
             /* type */ "transfer"
         );
 
-        // Query to overlay to get the TX beefs
-        const ordParentTx = await getTransactionByTxID(parentTxID);
-        if (!ordParentTx) {
-            throw new Error("Failed to get transaction by txid");
-        }
-
+        // Payment source still via overlay (legacy); ordinal uses carry-forward above.
         const { txid: paymentTxID, vout: paymentVout } = parseOutpoint(property.txids.paymentTxid as string);
         const paymentTx = await getTransactionByTxID(paymentTxID);
         if (!paymentTx) {
             throw new Error("Failed to get transaction by txid");
         }
 
-        // Create new multiSig lockingScript for the payment change UTXO
-        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(serverKey), PublicKey.fromString(property.seller)]);
+        // Payment CHANGE: derived 1-of-2 multisig (server + seller) at a FRESH nonce.
+        // Committed order [seller, server] => server is self-second on its next spend.
+        const changePaymentNonce = generateNonce();
+        const { selfKey: serverPaymentChangeChild, counterpartyKey: sellerPaymentChangeChild } = await deriveMultisigPair(wallet, property.seller, changePaymentNonce);
+        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerPaymentChangeChild), PublicKey.fromString(serverPaymentChangeChild)]);
         const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
@@ -211,10 +225,15 @@ export async function POST(request: Request) {
             satoshis: 1,
             lockingScript: ordinalTransferScript,
         });
-        preimageTx.addOutput({
-            satoshis: 1,
-            lockingScript: changeScript,
-        });
+        if (hasOrdinalChange) {
+            preimageTx.addOutput({
+                satoshis: 1,
+                lockingScript: changeScript,
+            });
+        }
+        // Track our payment-change index explicitly — the wallet may append its own
+        // inputs/outputs in the real tx, so we can't assume it's the last output.
+        const paymentChangeIndex = hasOrdinalChange ? 2 : 1;
         preimageTx.addOutput({
             change: true,
             lockingScript: paymentChangeLockingScript,
@@ -225,7 +244,10 @@ export async function POST(request: Request) {
 
         console.log('[Share-Purchase] Transaction to sign: ', preimageTx.toHex())
 
-        const paymentChangeSats = preimageTx.outputs[2].satoshis as number;
+        // fee() drops the payment change when the pool can't cover it (e.g. a final sale draining it).
+        const paymentChangeOutput = preimageTx.outputs[paymentChangeIndex];
+        const hasPaymentChange = !!paymentChangeOutput;
+        const paymentChangeSats = (paymentChangeOutput?.satoshis as number) ?? 0;
 
         // Get unlocking script lengths from preimage transaction
         const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
@@ -239,21 +261,25 @@ export async function POST(request: Request) {
                 satoshis: 1,
                 lockingScript: ordinalTransferScript.toHex(),
             },
-            {
+        ];
+        if (hasOrdinalChange) {
+            outputs.push({
                 outputDescription: "Ordinal token change",
                 satoshis: 1,
                 lockingScript: changeScript.toHex(),
-            },
-            {
+            });
+        }
+        if (hasPaymentChange) {
+            outputs.push({
                 outputDescription: "Payment change",
                 satoshis: paymentChangeSats,
                 lockingScript: paymentChangeLockingScript.toHex(),
-            },
-        ];
+            });
+        }
 
         // Merge the two input beefs required for the inputBEEF
         const beef = new Beef();
-        beef.mergeBeef(ordParentTx.outputs[0].beef);
+        beef.mergeBeef(fullParentTx.toBEEF());
         beef.mergeBeef(paymentTx.outputs[0].beef);
 
         // Create the transfer transaction with unlockingScriptLength
@@ -324,21 +350,38 @@ export async function POST(request: Request) {
             console.log(`Failed to broadcast transaction for ${transferTx.txid}`);
         }
 
-        // Update the current outpoint to point to the change output for next purchase
-        const newCurrentOutpoint = toOutpoint(transferTx.txid as string, 1);
-        const updateRes = await propertiesCollection.updateOne(
-            { _id: propertyObjectId },
-            {
-                $set: {
-                    "txids.currentOutpoint": newCurrentOutpoint,
-                    "txids.paymentTxid": toOutpoint(transferTx.txid as string, 2),
-                    // Keep mintTxid for backward compatibility
-                    "txids.mintTxid": newCurrentOutpoint,
-                }
-            }
-        );
-        if (!updateRes.modifiedCount) {
-            throw new Error("Failed to update current outpoint");
+        const atomicBeef = transferTx.tx as number[];
+        const set: Record<string, unknown> = {};
+
+        if (hasOrdinalChange) {
+            // Record the ordinal change (output 1) in the server basket; counterparty = seller.
+            await internalizeToBasket(wallet, atomicBeef, [{
+                outputIndex: 1, keyId: changeNonce, counterparty: property.seller,
+                counterpartyDerivedKey: sellerChangeChild, order: 'self-second', tags: ['type:share'],
+            }], "Share change (server side)");
+
+            // Advance currentOutpoint to the ordinal change; carry derivation + BEEF for its next spend.
+            set["txids.currentOutpoint"] = toOutpoint(transferTx.txid as string, 1);
+            set["currentDerivation"] = {
+                keyId: changeNonce,
+                counterparty: property.seller,
+                counterpartyDerivedKey: sellerChangeChild,
+                order: 'self-second',
+                beef: encodeBeef(atomicBeef),
+            };
+        }
+        // Final sale (no ordinal change): leave currentOutpoint as-is; status → funded below.
+        if (hasPaymentChange) {
+            set["txids.paymentTxid"] = toOutpoint(transferTx.txid as string, paymentChangeIndex);
+            set["paymentDerivation"] = {
+                keyId: changePaymentNonce,
+                counterparty: property.seller,
+                counterpartyDerivedKey: sellerPaymentChangeChild,
+                order: 'self-second',
+            };
+        }
+        if (Object.keys(set).length > 0) {
+            await propertiesCollection.updateOne({ _id: propertyObjectId }, { $set: set });
         }
 
         // Check if this investor already has shares for this property
@@ -357,6 +400,9 @@ export async function POST(request: Request) {
             parentTxid: currentOrdinalOutpoint,
             transferTxid: toOutpoint(transferTx.txid as string, 0),
             createdAt: new Date(),
+            // Investor's single-sig P2PKH derivation: they unlock with counterparty = server identity
+            keyId: transferNonce,
+            counterparty: serverIdentityKey,
         }
         const share = await sharesCollection.insertOne(formattedShare);
 
@@ -390,7 +436,11 @@ export async function POST(request: Request) {
             );
         }
 
-        return NextResponse.json({ share, isNewInvestor });
+        return NextResponse.json({
+            share,
+            isNewInvestor,
+            received: { atomicBeef: encodeBeef(atomicBeef), outputIndex: 0, keyId: transferNonce, counterparty: serverIdentityKey },
+        });
     } catch (e) {
         console.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

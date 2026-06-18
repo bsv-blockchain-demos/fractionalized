@@ -26,9 +26,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ message: proofResult.error ?? 'Proof identity mismatch' }, { status: 401 });
     }
 
-    // After successful response create JWT cookie
+    // Session id = the proof-validated identity key (what type-42 derivation uses).
     const jwt = new SignJWT({
-        user: userPubKey,
+        user: walletIdentityKey,
     });
     jwt.setProtectedHeader({ alg: "HS256" });
     jwt.setExpirationTime("1d");

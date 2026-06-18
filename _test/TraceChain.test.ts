@@ -23,7 +23,7 @@ describe('traceShareChain', () => {
     const propertyId = new ObjectId()
     const res = await traceShareChain({ propertyId, leafTransferTxid: 'txid.leaf' })
     expect(res.valid).toBe(false)
-    expect(res.reason).toMatch(/Property or mintTxid not found/i)
+    expect(res.reason).toMatch(/Property or originalMintTxid not found/i)
   })
 
   it('walks back hops to mintTxid and returns valid', async () => {

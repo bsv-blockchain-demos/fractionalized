@@ -47,7 +47,7 @@ describe('PaymentUtxo', () => {
     tx.addInput({
       sourceTransaction,
       sourceOutputIndex: 0,
-      unlockingScriptTemplate: uut.unlock(userWallet, serverLockingKey)
+      unlockingScriptTemplate: uut.unlock(userWallet, "0", "self", serverLockingKey)
     })
     tx.addOutput({
       lockingScript: Script.fromASM('OP_TRUE'),
@@ -105,7 +105,7 @@ describe('PaymentUtxo', () => {
     tx.addInput({
       sourceTransaction,
       sourceOutputIndex: 0,
-      unlockingScriptTemplate: uut.unlock(serverWallet, userLockingKey, "all", false, undefined, undefined, false)
+      unlockingScriptTemplate: uut.unlock(serverWallet, "0", "self", userLockingKey, "all", false, undefined, undefined, false)
     })
     tx.addOutput({
       lockingScript: Script.fromASM('OP_TRUE'),
@@ -172,6 +172,8 @@ describe('PaymentUtxo', () => {
 
     const paymentUnlockFrame = uut.unlock(
       /* wallet */ userWallet,
+      /* keyID */ "0",
+      /* counterparty */ "self",
       /* otherPubkey */ serverLockingKey,
       /* signOutputs */ "all",
       /* anyoneCanPay */ false,

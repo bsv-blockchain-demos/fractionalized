@@ -26,13 +26,9 @@ const AuthContext = createContext<authContextType>({
     logout: () => { },
 });
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
-    console.log('AuthContextProvider: Component mounting');
     const [userWallet, setUserWallet] = useState<authContextType['userWallet']>(new WalletClient());
-    console.log('AuthContextProvider: userWallet initialized');
     const [userPubKey, setUserPubKey] = useState<authContextType['userPubKey']>(null);
-    console.log('AuthContextProvider: userPubKey initialized');
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-    console.log('AuthContextProvider: isAuthenticated initialized');
 
     const checkAuth = useCallback(async (): Promise<boolean> => {
         console.log('checkAuth: Starting authentication check');
@@ -67,12 +63,10 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
             console.log('initializeWallet: Wallet authenticated, setting isAuthenticated to true');
             setIsAuthenticated(true);
 
-            console.log('initializeWallet: Fetching public key');
-            const { publicKey } = await userWallet.getPublicKey({
-                protocolID: [0, "fractionalized"],
-                keyID: "0",
-            });
-            console.log('initializeWallet: publicKey fetched:', publicKey);
+            console.log('initializeWallet: Fetching identity key');
+            // Identity key (not a derived key) — type-42 derivation is rooted in it.
+            const { publicKey } = await userWallet.getPublicKey({ identityKey: true });
+            console.log('initializeWallet: identity key fetched:', publicKey);
 
             // Only update state once everything is fetched
             console.log('initializeWallet: Setting userPubKey');
@@ -106,8 +100,6 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     useEffect(() => {
         initializeWallet();
     }, [initializeWallet]);
-
-    console.log('AuthContextProvider: Rendering provider with children');
 
     return (
         <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout }}>

@@ -11,6 +11,9 @@ type OwnedShare = {
   amount: number; // percent
   transferTxid: string;
   propertyTitle?: string;
+  // Share P2PKH derivation (absent for legacy shares).
+  keyId?: string;
+  counterparty?: string;
 };
 
 type Property = {
@@ -109,6 +112,8 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
     pricePerShare: number;
     transferTxid: string;
     tokenTxid: string;
+    keyId?: string;
+    counterparty?: string;
   }) => void;
 }) {
   const { userWallet, userPubKey, initializeWallet } = useAuthContext();
@@ -149,6 +154,9 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
           amount: Number(s?.amount ?? 0),
           transferTxid: String(s?.transferTxid ?? ""),
           propertyTitle: String(s?.propertyTitle ?? ""),
+          // Share derivation (from /api/my-shares) — needed to unlock the P2PKH when listing.
+          keyId: s?.keyId ? String(s.keyId) : undefined,
+          counterparty: s?.counterparty ? String(s.counterparty) : undefined,
         }));
         setShares(mapped);
         if (mapped.length) setSelectedShareId(mapped[0]._id);
@@ -300,6 +308,8 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
                     pricePerShare: Number(pricePerShare) || 0,
                     transferTxid: selectedShare.transferTxid,
                     tokenTxid: property.tokenTxid,
+                    keyId: selectedShare.keyId,
+                    counterparty: selectedShare.counterparty,
                   };
                   onListed(payload);
                 }}

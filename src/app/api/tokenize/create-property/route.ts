@@ -9,6 +9,9 @@ import { OrdinalsP2MS } from "../../../../utils/ordinalsP2MS";
 import { PaymentUtxo } from "../../../../utils/paymentUtxo";
 import { hashFromPubkeys } from "../../../../utils/hashFromPubkeys";
 import { broadcastTX } from "../../../../hooks/overlayFunctions";
+import { generateNonce, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../../utils/tokenDerivation";
+import { internalizeToBasket } from "../../../../utils/internalizeToBasket";
+import { encodeBeef } from "../../../../utils/beefEncoding";
 
 const STORAGE_URL = process.env.WALLET_STORAGE_URL;
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
@@ -19,7 +22,7 @@ export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
-    const { data, paymentTxAction, seller } = await request.json();
+    const { data, paymentTxAction, paymentNonce, seller } = await request.json();
 
     // Identity check: token user must match seller
     if (seller !== userId) {
@@ -124,15 +127,6 @@ export async function POST(request: Request) {
         }
         console.log(`[TIMING] Wallet created in ${Date.now() - walletStart}ms`);
 
-        // Get server public key
-        console.log('[TIMING] Getting server public key...');
-        const pubKeyStart = Date.now();
-        const { publicKey: serverPubKey } = await wallet.getPublicKey({
-            protocolID: [0, "fractionalized"],
-            keyID: "0",
-        });
-        console.log(`[TIMING] Got server public key in ${Date.now() - pubKeyStart}ms`);
-
         // Create property token using server wallet but with user's pubKeyHash
         const title = data.title.trim().toLowerCase();
         const location = data.location.trim().toLowerCase();
@@ -187,8 +181,13 @@ export async function POST(request: Request) {
             throw new Error("Percent to sell must be less than or equal to 100");
         }
 
-        // Create the ordinal locking script with 1sat inscription
-        const hashOfPubkeys = hashFromPubkeys([PublicKey.fromString(seller), PublicKey.fromString(serverPubKey)])
+        // Create the ordinal locking script with 1sat inscription (derived keys)
+        const serverIdentityKey = await getIdentityKey(wallet);
+        const mintNonce = generateNonce();
+        // builder is the server; counterparty/party is the seller
+        const { selfKey: serverChild, counterpartyKey: sellerChild } = await deriveMultisigPair(wallet, seller, mintNonce);
+        // committed order: [seller, server]  => server is self-second
+        const hashOfPubkeys = hashFromPubkeys([PublicKey.fromString(sellerChild), PublicKey.fromString(serverChild)]);
         const ordinalLockingScript = new OrdinalsP2MS().lock(
             /* oneOfTwoHash */ hashOfPubkeys,
             /* assetId */ `${response.txid}_0`,
@@ -197,8 +196,11 @@ export async function POST(request: Request) {
             /* type */ "deploy+mint"
         );
 
-        // Create payment change locking script (multisig 1 of 2 so server can use funds for transfer fees)
-        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(serverPubKey), PublicKey.fromString(seller)]);
+        // Payment CHANGE: derived 1-of-2 multisig (server + seller) at a fresh nonce.
+        // Committed order [seller, server] => server is self-second on its next spend.
+        const changePaymentNonce = generateNonce();
+        const { selfKey: serverChangeChild, counterpartyKey: sellerChangeChild } = await deriveMultisigPair(wallet, seller, changePaymentNonce);
+        const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerChangeChild), PublicKey.fromString(serverChangeChild)]);
         const paymentChangeLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
 
         // Parse payment transaction
@@ -208,15 +210,21 @@ export async function POST(request: Request) {
 
         const paymentSourceTX = Transaction.fromBEEF(paymentTxAction.tx as number[]);
 
+        // Spend the client-locked prefund payment via its derived key.
+        // Client locked [userChild, serverChild] (user first) => server is self-second (firstPubkeyIsWallet=false).
+        const { counterpartyKey: userPaymentChild } = await deriveMultisigPair(wallet, seller, paymentNonce);
         // Create payment unlock frame (used for both preimage and final signing)
         const paymentUnlockFrame = new PaymentUtxo().unlock(
             /* wallet */ wallet,
-            /* otherPubkey */ seller,
+            /* keyID */ paymentNonce,
+            /* counterparty */ seller,
+            /* otherPubkey */ userPaymentChild,
             /* signOutputs */ "all",
             /* anyoneCanPay */ false,
             /* sourceSatoshis */ undefined,
             /* lockingScript */ undefined,
-            /* firstPubkeyIsWallet */ true // order: server first, then user
+            /* firstPubkeyIsWallet */ false, // order: user first, then server
+            /* protocolID */ TOKEN_PROTOCOL,
         );
 
         // Build preimage for payment input to calculate change satoshis
@@ -316,6 +324,17 @@ export async function POST(request: Request) {
             throw new Error("Failed to mint shares for property token");
         }
 
+        // Internalize the mint output (index 0) into the server basket
+        const atomicBeef = signedAction.tx as number[];
+        await internalizeToBasket(wallet, atomicBeef, [{
+            outputIndex: 0, keyId: mintNonce, counterparty: seller,
+            counterpartyDerivedKey: sellerChild, order: 'self-second', tags: ['type:share'],
+        }], "Mint shares (server side)");
+
+        // [DEV] TEMP — verify server basket
+        const _devBasket = await wallet.listOutputs({ basket: 'fractionalized.tokens' });
+        console.log('[DEV] server basket:', _devBasket.totalOutputs, _devBasket.outputs?.map((o: any) => o.outpoint));
+
         // Broadcast the mint transaction to the Overlay
         console.log('[TIMING] Starting overlay broadcast...');
         const broadcastStart = Date.now();
@@ -340,7 +359,19 @@ export async function POST(request: Request) {
                 originalMintTxid: mintOutpoint,
                 currentOutpoint: mintOutpoint,
                 paymentTxid: toOutpoint(signedAction.txid, 1),
-                mintTxid: mintOutpoint, // For backward compatibility
+            },
+            currentDerivation: {
+                keyId: mintNonce,
+                counterparty: seller,
+                counterpartyDerivedKey: sellerChild,
+                order: 'self-second',
+                beef: encodeBeef(atomicBeef),
+            },
+            paymentDerivation: {
+                keyId: changePaymentNonce,
+                counterparty: seller,
+                counterpartyDerivedKey: sellerChangeChild,
+                order: 'self-second',
             },
             seller,
         };
@@ -373,7 +404,11 @@ export async function POST(request: Request) {
         console.log(`[TIMING] Database operations completed in ${Date.now() - dbStart}ms`);
         console.log(`[TIMING] ===== TOTAL ROUTE TIME: ${Date.now() - routeStart}ms =====`);
 
-        return NextResponse.json({ success: true, status: 200, data: propertyInsert });
+        return NextResponse.json({
+            success: true, status: 200, data: propertyInsert,
+            received: { atomicBeef: encodeBeef(atomicBeef), outputIndex: 0, keyId: mintNonce,
+                        counterparty: serverIdentityKey, counterpartyDerivedKey: serverChild, order: 'self-first' },
+        });
     } catch (e) {
         console.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

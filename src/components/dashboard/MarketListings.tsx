@@ -11,14 +11,20 @@ export interface MarketListingItem {
   location: string;
   sellAmount: number;
   pricePerShare: number;
+  listingNonce?: string;
+  listingOutpoint?: string;
+  listingBeef?: string;
+  tokenTxid?: string;
 }
 
 export interface MarketListingsProps {
   loading: boolean;
   items: MarketListingItem[];
+  onCancel?: (item: MarketListingItem) => void;
+  cancellingId?: string | null;
 }
 
-export default function MarketListings({ loading, items }: MarketListingsProps) {
+export default function MarketListings({ loading, items, onCancel, cancellingId }: MarketListingsProps) {
   if (loading) {
     return (
       <div className="p-4 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-text-secondary mb-8">
@@ -41,9 +47,10 @@ export default function MarketListings({ loading, items }: MarketListingsProps) 
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {items.map((item) => (
-            <Link key={item._id} href={`/properties/${item.propertyId}`} className="block">
-              <div className="card-glass p-4">
+          {items.map((item) => {
+            const isCancelling = cancellingId === item._id;
+            return (
+              <div key={item._id} className="card-glass p-4 flex flex-col">
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="font-semibold text-text-primary">{item.name}</h3>
                   <span className="badge-dark text-xs">Selling</span>
@@ -51,9 +58,27 @@ export default function MarketListings({ loading, items }: MarketListingsProps) 
                 <p className="text-xs text-text-secondary mb-2">{item.location}</p>
                 <div className="text-sm text-text-secondary">Amount: {item.sellAmount}%</div>
                 <div className="text-sm text-text-primary">Price/share: AED {item.pricePerShare.toLocaleString()}</div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href={`/properties/${item.propertyId}`}
+                    className="flex-1 text-center px-3 py-1.5 rounded-lg border border-border-subtle bg-bg-secondary text-sm text-text-primary btn-glow"
+                  >
+                    View
+                  </Link>
+                  {onCancel && (
+                    <button
+                      type="button"
+                      disabled={isCancelling || !!cancellingId}
+                      onClick={() => onCancel(item)}
+                      className="flex-1 text-center px-3 py-1.5 rounded-lg border border-border-subtle bg-bg-secondary text-sm text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed btn-glow"
+                    >
+                      {isCancelling ? "Cancelling..." : "Cancel listing"}
+                    </button>
+                  )}
+                </div>
               </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
