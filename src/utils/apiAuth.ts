@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify, errors } from "jose";
+import { getJwtSecret } from "../lib/config";
 
 export type AuthResult = { user: string };
 
@@ -13,7 +14,7 @@ export async function requireAuth(req: Request): Promise<AuthResult | NextRespon
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET as string);
+    const secret = new TextEncoder().encode(getJwtSecret());
     const { payload } = await jwtVerify(token, secret);
 
     if (!payload.user || typeof payload.user !== "string") {
