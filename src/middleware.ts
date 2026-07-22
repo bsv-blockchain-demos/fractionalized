@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify, errors } from "jose";
+import { getJwtSecret } from "./lib/config";
 
 interface RequestCookie {
   name: string;
   value: string;
 }
-
-const SECRET = process.env.JWT_SECRET as string;
 
 export async function middleware(req: NextRequest) {
   const token = (req.cookies.get("verified") as RequestCookie)?.value;
@@ -28,7 +27,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  const secret = new TextEncoder().encode(SECRET);
+  const secret = new TextEncoder().encode(getJwtSecret());
 
   try {
     await jwtVerify(token, secret);

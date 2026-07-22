@@ -1,16 +1,21 @@
 import { NextResponse } from "next/server";
 import { connectToMongo, sharesCollection } from "../../../lib/mongo";
 import { requireAuth } from "../../../utils/apiAuth";
+import { readJsonBody } from "../../../utils/validation";
+import { verifyRequestProof } from "../../../utils/apiAuthProof";
+import { AUTH_PROOF_PURPOSE } from "../../../lib/authProofPurposes";
 
 export async function POST(request: Request) {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
-  const userIdFromToken = auth.user; // pubkey
   try {
+    const body = (await readJsonBody(request)) as { proof?: unknown; walletIdentityKey?: unknown };
+    const proofRes = await verifyRequestProof(body, AUTH_PROOF_PURPOSE.myShares, auth.user);
+    if (proofRes instanceof NextResponse) return proofRes;
+
     await connectToMongo();
 
-    // Use pubkey from token
-    const investorPubKey = userIdFromToken;
+    const investorPubKey = proofRes.identityKey;
 
     // Return only shares currently owned by the user: shares for this investor pubkey
     // where there is no other share with parentTxid equal to this share's transferTxid

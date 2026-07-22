@@ -15,9 +15,7 @@ import { generateNonce, deriveMultisigPair, deriveRecipientKey, getIdentityKey, 
 import { internalizeToBasket } from "../../../utils/internalizeToBasket";
 import { encodeBeef } from "../../../utils/beefEncoding";
 import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
-
-const STORAGE = process.env.WALLET_STORAGE_URL;
-const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
+import { getServerPrivateKey, getWalletStorageUrl } from "../../../lib/config";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -38,10 +36,7 @@ export async function POST(request: Request) {
     try {
         await connectToMongo();
 
-        if (!SERVER_KEY || !STORAGE) {
-            return NextResponse.json({ error: "Server wallet not configured" }, { status: 500 });
-        }
-        const wallet = await makeWallet("main", STORAGE as string, SERVER_KEY as string);
+        const wallet = await makeWallet("main", getWalletStorageUrl(), getServerPrivateKey());
         if (!wallet) {
             throw new Error("Failed to create wallet");
         }

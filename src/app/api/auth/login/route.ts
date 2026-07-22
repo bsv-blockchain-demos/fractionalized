@@ -5,8 +5,7 @@ import { createSecretKey } from "crypto";
 import protoWallet from "@/lib/protoWallet";
 import { authServer } from "@/lib/authProof";
 import { consumeNonce } from "@/lib/authNonceStore";
-
-const SECRET = process.env.JWT_SECRET as string;
+import { getJwtSecret } from "@/lib/config";
 
 export async function POST(request: Request) {
     const body = await request.json();
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
     jwt.setProtectedHeader({ alg: "HS256" });
     jwt.setExpirationTime("1d");
 
-    const secret = createSecretKey(Buffer.from(SECRET, "utf-8"));
+    const secret = createSecretKey(Buffer.from(getJwtSecret(), "utf-8"));
     const token = await jwt.sign(secret);
 
     const cookieStore = await cookies();

@@ -7,9 +7,7 @@ import { makeWallet } from "../../../lib/serverWallet";
 import { getIdentityKey } from "../../../utils/tokenDerivation";
 import { decodeBeef } from "../../../utils/beefEncoding";
 import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
-
-const STORAGE = process.env.WALLET_STORAGE_URL;
-const SERVER_KEY = process.env.SERVER_PRIVATE_KEY;
+import { getServerPrivateKey, getWalletStorageUrl } from "../../../lib/config";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -73,12 +71,8 @@ export async function POST(request: Request) {
         // Server identity key the reclaimed P2PKH was locked toward (counterparty for the seller's
         // forSelf:true derivation). Derive server-side for trust; matches what share-purchase stores.
         let serverIdentityKey: string;
-        if (SERVER_KEY && STORAGE) {
-            const wallet = await makeWallet("main", STORAGE as string, SERVER_KEY as string);
-            serverIdentityKey = await getIdentityKey(wallet);
-        } else {
-            return NextResponse.json({ error: "Server wallet not configured" }, { status: 500 });
-        }
+        const wallet = await makeWallet("main", getWalletStorageUrl(), getServerPrivateKey());
+        serverIdentityKey = await getIdentityKey(wallet);
 
         // Acquire lock per (property, seller)
         const propertyObjectId = new ObjectId(marketItem.propertyId);

@@ -10,6 +10,8 @@ import SellingListings from "./dashboard/SellingListings";
 import MarketListings from "./dashboard/MarketListings";
 import PortfolioStats from "./dashboard/PortfolioStats";
 import { useCancelListing } from "../hooks/useCancelListing";
+import { fetchWithAuthProof } from "../utils/authProofClient";
+import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 
 export function Dashboard() {
   // User shares mapped to properties
@@ -55,7 +57,7 @@ export function Dashboard() {
         }
 
         // Get owned shares
-        const response = await fetch("/api/my-shares", { method: "POST" });
+        const response = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
@@ -122,7 +124,7 @@ export function Dashboard() {
           }
         }
 
-        const response = await fetch("/api/my-listings", { method: "POST" });
+        const response = await fetchWithAuthProof("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
@@ -170,7 +172,7 @@ export function Dashboard() {
         }
 
         // Get selling properties
-        const response = await fetch("/api/my-selling", { method: "POST" });
+        const response = await fetchWithAuthProof("/api/my-selling", userWallet, AUTH_PROOF_PURPOSE.mySelling);
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }

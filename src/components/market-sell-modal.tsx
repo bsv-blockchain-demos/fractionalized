@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 import toast from "react-hot-toast";
+import { fetchWithAuthProof } from "../utils/authProofClient";
+import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 
 type OwnedShare = {
   _id: string;
@@ -146,7 +148,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
             return;
           }
         }
-        const res = await fetch("/api/my-shares", { method: "POST" });
+        const res = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
         const data = await res.json();
         const mapped: OwnedShare[] = (data?.shares || []).map((s: any) => ({
           _id: String(s?._id ?? ""),

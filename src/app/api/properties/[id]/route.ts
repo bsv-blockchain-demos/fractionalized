@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToMongo, propertiesCollection, propertyDescriptionsCollection, sharesCollection } from "../../../../lib/mongo";
+import { requireAuth } from "../../../../utils/apiAuth";
+import { toPublicProperty } from "../../../../lib/serializers";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
   try {
     await connectToMongo();
 
@@ -42,17 +46,13 @@ export async function GET(
       investorsCount = uniqueInvestors.size;
     }
 
-    const out = {
-      ...property,
-      _id: property._id.toString(),
+    const item = {
+      ...toPublicProperty(property, { availablePercent, totalSold, investors: investorsCount }),
       description: descriptions?.description || { details: "", features: [] },
       whyInvest: descriptions?.whyInvest || [],
-      availablePercent: availablePercent,
-      totalSold: totalSold,
-      investors: investorsCount,
     };
 
-    return NextResponse.json({ item: out });
+    return NextResponse.json({ item });
   } catch (e) {
     console.error("/api/properties/[id] GET error:", e);
     return NextResponse.json({ error: "Failed to fetch property" }, { status: 500 });

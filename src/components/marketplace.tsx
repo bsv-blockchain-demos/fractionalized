@@ -19,6 +19,8 @@ import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from "../utils/toke
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { encodeBeef, decodeBeef } from "../utils/beefEncoding";
 import { useCancelListing, CancelListingItem } from "../hooks/useCancelListing";
+import { fetchWithAuthProof } from "../utils/authProofClient";
+import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 
 type ApiListing = {
     _id: string;
@@ -91,7 +93,7 @@ export function Marketplace() {
     // so fetch the seller's own listings to map the entry into a CancelListingItem first.
     const handleCancelOwnListing = useCallback(async (item: ApiListing) => {
         try {
-            const res = await fetch("/api/my-listings", { method: "POST" });
+            const res = await fetchWithAuthProof("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
             if (!res.ok) {
                 throw new Error("HTTP " + res.status);
             }

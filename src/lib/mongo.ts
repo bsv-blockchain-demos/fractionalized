@@ -2,6 +2,7 @@ import { MongoClient, ServerApiVersion, Db, Collection, ObjectId } from "mongodb
 import dotenv from "dotenv";
 dotenv.config();
 import { propertiesValidator, sharesValidator, propertyDescriptionsValidator, marketItemsValidator } from "./validators";
+import { getMongoUri } from "./config";
 
 export interface Properties {
   _id: ObjectId;
@@ -128,10 +129,7 @@ function getDatabaseNameFromUri(connectionUri: string): string {
 
 // Lazy initialization - only get env vars when actually connecting
 function getMongoConfig() {
-  const uri = process.env.MONGODB_URI;
-  if (!uri) {
-    throw new Error('MONGODB_URI is not defined in environment variables');
-  }
+  const uri = getMongoUri();
   const dbName = getDatabaseNameFromUri(uri);
   return { uri, dbName };
 }

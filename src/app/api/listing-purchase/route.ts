@@ -13,9 +13,7 @@ import { requireAuth } from "../../../utils/apiAuth";
 import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
 import { generateNonce, deriveRecipientKey, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../utils/tokenDerivation";
 import { encodeBeef } from "../../../utils/beefEncoding";
-
-const STORAGE_URL = process.env.WALLET_STORAGE_URL;
-const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
+import { getServerPrivateKey, getWalletStorageUrl } from "../../../lib/config";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -32,7 +30,7 @@ export async function POST(request: Request) {
     try {
         await connectToMongo();
 
-        const wallet = await makeWallet("main", STORAGE_URL as string, SERVER_PRIVATE_KEY as string);
+        const wallet = await makeWallet("main", getWalletStorageUrl(), getServerPrivateKey());
 
         // Fetch all necessary data from marketItem collection -> share collection -> property collection
         const marketItem = await marketItemsCollection.findOne({ _id: new ObjectId(marketItemId) });

@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { connectToMongo } from '@/lib/mongo'
 import { checkWalletBalance } from '@/utils/wallet-balance'
+import { getMinBalance } from '@/lib/config'
 
-// combined check (wallet + db)
+// combined readiness check (wallet + db) — fails closed on any error
 export async function GET() {
-  const { MIN_BALANCE } = process.env
-  const { db } = await connectToMongo()
   try {
+    const { db } = await connectToMongo()
     const balance = await checkWalletBalance()
-    if (balance < parseInt(MIN_BALANCE!)) throw new Error('Insufficient wallet balance')
+    if (balance < getMinBalance()) throw new Error('Insufficient wallet balance')
     await db.command({ ping: 1 })
     return NextResponse.json({ status: 'ready' })
   } catch (err) {

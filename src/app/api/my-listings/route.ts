@@ -2,16 +2,21 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToMongo, marketItemsCollection, propertiesCollection, listingBeefsCollection } from "../../../lib/mongo";
 import { requireAuth } from "../../../utils/apiAuth";
+import { readJsonBody } from "../../../utils/validation";
+import { verifyRequestProof } from "../../../utils/apiAuthProof";
+import { AUTH_PROOF_PURPOSE } from "../../../lib/authProofPurposes";
 
 export async function POST(request: Request) {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
-  const userIdFromToken = auth.user;
   try {
+    const body = (await readJsonBody(request)) as { proof?: unknown; walletIdentityKey?: unknown };
+    const proofRes = await verifyRequestProof(body, AUTH_PROOF_PURPOSE.myListings, auth.user);
+    if (proofRes instanceof NextResponse) return proofRes;
+
     await connectToMongo();
 
-    // Use authenticated user from token
-    const userId = userIdFromToken;
+    const userId = proofRes.identityKey;
 
     const cursor = marketItemsCollection.aggregate([
       { $match: { sellerId: userId, $or: [{ sold: { $exists: false } }, { sold: false }] } },

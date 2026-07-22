@@ -12,9 +12,7 @@ import { broadcastTX } from "../../../../hooks/overlayFunctions";
 import { generateNonce, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../../utils/tokenDerivation";
 import { internalizeToBasket } from "../../../../utils/internalizeToBasket";
 import { encodeBeef } from "../../../../utils/beefEncoding";
-
-const STORAGE_URL = process.env.WALLET_STORAGE_URL;
-const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
+import { getServerPrivateKey, getWalletStorageUrl } from "../../../../lib/config";
 
 export async function POST(request: Request) {
     console.log('[TIMING] ===== TOKENIZE ROUTE START =====');
@@ -115,13 +113,9 @@ export async function POST(request: Request) {
         await connectToMongo();
         console.log(`[TIMING] MongoDB connected in ${Date.now() - mongoStart}ms`);
 
-        if (!SERVER_PRIVATE_KEY || !STORAGE_URL) {
-            return NextResponse.json({ error: "Server wallet not configured" }, { status: 500 });
-        }
-
         console.log('[TIMING] Starting wallet creation...');
         const walletStart = Date.now();
-        const wallet = await makeWallet("main", STORAGE_URL as string, SERVER_PRIVATE_KEY as string);
+        const wallet = await makeWallet("main", getWalletStorageUrl(), getServerPrivateKey());
         if (!wallet) {
             throw new Error("Failed to create wallet");
         }
