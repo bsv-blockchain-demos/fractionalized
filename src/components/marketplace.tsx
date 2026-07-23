@@ -21,6 +21,7 @@ import { encodeBeef, decodeBeef } from "../utils/beefEncoding";
 import { useCancelListing, CancelListingItem } from "../hooks/useCancelListing";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
+import { logger } from "../utils/logger";
 
 type ApiListing = {
     _id: string;
@@ -70,7 +71,7 @@ export function Marketplace() {
         sellerId: string;
     } | null>(null);
 
-    const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+    const { userWallet, userPubKey, ensureWallet } = useAuthContext();
     const { cancelListing, cancellingId } = useCancelListing();
 
     const [items, setItems] = useState<ApiListing[]>([]);
@@ -81,13 +82,15 @@ export function Marketplace() {
             const data = await res.json();
             setItems(Array.isArray(data?.items) ? data.items : []);
         } catch (e) {
-            console.error(e);
+            logger.error(e);
         }
     }, []);
 
     useEffect(() => {
         fetchListings();
     }, [fetchListings]);
+
+    useEffect(() => { ensureWallet(true); }, [ensureWallet]);
 
     // Cancel a listing the viewer owns. /api/listings lacks the cancel derivation data,
     // so fetch the seller's own listings to map the entry into a CancelListingItem first.
@@ -122,7 +125,7 @@ export function Marketplace() {
                 setItems((prev) => prev.filter((l) => l._id !== item._id));
             }
         } catch (e) {
-            console.error("[handleCancelOwnListing] Error:", e);
+            logger.error("[handleCancelOwnListing] Error:", e);
             toast.error("Failed to cancel listing", {
                 duration: 5000, position: "top-center", id: "cancel-error",
             });
@@ -130,64 +133,36 @@ export function Marketplace() {
     }, [cancelListing]);
 
     const handleNewListing = useCallback(async (payload: payloadData) => {
-        console.log('[handleNewListing] Starting with payload:', payload);
         const { shareId, propertyId, pricePerShare, transferTxid, tokenTxid, keyId: shareKeyId, counterparty: shareCounterparty } = payload;
 
         setLoading(true);
 
         try {
-            if (!userWallet) {
-                console.log('[handleNewListing] No wallet found, initializing...');
-                try {
-                    await initializeWallet();
-                    console.log('[handleNewListing] Wallet initialized successfully');
-                } catch (e) {
-                    console.error('[handleNewListing] Failed to initialize wallet:', e);
-                    toast.error('Failed to connect wallet', {
-                        duration: 5000,
-                        position: 'top-center',
-                        id: 'wallet-connect-error',
-                    });
-                    return;
-                }
-            }
-
-            if (!userPubKey) {
-                console.error('[handleNewListing] No user public key available');
-                toast.error("Failed to get public key", {
-                    duration: 5000,
-                    position: "top-center",
-                    id: "public-key-error",
-                });
-                return;
-            }
-            console.log('[handleNewListing] User pubkey:', userPubKey);
+            const pk = await ensureWallet();
+            if (!pk) return;
 
             // Verify share ownership
-            console.log('[handleNewListing] Verifying share ownership...');
             const traceResult = await fetch("/api/test-chain", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ propertyId, leafTransferTxid: transferTxid, investorId: userPubKey }),
+                body: JSON.stringify({ propertyId, leafTransferTxid: transferTxid, investorId: pk }),
             });
             const data = await traceResult.json();
-            console.log('[handleNewListing] Share ownership verification result:', data);
 
             if (!data.valid) {
-                console.error('[handleNewListing] Share ownership verification failed:', data.reason);
+                logger.error('[handleNewListing] Share ownership verification failed:', data.reason);
                 toast.error(data.reason);
                 return;
             }
 
             // Transfer share to multisig with server
-            console.log('[handleNewListing] Getting transaction for txid:', transferTxid);
             const { txid, vout } = parseOutpoint(transferTxid);
             const tx = await getTransactionByTxID(txid);
 
             if (!tx) {
-                console.error('[handleNewListing] Failed to get transaction for txid:', txid);
+                logger.error('[handleNewListing] Failed to get transaction for txid:', txid);
                 toast.error("Failed to get transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -195,22 +170,18 @@ export function Marketplace() {
                 });
                 return;
             }
-            console.log('[handleNewListing] Transaction retrieved successfully');
 
             // Get full transaction
             const fullTx = Transaction.fromBEEF(tx.outputs[0].beef);
             const tokens = await calcTokenTransfer(fullTx, vout, 0);
-            console.log('[handleNewListing] Tokens calculated:', tokens);
 
             const assetId = transferTxid.replace(".", "_");
-            console.log('[handleNewListing] AssetId:', assetId);
 
             // Derive both listing-multisig child keys (seller signs with sellerChild; serverChild rebuilds the script).
             const listingNonce = generateNonce();
             const { selfKey: sellerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, listingNonce);
 
             // Multisig lock for the new output, committed order [seller, server].
-            console.log('[handleNewListing] Creating multisig locking script...');
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerChild), PublicKey.fromString(serverChild)]);
             const ordinalLockingScript = new OrdinalsP2MS().lock(
                 /* oneOfTwoHash */ oneOfTwoHash,
@@ -219,10 +190,8 @@ export function Marketplace() {
                 /* shares */ tokens,
                 /* type */ "transfer"
             );
-            console.log('[handleNewListing] Multisig locking script created');
 
             // Unlock the seller's P2PKH share with its recorded derivation (counterparty=server); legacy share => default unlock.
-            console.log('[handleNewListing] Building preimage transaction...');
             const ordinalUnlockFrame = shareKeyId
                 ? new OrdinalsP2PKH().unlock(
                     /* wallet */ userWallet!,
@@ -249,15 +218,12 @@ export function Marketplace() {
             });
 
             // Sign the ordinal input (index 0) against the preimage transaction
-            console.log('[handleNewListing] Signing ordinal input...');
             await preimageTx.fee(new SatoshisPerKilobyte(100));
             await preimageTx.sign();
             const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
             const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
-            console.log('[handleNewListing] Ordinal input signed');
 
             // Create the transaction with unlockingScriptLength
-            console.log('[handleNewListing] Creating listing transaction...');
             const actionRes = await userWallet!.createAction({
                 description: "New listing",
                 inputBEEF: tx.outputs[0].beef,
@@ -282,7 +248,7 @@ export function Marketplace() {
             });
 
             if (!actionRes?.signableTransaction) {
-                console.error('[handleNewListing] Failed to create signable transaction');
+                logger.error('[handleNewListing] Failed to create signable transaction');
                 toast.error("Failed to create transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -305,7 +271,7 @@ export function Marketplace() {
             const finalOrdinalUnlockingScript = txToSign.inputs[0].unlockingScript?.toHex();
 
             if (!finalOrdinalUnlockingScript) {
-                console.error('[handleNewListing] Missing unlocking script');
+                logger.error('[handleNewListing] Missing unlocking script');
                 toast.error("Failed to create transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -323,7 +289,7 @@ export function Marketplace() {
             });
 
             if (!newListingTx?.txid) {
-                console.error('[handleNewListing] Failed to sign transaction');
+                logger.error('[handleNewListing] Failed to sign transaction');
                 toast.error("Failed to create transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -331,17 +297,14 @@ export function Marketplace() {
                 });
                 return;
             }
-            console.log('[handleNewListing] Transaction created, txid:', newListingTx.txid);
 
             const newListingFullTx = Transaction.fromBEEF(newListingTx.tx as number[]);
 
             // Broadcast the transaction
-            console.log('[handleNewListing] Broadcasting transaction...');
             const broadcastResult = await broadcastTX(newListingFullTx);
-            console.log('[handleNewListing] Broadcast result:', broadcastResult);
 
             if (broadcastResult.status !== "success") {
-                console.error('[handleNewListing] Broadcast failed:', broadcastResult);
+                logger.error('[handleNewListing] Broadcast failed:', broadcastResult);
                 toast.error("Failed to broadcast transaction", {
                     duration: 5000,
                     position: "top-center",
@@ -353,7 +316,7 @@ export function Marketplace() {
             // Record the listing: BEEF backup + derivation for the server.
             const dbPayload = {
                 propertyId,
-                sellerId: userPubKey,
+                sellerId: pk,
                 amount: tokens,
                 parentTxid: transferTxid,
                 transferTxid: toOutpoint(newListingTx.txid as string, 0),
@@ -363,7 +326,6 @@ export function Marketplace() {
                 sellerChild,
                 serverChild,
             };
-            console.log('[handleNewListing] Updating database with:', dbPayload);
             const dbRes = await fetch("/api/new-listing", {
                 method: "POST",
                 headers: {
@@ -373,7 +335,7 @@ export function Marketplace() {
             });
             if (!dbRes.ok) {
                 const err = await dbRes.json().catch(() => ({}));
-                console.error('[handleNewListing] new-listing failed:', err);
+                logger.error('[handleNewListing] new-listing failed:', err);
                 toast.error(err?.error || "Failed to record listing", {
                     duration: 5000,
                     position: "top-center",
@@ -381,7 +343,6 @@ export function Marketplace() {
                 });
                 return;
             }
-            console.log('[handleNewListing] Database updated successfully');
 
             // Record the listing output in the seller's basket (seller's perspective: counterparty=server, order self-first).
             await internalizeToBasket(
@@ -401,37 +362,25 @@ export function Marketplace() {
             // Show success state instead of closing modal
             setSellSuccess(true);
             toast.success("Share listed for sale", { duration: 4000, position: "top-center", id: "list-success" });
-            console.log('[handleNewListing] Listing creation completed successfully');
-            setLoading(false);
         } catch (e) {
-            console.error('[handleNewListing] Error occurred:', e);
-            console.error('[handleNewListing] Error stack:', e instanceof Error ? e.stack : 'No stack trace');
+            logger.error('[handleNewListing] Error occurred:', e);
+            logger.error('[handleNewListing] Error stack:', e instanceof Error ? e.stack : 'No stack trace');
             toast.error("Failed to create listing", {
                 duration: 5000,
                 position: "top-center",
                 id: "listing-error",
             });
+        } finally {
             setLoading(false);
         }
-    }, [userWallet, userPubKey, initializeWallet]);
+    }, [userWallet, ensureWallet]);
 
     const handlePurchase = async (
         { marketItemId, buyerId }: { marketItemId: string; buyerId: string }
     ) => {
         try {
-            if (!userWallet) {
-                try {
-                    await initializeWallet();
-                } catch (e) {
-                    console.error('Failed to initialize wallet:', e);
-                    toast.error('Failed to connect wallet', {
-                        duration: 5000,
-                        position: 'top-center',
-                        id: 'wallet-connect-error',
-                    });
-                    return;
-                }
-            }
+            const pk = await ensureWallet();
+            if (!pk) return;
 
             setPurchaseLoading(true);
             // Create the paymentTX with a per-output type-42 derived 1-of-2 multisig (buyer + server).
@@ -469,7 +418,7 @@ export function Marketplace() {
             const response = await fetch("/api/listing-purchase", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ marketItemId, buyerId, paymentNonce, paymentTX: paymentUtxo }),
+                body: JSON.stringify({ marketItemId, buyerId: pk, paymentNonce, paymentTX: paymentUtxo }),
             });
             const data = await response.json();
             if (response.status !== 200) {
@@ -496,7 +445,7 @@ export function Marketplace() {
                         "Receive purchased share",
                     );
                 } catch (e) {
-                    console.error('[handlePurchase] Failed to internalize purchased share:', e);
+                    logger.error('[handlePurchase] Failed to internalize purchased share:', e);
                 }
             }
 
@@ -504,7 +453,7 @@ export function Marketplace() {
             setPurchaseSuccess(true);
             toast.success("Share purchased", { duration: 4000, position: "top-center", id: "purchase-success" });
         } catch (e) {
-            console.error(e);
+            logger.error(e);
             toast.error("Failed to purchase", {
                 duration: 5000,
                 position: "top-center",

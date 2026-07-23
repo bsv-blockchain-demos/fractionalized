@@ -13,6 +13,7 @@ import { SERVER_IDENTITY_KEY } from "../utils/env";
 import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from "../utils/tokenDerivation";
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef, encodeBeef } from "../utils/beefEncoding";
+import { logger } from "../utils/logger";
 
 export interface CancelListingItem {
   _id: string;
@@ -26,7 +27,7 @@ export interface CancelListingItem {
 
 export function useCancelListing() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+  const { userWallet, ensureWallet } = useAuthContext();
 
   // Cancel a listing: reclaim the share from the multisig(seller+server) back to the seller's
   // own self-custody P2PKH. The seller builds + signs the spend client-side.
@@ -41,19 +42,8 @@ export function useCancelListing() {
 
     setCancellingId(item._id);
     try {
-      if (!userWallet) {
-        try {
-          await initializeWallet();
-        } catch (e) {
-          console.error("Failed to initialize wallet:", e);
-          toast.error("Failed to connect wallet", { duration: 5000, position: "top-center", id: "wallet-connect-error" });
-          return false;
-        }
-      }
-      if (!userPubKey) {
-        toast.error("Failed to get public key", { duration: 5000, position: "top-center", id: "public-key-error" });
-        return false;
-      }
+      const pk = await ensureWallet();
+      if (!pk) return false;
 
       const listingOutpoint = item.listingOutpoint;
       const { vout: listingVout } = parseOutpoint(listingOutpoint);
@@ -181,13 +171,13 @@ export function useCancelListing() {
           "Reclaim listed share",
         );
       } catch (e) {
-        console.error("[cancelListing] Failed to internalize reclaimed share:", e);
+        logger.error("[cancelListing] Failed to internalize reclaimed share:", e);
       }
 
       toast.success("Listing cancelled", { duration: 4000, position: "top-center", id: "cancel-success" });
       return true;
     } catch (e) {
-      console.error("[cancelListing] Error:", e);
+      logger.error("[cancelListing] Error:", e);
       toast.error("Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
       return false;
     } finally {

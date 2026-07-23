@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify, errors } from "jose";
 import { getJwtSecret } from "../lib/config";
+import { logger } from "./logger";
 
 export type AuthResult = { user: string };
 
@@ -32,7 +33,7 @@ export async function requireAuth(req: Request): Promise<AuthResult | NextRespon
     ) {
       res.cookies.delete("verified");
     }
-    console.error("JWT error", error);
+    logger.error("JWT error", error);
     return res;
   }
 }

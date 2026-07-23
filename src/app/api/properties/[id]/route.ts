@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { connectToMongo, propertiesCollection, propertyDescriptionsCollection, sharesCollection } from "../../../../lib/mongo";
 import { requireAuth } from "../../../../utils/apiAuth";
 import { toPublicProperty } from "../../../../lib/serializers";
+import { logger } from "../../../../utils/logger";
 
 export async function GET(
   req: Request,
@@ -54,7 +55,7 @@ export async function GET(
 
     return NextResponse.json({ item });
   } catch (e) {
-    console.error("/api/properties/[id] GET error:", e);
+    logger.error("/api/properties/[id] GET error:", e);
     return NextResponse.json({ error: "Failed to fetch property" }, { status: 500 });
   }
 }

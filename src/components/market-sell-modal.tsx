@@ -6,6 +6,7 @@ import { Spinner } from "./spinner";
 import toast from "react-hot-toast";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
+import { logger } from "../utils/logger";
 
 type OwnedShare = {
   _id: string;
@@ -118,7 +119,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
     counterparty?: string;
   }) => void;
 }) {
-  const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+  const { userWallet, userPubKey, ensureWallet } = useAuthContext();
   const [loadingData, setLoadingData] = useState(false);
   const [shares, setShares] = useState<OwnedShare[]>([]);
   const [selectedShareId, setSelectedShareId] = useState<string>("");
@@ -135,19 +136,8 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
     const run = async () => {
       setLoadingData(true);
       try {
-        if (!userWallet) {
-          try {
-            await initializeWallet();
-          } catch (e) {
-            console.error('Failed to initialize wallet:', e);
-            toast.error('Failed to connect wallet', {
-              duration: 5000,
-              position: 'top-center',
-              id: 'wallet-connect-error',
-            });
-            return;
-          }
-        }
+        const pk = await ensureWallet();
+        if (!pk) return;
         const res = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
         const data = await res.json();
         const mapped: OwnedShare[] = (data?.shares || []).map((s: any) => ({
@@ -163,13 +153,13 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
         setShares(mapped);
         if (mapped.length) setSelectedShareId(mapped[0]._id);
       } catch (e) {
-        console.error(e);
+        logger.error(e);
       } finally {
         setLoadingData(false);
       }
     };
     run();
-  }, [open, userWallet, userPubKey, initializeWallet]);
+  }, [open, userWallet, userPubKey, ensureWallet]);
 
   // Load property details and set default price when share changes
   useEffect(() => {
@@ -194,7 +184,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
         const estimate = Math.max(0, Math.round((prop.priceUSD / 100) * 100) / 100);
         setPricePerShare(estimate);
       } catch (e) {
-        console.error(e);
+        logger.error(e);
         setProperty(null);
         setPricePerShare(0);
       }

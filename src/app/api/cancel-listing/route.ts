@@ -8,6 +8,7 @@ import { getIdentityKey } from "../../../utils/tokenDerivation";
 import { decodeBeef } from "../../../utils/beefEncoding";
 import { parseOutpoint, toOutpoint } from "../../../utils/outpoints";
 import { getServerPrivateKey, getWalletStorageUrl } from "../../../lib/config";
+import { logger } from "../../../utils/logger";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -122,7 +123,7 @@ export async function POST(request: Request) {
             },
         }, { status: 200 });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     } finally {
         try {

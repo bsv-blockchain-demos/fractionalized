@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToMongo, marketItemsCollection, propertiesCollection } from "../../../lib/mongo";
 import { requireAuth } from "../../../utils/apiAuth";
+import { logger } from "../../../utils/logger";
 
 export async function GET(request: Request) {
     try {
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ items: normalized });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

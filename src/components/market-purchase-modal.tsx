@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 
@@ -29,12 +29,14 @@ export function MarketPurchaseModal({
   onClose: () => void;
   onBuy: (payload: { marketItemId: string; buyerId: string; }) => void;
 }) {
-  const { userPubKey } = useAuthContext();
+  const { userPubKey, ensureWallet } = useAuthContext();
 
   const totalPrice = useMemo(() => {
     if (!item) return 0;
     return Number(item.sellAmount) * Number(item.pricePerShare || 0);
   }, [item]);
+
+  useEffect(() => { if (open) ensureWallet(true); }, [open, ensureWallet]);
 
   if (!open || !item) return null;
 

@@ -13,9 +13,10 @@ import { generateNonce, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } fro
 import { internalizeToBasket } from "../../../../utils/internalizeToBasket";
 import { encodeBeef } from "../../../../utils/beefEncoding";
 import { getServerPrivateKey, getWalletStorageUrl } from "../../../../lib/config";
+import { logger } from "../../../../utils/logger";
 
 export async function POST(request: Request) {
-    console.log('[TIMING] ===== TOKENIZE ROUTE START =====');
+    logger.debug('[TIMING] ===== TOKENIZE ROUTE START =====');
     const routeStart = Date.now();
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
@@ -108,18 +109,18 @@ export async function POST(request: Request) {
     }
 
     try {
-        console.log('[TIMING] Starting MongoDB connection...');
+        logger.debug('[TIMING] Starting MongoDB connection...');
         const mongoStart = Date.now();
         await connectToMongo();
-        console.log(`[TIMING] MongoDB connected in ${Date.now() - mongoStart}ms`);
+        logger.debug(`[TIMING] MongoDB connected in ${Date.now() - mongoStart}ms`);
 
-        console.log('[TIMING] Starting wallet creation...');
+        logger.debug('[TIMING] Starting wallet creation...');
         const walletStart = Date.now();
         const wallet = await makeWallet("main", getWalletStorageUrl(), getServerPrivateKey());
         if (!wallet) {
             throw new Error("Failed to create wallet");
         }
-        console.log(`[TIMING] Wallet created in ${Date.now() - walletStart}ms`);
+        logger.debug(`[TIMING] Wallet created in ${Date.now() - walletStart}ms`);
 
         // Create property token using server wallet but with user's pubKeyHash
         const title = data.title.trim().toLowerCase();
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
             .writeOpCode(OP.OP_RETURN)
             .writeBin(propertyDataHash)
 
-        console.log('[TIMING] Starting property token createAction...');
+        logger.debug('[TIMING] Starting property token createAction...');
         const createPropertyStart = Date.now();
         const response = await wallet.createAction({
             description: "Create property token",
@@ -159,7 +160,7 @@ export async function POST(request: Request) {
                 // No acceptDelayedBroadcast needed - this output is just a reference token, not spent immediately
             }
         });
-        console.log(`[TIMING] Property token createAction completed in ${Date.now() - createPropertyStart}ms`);
+        logger.debug(`[TIMING] Property token createAction completed in ${Date.now() - createPropertyStart}ms`);
 
         if (!response?.txid) {
             throw new Error("Failed to create property token");
@@ -222,8 +223,7 @@ export async function POST(request: Request) {
         );
 
         // Build preimage for payment input to calculate change satoshis
-        console.log('[TIMING] Starting preimage transaction build and sign...');
-        console.log("Payment unlock frame before signing: ", paymentUnlockFrame);
+        logger.debug('[TIMING] Starting preimage transaction build and sign...');
         const preimageStart = Date.now();
         const preimageTx = new Transaction();
         preimageTx.addInput({
@@ -242,14 +242,13 @@ export async function POST(request: Request) {
 
         await preimageTx.fee(new SatoshisPerKilobyte(100))
         await preimageTx.sign()
-        console.log("Payment unlock frame after signing: ", paymentUnlockFrame);
-        console.log(`[TIMING] Preimage transaction completed in ${Date.now() - preimageStart}ms`);
+        logger.debug(`[TIMING] Preimage transaction completed in ${Date.now() - preimageStart}ms`);
 
         const changeSats = preimageTx.outputs[1].satoshis as number
-        console.log(`[TIMING] Calculated change satoshis: ${changeSats}`);
+        logger.debug(`[TIMING] Calculated change satoshis: ${changeSats}`);
 
         // Create the mint transaction with unlockingScriptLength instead of actual unlocking script
-        console.log('[TIMING] Starting mint createAction with unlockingScriptLength...');
+        logger.debug('[TIMING] Starting mint createAction with unlockingScriptLength...');
         const createActionStart = Date.now();
         const actionRes = await wallet.createAction({
             description: "Mint shares for property token",
@@ -278,7 +277,7 @@ export async function POST(request: Request) {
                 acceptDelayedBroadcast: false,
             }
         });
-        console.log(`[TIMING] Mint createAction completed in ${Date.now() - createActionStart}ms`);
+        logger.debug(`[TIMING] Mint createAction completed in ${Date.now() - createActionStart}ms`);
 
         if (!actionRes?.signableTransaction) {
             throw new Error("Failed to create signable transaction");
@@ -288,14 +287,14 @@ export async function POST(request: Request) {
         const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
         // Add unlocking script template to the payment input (reuse same frame)
-        console.log('[TIMING] Starting final transaction signing...');
+        logger.debug('[TIMING] Starting final transaction signing...');
         const finalSignStart = Date.now();
         txToSign.inputs[0].unlockingScriptTemplate = paymentUnlockFrame;
         txToSign.inputs[0].sourceTransaction = paymentSourceTX;
 
         // Sign the complete transaction
         await txToSign.sign();
-        console.log(`[TIMING] Final transaction sign completed in ${Date.now() - finalSignStart}ms`);
+        logger.debug(`[TIMING] Final transaction sign completed in ${Date.now() - finalSignStart}ms`);
 
         // Extract the unlocking script
         const unlockingScript = txToSign.inputs[0].unlockingScript?.toHex();
@@ -304,7 +303,7 @@ export async function POST(request: Request) {
         }
 
         // Sign the action with the actual unlocking script
-        console.log('[TIMING] Starting signAction...');
+        logger.debug('[TIMING] Starting signAction...');
         const signActionStart = Date.now();
         const signedAction = await wallet.signAction({
             reference,
@@ -312,7 +311,7 @@ export async function POST(request: Request) {
                 "0": { unlockingScript }
             }
         });
-        console.log(`[TIMING] signAction completed in ${Date.now() - signActionStart}ms`);
+        logger.debug(`[TIMING] signAction completed in ${Date.now() - signActionStart}ms`);
 
         if (!signedAction?.txid) {
             throw new Error("Failed to mint shares for property token");
@@ -325,23 +324,19 @@ export async function POST(request: Request) {
             counterpartyDerivedKey: sellerChild, order: 'self-second', tags: ['type:share'],
         }], "Mint shares (server side)");
 
-        // [DEV] TEMP — verify server basket
-        const _devBasket = await wallet.listOutputs({ basket: 'fractionalized.tokens' });
-        console.log('[DEV] server basket:', _devBasket.totalOutputs, _devBasket.outputs?.map((o: any) => o.outpoint));
-
         // Broadcast the mint transaction to the Overlay
-        console.log('[TIMING] Starting overlay broadcast...');
+        logger.debug('[TIMING] Starting overlay broadcast...');
         const broadcastStart = Date.now();
         const mintTx = Transaction.fromBEEF(signedAction.tx as number[]);
         const overlayResponse = await broadcastTX(mintTx);
-        console.log(`[TIMING] Overlay broadcast completed in ${Date.now() - broadcastStart}ms`);
+        logger.debug(`[TIMING] Overlay broadcast completed in ${Date.now() - broadcastStart}ms`);
 
         if (overlayResponse.status !== "success") {
-            console.log(`Failed to broadcast transaction for ${signedAction.txid}`);
+            logger.debug(`Failed to broadcast transaction for ${signedAction.txid}`);
         }
 
         // Save property data to database
-        console.log('[TIMING] Starting database operations...');
+        logger.debug('[TIMING] Starting database operations...');
         const dbStart = Date.now();
         const { description, whyInvest, ...rest } = data || {};
 
@@ -392,11 +387,11 @@ export async function POST(request: Request) {
             }
         } catch (e) {
             // If the description insert fails, we won't fail the whole operation; log and proceed
-            console.warn("Failed to insert property description:", e);
+            logger.warn("Failed to insert property description:", e);
         }
 
-        console.log(`[TIMING] Database operations completed in ${Date.now() - dbStart}ms`);
-        console.log(`[TIMING] ===== TOTAL ROUTE TIME: ${Date.now() - routeStart}ms =====`);
+        logger.debug(`[TIMING] Database operations completed in ${Date.now() - dbStart}ms`);
+        logger.debug(`[TIMING] ===== TOTAL ROUTE TIME: ${Date.now() - routeStart}ms =====`);
 
         return NextResponse.json({
             success: true, status: 200, data: propertyInsert,
@@ -404,7 +399,7 @@ export async function POST(request: Request) {
                         counterparty: serverIdentityKey, counterpartyDerivedKey: serverChild, order: 'self-first' },
         });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

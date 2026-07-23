@@ -5,6 +5,7 @@ import { requireAuth } from "../../../utils/apiAuth";
 import { readJsonBody } from "../../../utils/validation";
 import { verifyRequestProof } from "../../../utils/apiAuthProof";
 import { AUTH_PROOF_PURPOSE } from "../../../lib/authProofPurposes";
+import { logger } from "../../../utils/logger";
 
 export async function POST(request: Request) {
   const auth = await requireAuth(request);
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ items: normalized });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

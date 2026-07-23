@@ -1,4 +1,5 @@
 import { LookupResolver, TopicBroadcaster, Transaction } from "@bsv/sdk";
+import { logger } from "../utils/logger";
 
 const overlay = new LookupResolver({
     slapTrackers: ['https://overlay-us-1.bsvb.tech'],
@@ -12,10 +13,10 @@ export const broadcastTX = async (tx: Transaction) => {
     try {
         const tb = new TopicBroadcaster(['tm_fractionalize'], { resolver: overlay });
         const overlayResponse = await tx.broadcast(tb);
-        console.log("Overlay response: ", overlayResponse);
+        logger.debug("Overlay response: ", overlayResponse);
         return { status: 'success' as const, txid, overlayResponse };
     } catch (e) {
-        console.warn(`Overlay broadcast failed for ${txid} (non-fatal):`, e);
+        logger.warn(`Overlay broadcast failed for ${txid} (non-fatal):`, e);
         return { status: 'failed' as const, txid };
     }
 }
@@ -31,6 +32,6 @@ export async function getTransactionByTxID(txid: string) {
 
         return response;
     } catch (error) {
-        console.error("Error getting transaction:", error);
+        logger.error("Error getting transaction:", error);
     }
 }

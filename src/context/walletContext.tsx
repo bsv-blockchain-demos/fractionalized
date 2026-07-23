@@ -1,14 +1,13 @@
 "use client"
 
-import {
-    WalletClient,
-} from '@bsv/sdk'
-import { useContext, createContext, useState, useEffect, useCallback } from "react";
+import { WalletClient } from '@bsv/sdk'
+import { useContext, createContext, useState, useCallback, useRef, useMemo } from "react";
 import { toast } from "react-hot-toast";
 
 type authContextType = {
     userWallet: WalletClient;
     userPubKey: string | null;
+    ensureWallet: (silent?: boolean) => Promise<string | null>;
     initializeWallet: () => Promise<void>;
     setIsAuthenticated: (value: boolean) => void;
     isAuthenticated: boolean;
@@ -19,90 +18,72 @@ type authContextType = {
 const AuthContext = createContext<authContextType>({
     userWallet: new WalletClient(),
     userPubKey: null,
+    ensureWallet: async () => null,
     initializeWallet: async () => { },
     setIsAuthenticated: () => { },
     isAuthenticated: false,
-    checkAuth: async () => { return false; },
+    checkAuth: async () => false,
     logout: () => { },
 });
+
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
-    const [userWallet, setUserWallet] = useState<authContextType['userWallet']>(new WalletClient());
-    const [userPubKey, setUserPubKey] = useState<authContextType['userPubKey']>(null);
+    const [userWallet] = useState<WalletClient>(() => new WalletClient());
+    const [userPubKey, setUserPubKey] = useState<string | null>(null);
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+    const initPromiseRef = useRef<Promise<string | null> | null>(null);
 
     const checkAuth = useCallback(async (): Promise<boolean> => {
-        console.log('checkAuth: Starting authentication check');
-        if (userWallet) {
-            console.log('checkAuth: userWallet exists, calling isAuthenticated');
-            const { authenticated } = await userWallet.isAuthenticated();
-            console.log('checkAuth: authenticated result:', authenticated);
-            setIsAuthenticated(authenticated || false);
-            console.log('checkAuth: setIsAuthenticated called with:', authenticated || false);
-            return authenticated || false
-        } else {
-            console.log('checkAuth: userWallet is null or undefined');
-        }
-        return false
+        const { authenticated } = await userWallet.isAuthenticated();
+        setIsAuthenticated(authenticated || false);
+        return authenticated || false;
     }, [userWallet]);
 
-    const initializeWallet = useCallback(async () => {
-        console.log('initializeWallet: Starting wallet initialization');
-        try {
-            console.log('initializeWallet: Checking authentication');
-            const { authenticated } = await userWallet.isAuthenticated();
-            console.log('initializeWallet: authenticated result:', authenticated);
-            if (!authenticated) {
-                console.error('Wallet not authenticated');
-                toast.error('Wallet not authenticated', {
-                    duration: 5000,
-                    position: 'top-center',
-                    id: 'wallet-not-authenticated',
-                });
-                return;
-            }
-            console.log('initializeWallet: Wallet authenticated, setting isAuthenticated to true');
-            setIsAuthenticated(true);
-
-            console.log('initializeWallet: Fetching identity key');
-            // Identity key (not a derived key) — type-42 derivation is rooted in it.
-            const { publicKey } = await userWallet.getPublicKey({ identityKey: true });
-            console.log('initializeWallet: identity key fetched:', publicKey);
-
-            // Only update state once everything is fetched
-            console.log('initializeWallet: Setting userPubKey');
-            setUserPubKey(publicKey);
-            toast.success('Wallet connected successfully', {
-                duration: 5000,
-                position: 'top-center',
-                id: 'wallet-connect-success',
-            });
-            console.log('initializeWallet: Wallet initialization completed successfully');
-        } catch (error) {
-            console.error('Failed to initialize wallet:', error);
-            toast.error('Failed to connect wallet', {
-                duration: 5000,
-                position: 'top-center',
-                id: 'wallet-connect-error',
-            });
+    // Returns the identity pubkey, or null (fails closed) if the wallet is absent/locked.
+    // Use the return value, not the context userPubKey (stale until re-render). `silent` mutes toasts.
+    const ensureWallet = useCallback((silent: boolean = false): Promise<string | null> => {
+        if (userPubKey) return Promise.resolve(userPubKey);
+        if (!initPromiseRef.current) {
+            const p = (async (): Promise<string | null> => {
+                try {
+                    const { authenticated } = await userWallet.isAuthenticated();
+                    if (!authenticated) {
+                        if (!silent) { toast.error('Wallet not authenticated', { duration: 5000, position: 'top-center', id: 'wallet-not-authenticated' }); }
+                        return null;
+                    }
+                    const { publicKey } = await userWallet.getPublicKey({ identityKey: true });
+                    setUserPubKey(publicKey);
+                    setIsAuthenticated(true);
+                    if (!silent) { toast.success('Wallet connected successfully', { duration: 5000, position: 'top-center', id: 'wallet-connect-success' }); }
+                    return publicKey;
+                } catch {
+                    if (!silent) { toast.error('Failed to connect wallet', { duration: 5000, position: 'top-center', id: 'wallet-connect-error' }); }
+                    return null;
+                }
+            })();
+            // Dedupe concurrent calls; drop the cache on failure so callers can retry.
+            initPromiseRef.current = p;
+            p.then((pk) => { if (!pk) initPromiseRef.current = null; }).catch(() => { initPromiseRef.current = null; });
         }
-    }, [userWallet]);
+        return initPromiseRef.current;
+    }, [userWallet, userPubKey]);
 
-    // Logout function to clear all wallet states
+    // Back-compat wrapper for the Login button.
+    const initializeWallet = useCallback(async (): Promise<void> => {
+        await ensureWallet();
+    }, [ensureWallet]);
+
     const logout = useCallback(() => {
-        console.log('logout: Clearing wallet states');
-        setUserWallet(new WalletClient());
         setUserPubKey(null);
         setIsAuthenticated(false);
-        console.log('logout: Wallet states cleared');
+        initPromiseRef.current = null;
     }, []);
 
-    // Initialize wallet on mount
-    useEffect(() => {
-        initializeWallet();
-    }, [initializeWallet]);
+    const value = useMemo(() => ({
+        userWallet, userPubKey, ensureWallet, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout,
+    }), [userWallet, userPubKey, ensureWallet, initializeWallet, isAuthenticated, checkAuth, logout]);
 
     return (
-        <AuthContext.Provider value={{ userWallet, userPubKey, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

@@ -3,6 +3,7 @@ import { connectToMongo, propertiesCollection } from "../../../lib/mongo";
 import { requireAuth } from "../../../utils/apiAuth";
 import { toPublicProperty } from "../../../lib/serializers";
 import { buildFacetPipeline } from "../../../lib/propertiesPipeline";
+import { logger } from "../../../utils/logger";
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ items, total, page: body.page ?? 1, limit: body.limit ?? 20 });
   } catch (e: any) {
-    console.error("/api/properties error:", e);
+    logger.error("/api/properties error:", e);
     return NextResponse.json({ error: "Failed to fetch properties" }, { status: 500 });
   }
 }
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ items, total, page, limit });
   } catch (e) {
-    console.error("/api/properties GET error:", e);
+    logger.error("/api/properties GET error:", e);
     return NextResponse.json({ error: "Failed to fetch properties" }, { status: 500 });
   }
 }

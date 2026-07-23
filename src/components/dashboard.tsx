@@ -12,6 +12,7 @@ import PortfolioStats from "./dashboard/PortfolioStats";
 import { useCancelListing } from "../hooks/useCancelListing";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
+import { logger } from "../utils/logger";
 
 export function Dashboard() {
   // User shares mapped to properties
@@ -35,26 +36,15 @@ export function Dashboard() {
   const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
   const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
   const [loadingMyListings, setLoadingMyListings] = useState<boolean>(false);
-  const { userWallet, userPubKey, initializeWallet } = useAuthContext();
+  const { userWallet, userPubKey, ensureWallet } = useAuthContext();
   const { cancelListing, cancellingId } = useCancelListing();
 
   useEffect(() => {
     const fetchInvestedProperties = async () => {
       setLoadingInvestments(true);
       try {
-        if (!userWallet) {
-          try {
-            await initializeWallet();
-          } catch (e) {
-            console.error('Failed to initialize wallet:', e);
-            toast.error('Failed to connect wallet', {
-              duration: 5000,
-              position: 'top-center',
-              id: 'wallet-connect-error',
-            });
-            return;
-          }
-        }
+        const pk = await ensureWallet();
+        if (!pk) return;
 
         // Get owned shares
         const response = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
@@ -95,7 +85,7 @@ export function Dashboard() {
         );
         setInvestedCards(valid);
       } catch (e: any) {
-        console.error(e);
+        logger.error(e);
         toast.error("Failed to load your investments");
       } finally {
         setLoadingInvestments(false);
@@ -103,26 +93,15 @@ export function Dashboard() {
     };
     fetchInvestedProperties();
     // Re-run if the user identity changes
-  }, [userWallet, userPubKey, initializeWallet]);
+  }, [userWallet, userPubKey, ensureWallet]);
 
   // Fetch user's market listings (unsold)
   useEffect(() => {
     const fetchMyListings = async () => {
       setLoadingMyListings(true);
       try {
-        if (!userWallet) {
-          try {
-            await initializeWallet();
-          } catch (e) {
-            console.error('Failed to initialize wallet:', e);
-            toast.error('Failed to connect wallet', {
-              duration: 5000,
-              position: 'top-center',
-              id: 'wallet-connect-error',
-            });
-            return;
-          }
-        }
+        const pk = await ensureWallet();
+        if (!pk) return;
 
         const response = await fetchWithAuthProof("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
         if (!response.ok) {
@@ -143,33 +122,22 @@ export function Dashboard() {
           tokenTxid: i?.tokenTxid ? String(i.tokenTxid) : undefined,
         })));
       } catch (e) {
-        console.error(e);
+        logger.error(e);
         toast.error("Failed to load your listings");
       } finally {
         setLoadingMyListings(false);
       }
     };
     fetchMyListings();
-  }, [userWallet, userPubKey, initializeWallet]);
+  }, [userWallet, userPubKey, ensureWallet]);
 
   // Fetch properties the user is selling
   useEffect(() => {
     const fetchSellingProperties = async () => {
       setLoadingSelling(true);
       try {
-        if (!userWallet) {
-          try {
-            await initializeWallet();
-          } catch (e) {
-            console.error('Failed to initialize wallet:', e);
-            toast.error('Failed to connect wallet', {
-              duration: 5000,
-              position: 'top-center',
-              id: 'wallet-connect-error',
-            });
-            return;
-          }
-        }
+        const pk = await ensureWallet();
+        if (!pk) return;
 
         // Get selling properties
         const response = await fetchWithAuthProof("/api/my-selling", userWallet, AUTH_PROOF_PURPOSE.mySelling);
@@ -185,7 +153,7 @@ export function Dashboard() {
         );
         setSelling(valid);
       } catch (e: any) {
-        console.error(e);
+        logger.error(e);
         toast.error("Failed to load your selling properties");
       } finally {
         setLoadingSelling(false);
@@ -193,7 +161,7 @@ export function Dashboard() {
     };
     fetchSellingProperties();
     // Re-run if the user identity changes
-  }, [userWallet, userPubKey, initializeWallet]);
+  }, [userWallet, userPubKey, ensureWallet]);
 
   // Cancel a listing via the shared hook, then optimistically remove it from the UI.
   const handleCancelListing = (item: {

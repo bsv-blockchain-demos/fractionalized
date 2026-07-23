@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 import { propertiesValidator, sharesValidator, propertyDescriptionsValidator, marketItemsValidator } from "./validators";
 import { getMongoUri } from "./config";
+import { logger } from "../utils/logger";
 
 export interface Properties {
   _id: ObjectId;
@@ -184,10 +185,10 @@ async function connectToMongo() {
       if (!client) {
         client = new MongoClient(uri, options);
         await client.connect();
-        console.log("Connected to MongoDB!");
+        logger.debug("Connected to MongoDB!");
       } else {
         // Reuse existing client if already connected
-        console.log("Reusing existing MongoDB connection");
+        logger.debug("Reusing existing MongoDB connection");
       }
 
       // Initialize database and collections
@@ -209,7 +210,7 @@ async function connectToMongo() {
             validationLevel: "strict",
           });
         } catch (e) {
-          console.warn("collMod properties failed (will continue):", e);
+          logger.warn("collMod properties failed (will continue):", e);
         }
       }
 
@@ -227,7 +228,7 @@ async function connectToMongo() {
             validationLevel: "strict",
           });
         } catch (e) {
-          console.warn("collMod shares failed (will continue):", e);
+          logger.warn("collMod shares failed (will continue):", e);
         }
       }
 
@@ -245,7 +246,7 @@ async function connectToMongo() {
             validationLevel: "strict",
           });
         } catch (e) {
-          console.warn("collMod property_descriptions failed (will continue):", e);
+          logger.warn("collMod property_descriptions failed (will continue):", e);
         }
       }
 
@@ -263,7 +264,7 @@ async function connectToMongo() {
             validationLevel: "strict",
           });
         } catch (e) {
-          console.warn("collMod market_items failed (will continue):", e);
+          logger.warn("collMod market_items failed (will continue):", e);
         }
       }
 
@@ -310,7 +311,7 @@ async function connectToMongo() {
           }
         );
       } catch (e) {
-        console.warn("Ensuring txids.tokenTxid index failed (will continue):", e);
+        logger.warn("Ensuring txids.tokenTxid index failed (will continue):", e);
       }
 
       await sharesCollection.createIndex({ "_id": 1 });
@@ -331,9 +332,9 @@ async function connectToMongo() {
 
       // Note: _id is automatically unique in MongoDB, no need for custom id field
 
-      console.log("MongoDB indexes created successfully");
+      logger.debug("MongoDB indexes created successfully");
     } catch (error) {
-      console.error("Error connecting to MongoDB:", error);
+      logger.error("Error connecting to MongoDB:", error);
       connectingPromise = null; // Reset on error so retry is possible
       throw error;
     } finally {
@@ -351,11 +352,11 @@ if (typeof process !== 'undefined' && process.on) {
     try {
       if (client) {
         await client.close();
-        console.log('MongoDB connection closed.');
+        logger.debug('MongoDB connection closed.');
       }
       process.exit(0);
     } catch (error) {
-      console.error('Error during MongoDB shutdown:', error);
+      logger.error('Error during MongoDB shutdown:', error);
       process.exit(1);
     }
   });

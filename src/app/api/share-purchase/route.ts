@@ -16,13 +16,14 @@ import { internalizeToBasket } from "../../../utils/internalizeToBasket";
 import { encodeBeef } from "../../../utils/beefEncoding";
 import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
 import { getServerPrivateKey, getWalletStorageUrl } from "../../../lib/config";
+import { logger } from "../../../utils/logger";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
     if (auth instanceof NextResponse) return auth;
     const userId = auth.user;
     const { propertyId, investorId, amount } = await request.json();
-    console.log("InvestorId", investorId)
+    logger.debug("InvestorId", investorId)
 
     // Verify the investoryId (requester) is the logged in user
     if (userId !== investorId) {
@@ -237,8 +238,6 @@ export async function POST(request: Request) {
         await preimageTx.fee(new SatoshisPerKilobyte(100))
         await preimageTx.sign()
 
-        console.log('[Share-Purchase] Transaction to sign: ', preimageTx.toHex())
-
         // fee() drops the payment change when the pool can't cover it (e.g. a final sale draining it).
         const paymentChangeOutput = preimageTx.outputs[paymentChangeIndex];
         const hasPaymentChange = !!paymentChangeOutput;
@@ -342,7 +341,7 @@ export async function POST(request: Request) {
         const overlayResponse = await broadcastTX(tx);
 
         if (overlayResponse.status !== "success") {
-            console.log(`Failed to broadcast transaction for ${transferTx.txid}`);
+            logger.debug(`Failed to broadcast transaction for ${transferTx.txid}`);
         }
 
         const atomicBeef = transferTx.tx as number[];
@@ -437,7 +436,7 @@ export async function POST(request: Request) {
             received: { atomicBeef: encodeBeef(atomicBeef), outputIndex: 0, keyId: transferNonce, counterparty: serverIdentityKey },
         });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     } finally {
         // Release lock

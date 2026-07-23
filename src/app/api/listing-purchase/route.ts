@@ -14,6 +14,7 @@ import { fetchTokenSourceTx } from "../../../utils/fetchTokenSourceTx";
 import { generateNonce, deriveRecipientKey, deriveMultisigPair, getIdentityKey, TOKEN_PROTOCOL } from "../../../utils/tokenDerivation";
 import { encodeBeef } from "../../../utils/beefEncoding";
 import { getServerPrivateKey, getWalletStorageUrl } from "../../../lib/config";
+import { logger } from "../../../utils/logger";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -258,7 +259,7 @@ export async function POST(request: Request) {
             },
         }, { status: 200 });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     } finally {
         try {

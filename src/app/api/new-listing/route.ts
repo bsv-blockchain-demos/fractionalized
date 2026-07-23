@@ -7,6 +7,7 @@ import { Transaction, PublicKey } from "@bsv/sdk";
 import { OrdinalsP2MS } from "../../../utils/ordinalsP2MS";
 import { hashFromPubkeys } from "../../../utils/hashFromPubkeys";
 import { decodeBeef } from "../../../utils/beefEncoding";
+import { logger } from "../../../utils/logger";
 
 export async function POST(request: Request) {
     const auth = await requireAuth(request);
@@ -75,6 +76,23 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Listing output does not match expected multisig" }, { status: 400 });
         }
 
+        // DB-integrity gate (H-3): the seller must actually own the share being listed.
+        const parentShare = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: parentTxid });
+        if (!parentShare) {
+            return NextResponse.json({ error: "Parent share not found" }, { status: 400 });
+        }
+        if (parentShare.investorId !== sellerId) {
+            return NextResponse.json({ error: "You do not own this share" }, { status: 403 });
+        }
+        if (typeof parentShare.amount === "number" && amount > parentShare.amount) {
+            return NextResponse.json({ error: "Amount exceeds share balance" }, { status: 400 });
+        }
+        // Leaf check: parent must be unspent/unlisted (no child references it as parentTxid).
+        const alreadySpent = await sharesCollection.findOne({ propertyId: propertyObjectId, parentTxid: parentTxid });
+        if (alreadySpent) {
+            return NextResponse.json({ error: "Share already spent or listed" }, { status: 409 });
+        }
+
         // Acquire lock per (property, seller)
         try {
             const lockRes = await locksCollection.insertOne({
@@ -135,7 +153,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ share, listing });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     } finally {
         if (lockId) {

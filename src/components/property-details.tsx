@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast';
 import { useAuthContext } from '../context/walletContext';
 import { internalizeToBasket } from '../utils/internalizeToBasket';
 import { decodeBeef } from '../utils/beefEncoding';
+import { logger } from '../utils/logger';
 
 // Extended property type that includes computed fields from the API
 type PropertyWithDetails = Properties & {
@@ -25,7 +26,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
     const [property, setProperty] = useState<PropertyWithDetails | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
-    const { userWallet, initializeWallet, userPubKey } = useAuthContext();
+    const { userWallet, ensureWallet, userPubKey } = useAuthContext();
 
     useEffect(() => {
         async function fetchProperty() {
@@ -40,32 +41,24 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                     setProperty(item);
                 }
             } catch (e) {
-                console.error("Failed to load property details:", e);
+                logger.error("Failed to load property details:", e);
             } finally {
                 setLoading(false);
             }
         }
         fetchProperty();
     }, [propertyId]);
-    
+
+    useEffect(() => { ensureWallet(true); }, [ensureWallet]);
+
     const handleContinueInvest = async (amount: number) => {
         setInvestLoading(true);
 
         try {
-            // Initialize wallet if not already connected
-            if (!userWallet) {
-                try {
-                    await initializeWallet();
-                } catch (e) {
-                    console.error('Failed to initialize wallet:', e);
-                    toast.error('Failed to connect wallet', {
-                        duration: 5000,
-                        position: 'top-center',
-                        id: 'wallet-connect-error',
-                    });
-                    setInvestLoading(false);
-                    return;
-                }
+            const pk = await ensureWallet();
+            if (!pk) {
+                setInvestLoading(false);
+                return;
             }
 
             // Send purchase request to API
@@ -76,7 +69,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 },
                 body: JSON.stringify({
                     propertyId,
-                    investorId: userPubKey,
+                    investorId: pk,
                     amount: Number(amount),
                 }),
             });
@@ -84,13 +77,11 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
 
             // Handle API errors
             if (data.error) {
-                console.error(data.error);
+                logger.error(data.error);
                 toast.error("Failed to purchase share");
                 setInvestLoading(false);
                 return;
             }
-
-            console.log(data);
 
             // Internalize the purchased share output into the investor's wallet basket
             if (data?.received) {
@@ -106,11 +97,8 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                         }],
                         "Receive purchased share",
                     );
-                    // [DEV] TEMP — verify buyer basket; remove before final commit
-                    const _b = await userWallet!.listOutputs({ basket: 'fractionalized.tokens' });
-                    console.log('[DEV] buyer basket:', _b.totalOutputs, _b.outputs?.map((o: any) => o.outpoint));
                 } catch (e) {
-                    console.warn("Failed to internalize purchased share into wallet basket:", e);
+                    logger.warn("Failed to internalize purchased share into wallet basket:", e);
                 }
             }
 
@@ -133,7 +121,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             setInvestSuccess(true);
             toast.success("Share purchased", { duration: 4000, position: "top-center", id: "invest-success" });
         } catch (e) {
-            console.error('Investment error:', e);
+            logger.error('Investment error:', e);
             toast.error('Failed to complete investment');
         } finally {
             setInvestLoading(false);

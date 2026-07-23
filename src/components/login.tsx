@@ -5,61 +5,31 @@ import { useAuthContext } from "../context/walletContext";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { authClient } from "@/lib/authProof";
+import { logger } from "../utils/logger";
 
 export function Login() {
-    console.log('Login component: Mounting');
     const [loading, setLoading] = useState(false);
-    const { initializeWallet, checkAuth, userPubKey, userWallet } = useAuthContext();
-    console.log('Login component: Hooks initialized, userPubKey:', userPubKey);
+    const { ensureWallet, userWallet } = useAuthContext();
     const router = useRouter();
 
     const handleLogin = useCallback(async () => {
-        console.log('handleLogin: Starting login process');
         try {
             setLoading(true);
-            console.log('handleLogin: Loading set to true');
 
-            // Ensure wallet is initialized and authenticated
-            console.log('handleLogin: Calling initializeWallet');
-            await initializeWallet();
-            console.log('handleLogin: initializeWallet completed');
-            const isAuth = await checkAuth();
-            console.log('handleLogin: checkAuth result:', isAuth);
-            if (!isAuth) {
-                toast.error("Please authenticate your wallet first", {
-                    duration: 4000,
-                    position: "top-center",
-                    id: "wallet-auth-error",
-                });
-                return;
-            }
-
-            if (!userPubKey) {
-                console.log('handleLogin: userPubKey is missing');
-                toast.error("Missing public key from wallet", {
-                    duration: 4000,
-                    position: "top-center",
-                    id: "pubkey-missing",
-                });
-                return;
-            }
-            console.log('handleLogin: userPubKey found:', userPubKey);
+            const walletIdentityKey = await ensureWallet(); // identity pubkey, or null when absent/locked
+            if (!walletIdentityKey) return; // ensureWallet already toasted
 
             // Signed, expiry-bound, single-use proof that the user controls the wallet private key
             const SERVER_IDENTITY = process.env.NEXT_PUBLIC_SERVER_IDENTITY_KEY!;
-            const { publicKey: walletIdentityKey } = await userWallet.getPublicKey({ identityKey: true });
             const proof = await authClient.createAuthProof(userWallet, SERVER_IDENTITY, 'login');
 
             // Ask server to set JWT cookie
-            console.log('handleLogin: Making fetch request to /api/auth/login with userPubKey:', userPubKey);
             const res = await fetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ request: "login", userPubKey, proof, walletIdentityKey }),
+                body: JSON.stringify({ request: "login", userPubKey: walletIdentityKey, proof, walletIdentityKey }),
             });
-            console.log('handleLogin: Fetch response status:', res.status);
             const data = await res.json().catch(() => ({}));
-            console.log('handleLogin: Fetch response data:', data);
             if (!res.ok) {
                 toast.error(data?.message || "Login failed", {
                     duration: 4000,
@@ -76,20 +46,18 @@ export function Login() {
             });
 
             // Navigate away from /login; middleware will allow since cookie set
-            console.log('handleLogin: Login successful, navigating to /');
             router.replace("/");
         } catch (e) {
-            console.error('handleLogin: Unexpected error during login:', e);
+            logger.error('handleLogin: Unexpected error during login:', e);
             toast.error("Unexpected error during login", {
                 duration: 4000,
                 position: "top-center",
                 id: "login-error",
             });
         } finally {
-            console.log('handleLogin: Setting loading to false');
             setLoading(false);
         }
-    }, [initializeWallet, checkAuth, userPubKey, userWallet, router]);
+    }, [ensureWallet, userWallet, router]);
 
     return (
         <div className="container mx-auto px-4 py-12">

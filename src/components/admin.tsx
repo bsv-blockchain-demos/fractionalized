@@ -12,6 +12,7 @@ import { hashFromPubkeys } from "@/utils/hashFromPubkeys";
 import { generateNonce, deriveMultisigPair } from "../utils/tokenDerivation";
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef } from "../utils/beefEncoding";
+import { logger } from "../utils/logger";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -28,7 +29,7 @@ export function Admin() {
     const [step2, setStep2] = useState<StepStatus>("idle");
     const [createdPropertyId, setCreatedPropertyId] = useState<string | null>(null);
 
-    const { userWallet, userPubKey, initializeWallet, checkAuth } = useAuthContext();
+    const { userWallet, ensureWallet } = useAuthContext();
 
     const stepLabels = [
         "Creating payment UTXO...",
@@ -128,26 +129,8 @@ export function Admin() {
 
         let currentStep = 1; // Track which step we're in
 
-        const authenticated = await checkAuth();
-        if (!authenticated) {
-            toast.error('Failed to authenticate', {
-                duration: 5000,
-                position: 'top-center',
-                id: 'authentication-error',
-            });
-            setProcessing(false);
-            return;
-        }
-
-        if (!userPubKey) {
-            toast.error('Failed to get public key', {
-                duration: 5000,
-                position: 'top-center',
-                id: 'public-key-error',
-            });
-            setProcessing(false);
-            return;
-        }
+        const pk = await ensureWallet();
+        if (!pk) { setProcessing(false); return; } // ensureWallet toasts; blocks absent/locked wallet
 
         try {
             // Step 1: Create payment UTXO
@@ -196,12 +179,11 @@ export function Admin() {
                     data: _data,
                     paymentTxAction,
                     paymentNonce,
-                    seller: userPubKey,
+                    seller: pk,
                 }),
             });
 
             const createPropertyData = await createPropertyResponse.json();
-            console.log({ createPropertyData });
 
             if (!createPropertyResponse.ok && createPropertyData?.error === "Validation failed") {
                 const arr = Array.isArray(createPropertyData?.details) ? createPropertyData.details : [];
@@ -235,11 +217,8 @@ export function Admin() {
                         }],
                         "Receive minted shares",
                     );
-                    // [DEV] TEMP — verify seller basket
-                    const _b = await userWallet!.listOutputs({ basket: 'fractionalized.tokens' });
-                    console.log('[DEV] seller basket:', _b.totalOutputs, _b.outputs?.map((o: any) => o.outpoint));
                 } catch (internalizeError) {
-                    console.warn("Failed to internalize minted output into seller basket — property was created but wallet basket entry is missing:", internalizeError);
+                    logger.warn("Failed to internalize minted output into seller basket — property was created but wallet basket entry is missing:", internalizeError);
                 }
             }
 
@@ -253,7 +232,7 @@ export function Admin() {
             });
         } catch (e) {
             // If any error occurs, mark the current running step as error
-            console.error("Error during tokenization process:", e);
+            logger.error("Error during tokenization process:", e);
             if (currentStep === 1) {
                 setStep1("error");
             } else if (currentStep === 2) {
@@ -416,7 +395,7 @@ export function Admin() {
             };
             reader.readAsDataURL(file);
         } catch (error) {
-            console.error("Error uploading file:", error);
+            logger.error("Error uploading file:", error);
             toast.error("Failed to upload file");
         }
     };
