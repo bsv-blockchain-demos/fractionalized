@@ -1,10 +1,10 @@
 "use client";
 
-import { dummyProperties } from '../lib/dummydata';
 import { useMemo, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FilterSortModal, type FilterState, type SortOption } from './filter-sort-modal';
 import PropertyGrid from './properties/PropertyGrid';
+import { apiFetch } from '../utils/apiFetch';
 
 type Status = 'all' | 'upcoming' | 'open' | 'funded' | 'sold';
 
@@ -33,6 +33,7 @@ export function Properties() {
     const PAGE_SIZE = 20;
     const [total, setTotal] = useState<number>(0);
     const [loading, setLoading] = useState<boolean>(false);
+    const [loadError, setLoadError] = useState(false);
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -74,20 +75,23 @@ export function Properties() {
                 viewQS.set('sortBy', sortBy);
                 viewQS.set('status', activeStatus);
                 viewQS.set('filters', JSON.stringify(filters));
-                router.push(`?${viewQS.toString()}`);
+                router.replace(`?${viewQS.toString()}`);
 
-                const response = await fetch(url, { method: 'GET' });
+                const response = await apiFetch(url, { method: 'GET' });
                 if (!response.ok) {
-                    setProperties(dummyProperties);
-                    setTotal(dummyProperties.length);
+                    setProperties([]);
+                    setTotal(0);
+                    setLoadError(true);
                     return;
                 }
                 const data = await response.json();
+                setLoadError(false);
                 setProperties(data.items || []);
                 setTotal(data.total || 0);
             } catch (e) {
-                setProperties(dummyProperties);
-                setTotal(dummyProperties.length);
+                setProperties([]);
+                setTotal(0);
+                setLoadError(true);
             } finally {
                 setLoading(false);
             }
@@ -179,8 +183,24 @@ export function Properties() {
                 </div>
             )}
 
+            {/* Error state */}
+            {!loading && loadError && (
+                <div className="flex items-center justify-center py-10">
+                    <span className="text-sm text-text-secondary">Couldn&apos;t load properties. Please try again.</span>
+                </div>
+            )}
+
+            {/* Empty state */}
+            {!loading && !loadError && filtered.length === 0 && (
+                <div className="flex items-center justify-center py-10">
+                    <span className="text-sm text-text-secondary">No properties found.</span>
+                </div>
+            )}
+
             {/* Grid */}
-            <PropertyGrid items={filtered as any} />
+            {!loading && !loadError && filtered.length > 0 && (
+                <PropertyGrid items={filtered as any} />
+            )}
 
             {/* Pagination Controls */}
             <div className="mt-6 flex items-center justify-center gap-4">

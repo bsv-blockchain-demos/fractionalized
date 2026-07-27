@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { jwtVerify, errors } from "jose";
+import { jwtVerify } from "jose";
 import { getJwtSecret } from "../lib/config";
 import { logger } from "./logger";
 
 export type AuthResult = { user: string };
+
+// 401 that also clears the invalid/expired `verified` cookie, so a client isn't stuck
+// re-sending a bad token; the next page navigation then hits middleware → clean /login redirect.
+function unauthorized(clearCookie: boolean): NextResponse {
+  const res = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (clearCookie) res.cookies.delete("verified");
+  return res;
+}
 
 export async function requireAuth(req: Request): Promise<AuthResult | NextResponse> {
   try {
@@ -12,28 +20,20 @@ export async function requireAuth(req: Request): Promise<AuthResult | NextRespon
     const token = cookieStore.get("verified")?.value;
 
     if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized(false); // no cookie to clear
     }
 
     const secret = new TextEncoder().encode(getJwtSecret());
     const { payload } = await jwtVerify(token, secret);
 
     if (!payload.user || typeof payload.user !== "string") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized(true); // signed but malformed → clear it
     }
 
     return { user: payload.user };
   } catch (error) {
-    // On any JWT error, redirect to login and clear cookie
-    const res = NextResponse.redirect(new URL("/login", req.url));
-    if (
-      error instanceof errors.JWTExpired ||
-      error instanceof errors.JWTInvalid ||
-      error instanceof errors.JWSSignatureVerificationFailed
-    ) {
-      res.cookies.delete("verified");
-    }
+    // Expired/invalid/tampered token → clear the bad cookie.
     logger.error("JWT error", error);
-    return res;
+    return unauthorized(true);
   }
 }

@@ -22,6 +22,7 @@ import { useCancelListing, CancelListingItem } from "../hooks/useCancelListing";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 import { logger } from "../utils/logger";
+import { apiFetch } from "../utils/apiFetch";
 
 type ApiListing = {
     _id: string;
@@ -78,7 +79,7 @@ export function Marketplace() {
 
     const fetchListings = useCallback(async () => {
         try {
-            const res = await fetch("/api/listings");
+            const res = await apiFetch("/api/listings");
             const data = await res.json();
             setItems(Array.isArray(data?.items) ? data.items : []);
         } catch (e) {
@@ -326,7 +327,7 @@ export function Marketplace() {
                 sellerChild,
                 serverChild,
             };
-            const dbRes = await fetch("/api/new-listing", {
+            const dbRes = await apiFetch("/api/new-listing", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -415,7 +416,7 @@ export function Marketplace() {
             }
 
             // Send the paymentTX to the server and start ordinal transfer
-            const response = await fetch("/api/listing-purchase", {
+            const response = await apiFetch("/api/listing-purchase", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ marketItemId, buyerId: pk, paymentNonce, paymentTX: paymentUtxo }),

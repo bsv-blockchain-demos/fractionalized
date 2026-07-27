@@ -9,6 +9,13 @@ export async function GET(request: Request) {
         const auth = await requireAuth(request);
         if (auth instanceof NextResponse) return auth;
 
+        const { searchParams } = new URL(request.url);
+        const page = Number(searchParams.get("page") || 1);
+        const limit = Number(searchParams.get("limit") || 20);
+        const safeLimit = Math.min(Math.max(1, Number(limit) || 20), 100);
+        const safePage = Math.max(1, Number(page) || 1);
+        const skip = Math.max(0, (safePage - 1) * safeLimit);
+
         await connectToMongo();
 
         // Find unsold listings (sold: false OR missing)
@@ -44,6 +51,8 @@ export async function GET(request: Request) {
                 },
             },
             { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: safeLimit },
         ]);
 
         const items = await cursor.toArray();
@@ -59,7 +68,7 @@ export async function GET(request: Request) {
             location: String(i.location ?? "Unknown"),
           }));
 
-        return NextResponse.json({ items: normalized });
+        return NextResponse.json({ items: normalized, page: safePage, limit: safeLimit });
     } catch (e) {
         logger.error(e);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -13,6 +13,7 @@ import { useCancelListing } from "../hooks/useCancelListing";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 import { logger } from "../utils/logger";
+import { apiFetch } from "../utils/apiFetch";
 
 export function Dashboard() {
   // User shares mapped to properties
@@ -70,7 +71,7 @@ export function Dashboard() {
         // Fetch property details for each share
         const props = await Promise.all(
           shares.map(async (s) => {
-            const res = await fetch(`/api/properties/${s.propertyId}`);
+            const res = await apiFetch(`/api/properties/${s.propertyId}`);
             if (!res.ok) {
               throw new Error(`Property HTTP ${res.status}`);
             }

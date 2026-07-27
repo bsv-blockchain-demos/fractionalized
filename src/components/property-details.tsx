@@ -10,6 +10,7 @@ import { useAuthContext } from '../context/walletContext';
 import { internalizeToBasket } from '../utils/internalizeToBasket';
 import { decodeBeef } from '../utils/beefEncoding';
 import { logger } from '../utils/logger';
+import { apiFetch } from '../utils/apiFetch';
 
 // Extended property type that includes computed fields from the API
 type PropertyWithDetails = Properties & {
@@ -32,7 +33,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
         async function fetchProperty() {
             setLoading(true);
             try {
-                const res = await fetch(`/api/properties/${propertyId}`);
+                const res = await apiFetch(`/api/properties/${propertyId}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
 
@@ -62,7 +63,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             }
 
             // Send purchase request to API
-            const response = await fetch(`/api/share-purchase`, {
+            const response = await apiFetch(`/api/share-purchase`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -235,36 +236,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                         ))}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-8">
-                        <div>
-                            <h3 className="font-semibold mb-2 text-text-primary">Modern Urban Living</h3>
-                            <p className="text-sm mb-4 text-text-secondary">
-                                J One Tower in Business Bay offers stylish, fully furnished apartments with smart layouts and premium finishes, ideal for young professionals.
-                            </p>
-                            <h3 className="font-semibold mb-2 text-text-primary">Excellent Facilities</h3>
-                            <p className="text-sm mb-4 text-text-secondary">
-                                Residents enjoy access to a rooftop infinity pool, a fully equipped gym, spa with sauna and steam rooms, children&apos;s play areas, and 24/7 security coverage.
-                            </p>
-                            <h3 className="font-semibold mb-2 text-text-primary">Below Market Price</h3>
-                            <p className="text-sm text-text-secondary">
-                                Priced at USD 1,450,000 approximately 22.8% below the estimated USD 1,874,563 valuation by third party company, offering a strong entry point.
-                            </p>
-                        </div>
-                        <div>
-                            <h3 className="font-semibold mb-2 text-text-primary">Strong Rental Appeal</h3>
-                            <p className="text-sm mb-4 text-text-secondary">
-                                This flat-floor unit with excellent community and partial lake views is well-positioned for immediate occupancy, appealing to long-term tenants.
-                            </p>
-                            <h3 className="font-semibold mb-2 text-text-primary">Attractive Investment Returns</h3>
-                            <p className="text-sm mb-4 text-text-secondary">
-                                With a projected rental yield of 8.07% and an estimated average annual net rental returns of 5.22%, and an annualised ROI of 13.86% over five years.
-                            </p>
-                            <h3 className="font-semibold mb-2 text-text-primary">Prime Location</h3>
-                            <p className="text-sm text-text-secondary">
-                                Strategically located in Business Bay with easy access to downtown areas and metro stations, ensuring high rental demand and capital appreciation.
-                            </p>
-                        </div>
-                    </div>
+                    <p className="text-sm text-text-secondary">No additional investment notes.</p>
                 )}
             </div>
 

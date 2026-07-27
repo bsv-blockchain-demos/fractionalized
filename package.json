@@ -14,7 +14,8 @@
     "trace-chain": "tsx scripts/trace-chain.ts",
     "migrate-mint-txid": "tsx scripts/migrate-mint-txid.ts",
     "broadcast-failed-listing": "tsx scripts/broadcast-failed-listing.ts",
-    "broadcast-failed-listing-file": "tsx scripts/broadcast-failed-listing-file.ts"
+    "broadcast-failed-listing-file": "tsx scripts/broadcast-failed-listing-file.ts",
+    "db:migrate": "tsx scripts/db-migrate.ts"
   },
   "dependencies": {
     "@bsv/auth": "^0.0.1",

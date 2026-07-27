@@ -14,6 +14,7 @@ import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from 
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef, encodeBeef } from "../utils/beefEncoding";
 import { logger } from "../utils/logger";
+import { apiFetch } from "../utils/apiFetch";
 
 export interface CancelListingItem {
   _id: string;
@@ -146,7 +147,7 @@ export function useCancelListing() {
       await broadcastTX(cancelFullTx);
 
       // Persist: record reclaimed share, remove the listing + its BEEF backup.
-      const res = await fetch("/api/cancel-listing", {
+      const res = await apiFetch("/api/cancel-listing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -13,6 +13,7 @@ import { generateNonce, deriveMultisigPair } from "../utils/tokenDerivation";
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef } from "../utils/beefEncoding";
 import { logger } from "../utils/logger";
+import { apiFetch } from "../utils/apiFetch";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -170,7 +171,7 @@ export function Admin() {
             // Step 2: Send to backend to create property token and mint tokens
             setStep2("running");
 
-            const createPropertyResponse = await fetch("/api/tokenize/create-property", {
+            const createPropertyResponse = await apiFetch("/api/tokenize/create-property", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

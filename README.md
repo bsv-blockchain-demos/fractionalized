@@ -98,6 +98,19 @@ Notes:
 - **Do not commit real secrets** (private keys, JWT secrets, production DB URIs).
 - The login route sets cookies with `secure: true`. Over plain `http://localhost` the browser may refuse to set the cookie; run behind HTTPS (or adjust cookie policy in code) for local dev.
 
+See `.env.example` at the repo root for the full list of required keys with descriptions.
+
+### Database setup
+
+Run `npm run db:migrate` once per environment before first use. This creates the MongoDB collections, JSON-schema validators, and required indexes (including the `auth_nonces` replay-protection index). The app fails fast on startup if a required unique index is missing, so this must be run before the app is first deployed/started against a given database.
+
+### Secrets & rotation
+
+- Never commit real secrets — `.env.example` is a template only and contains no values.
+- In production, store `SERVER_PRIVATE_KEY` and `JWT_SECRET` in a secrets manager (e.g. Vercel environment variables or a KMS), not in checked-in files.
+- Keep `SERVER_PRIVATE_KEY` and `JWT_SECRET` as distinct values — never reuse one secret for both purposes.
+- Rotate either secret immediately if it is ever exposed (committed, logged, or leaked).
+
 ### Run
 
 ```bash

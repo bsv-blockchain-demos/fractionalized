@@ -9,10 +9,7 @@ async function getAuthNonces(): Promise<Collection> {
     if (!ready) {
         ready = (async () => {
             const { db } = await connectToMongo();
-            const col = db.collection("auth_nonces");
-            await col.createIndex({ nonce: 1 }, { unique: true });
-            await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-            return col;
+            return db.collection("auth_nonces");
         })();
     }
     return ready;

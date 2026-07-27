@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 import { logger } from "../utils/logger";
+import { apiFetch } from "../utils/apiFetch";
 
 type OwnedShare = {
   _id: string;
@@ -169,7 +170,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
         return;
       }
       try {
-        const res = await fetch(`/api/properties/${selectedShare.propertyId}`);
+        const res = await apiFetch(`/api/properties/${selectedShare.propertyId}`);
         if (!res.ok) throw new Error("Property fetch failed");
         const { item } = await res.json();
         const prop: Property = {
