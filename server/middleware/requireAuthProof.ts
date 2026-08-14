@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
-import { authServer } from '../../src/lib/authProof';
+import { authServer } from '@shared/authProof';
 import { consumeNonce } from '../../src/lib/authNonceStore';
 import { checkSessionCookie, CLEAR_OPTS } from './requireSession';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 
 /**
  * Two-layer guard for value-moving routes: a valid login session (JWT cookie)

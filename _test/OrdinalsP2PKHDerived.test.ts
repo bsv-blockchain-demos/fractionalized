@@ -1,7 +1,7 @@
 import { PrivateKey, Transaction, Script, MerklePath, PublicKey } from '@bsv/sdk'
-import { OrdinalsP2PKH } from '../src/utils/ordinalsP2PKH'
+import { OrdinalsP2PKH } from '@shared/bsv/ordinalsP2PKH'
 import { makeWallet } from '../src/lib/serverWallet'
-import { generateNonce, deriveRecipientKey, TOKEN_PROTOCOL } from '../src/utils/tokenDerivation'
+import { generateNonce, deriveRecipientKey, TOKEN_PROTOCOL } from '@shared/bsv/tokenDerivation'
 
 it('investor spends a P2PKH locked to their derived key', async () => {
   const server = PrivateKey.fromRandom(); const user = PrivateKey.fromRandom()

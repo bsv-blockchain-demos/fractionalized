@@ -1,4 +1,3 @@
-// src/utils/internalizeToBasket.ts
 import type { WalletInterface } from '@bsv/sdk';
 import { TOKEN_PROTOCOL } from './tokenDerivation';
 

@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 
 /**
  * Terminal Express error middleware (4-arg signature). Logs the real error

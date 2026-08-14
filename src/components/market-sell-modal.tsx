@@ -5,8 +5,8 @@ import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 import toast from "react-hot-toast";
 import { fetchWithAuthProof } from "../utils/authProofClient";
-import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
-import { logger } from "../utils/logger";
+import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
+import { logger } from "@shared/logger";
 import { apiFetch } from "../utils/apiFetch";
 
 type OwnedShare = {

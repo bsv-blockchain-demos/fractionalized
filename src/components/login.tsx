@@ -4,9 +4,9 @@ import { useState, useCallback } from "react";
 import { useAuthContext } from "../context/walletContext";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { authClient } from "@/lib/authProof";
+import { authClient } from "@shared/authProof";
 import { apiFetch } from "../utils/apiFetch";
-import { logger } from "../utils/logger";
+import { logger } from "@shared/logger";
 
 export function Login() {
     const [loading, setLoading] = useState(false);

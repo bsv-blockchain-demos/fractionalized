@@ -1,8 +1,8 @@
 import { PrivateKey, Transaction, Script, MerklePath, PublicKey } from '@bsv/sdk'
-import { OrdinalsP2MS } from '../src/utils/ordinalsP2MS'
+import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS'
 import { makeWallet } from '../src/lib/serverWallet'
-import { hashFromPubkeys } from '../src/utils/hashFromPubkeys'
-import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from '../src/utils/tokenDerivation'
+import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys'
+import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from '@shared/bsv/tokenDerivation'
 
 async function buildSpend(signerWallet: any, counterpartyId: string, otherDerivedKey: string, hash: number[], firstPubkeyIsWallet: boolean, nonce: string) {
   const src = new Transaction()

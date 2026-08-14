@@ -1,5 +1,5 @@
 import type { WalletInterface } from "@bsv/sdk";
-import { authClient } from "../lib/authProof";
+import { authClient } from "@shared/authProof";
 import { SERVER_IDENTITY_KEY } from "./env";
 import { apiFetch } from "./apiFetch";
 

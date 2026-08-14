@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { Properties } from "../../lib/mongo";
+import type { Properties } from "@shared/types";
 
 export interface SellingListingsProps {
   selling: Properties[];

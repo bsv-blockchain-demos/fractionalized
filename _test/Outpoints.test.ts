@@ -1,4 +1,4 @@
-import { toOutpoint, toTxid, parseOutpoint } from "../src/utils/outpoints";
+import { toOutpoint, toTxid, parseOutpoint } from "@shared/bsv/outpoints";
 
 describe("utils/outpoints", () => {
   test("toOutpoint uses provided vout when input is a bare txid", () => {

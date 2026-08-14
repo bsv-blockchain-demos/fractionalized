@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { SignJWT } from 'jose';
 import { createSecretKey } from 'crypto';
-import { authServer } from '../../src/lib/authProof';
+import { authServer } from '@shared/authProof';
 import { consumeNonce } from '../../src/lib/authNonceStore';
 import { getJwtSecret } from '../config';
 import { checkSessionCookie, CLEAR_OPTS } from '../middleware/requireSession';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 
 export const authRouter = Router();
 

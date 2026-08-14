@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ValidationError } from "./validation";
-import { logger } from "./logger";
+import { logger } from "@shared/logger";
 
 export function handleRouteError(e: unknown, fallbackMessage: string): NextResponse {
   if (e instanceof ValidationError) {

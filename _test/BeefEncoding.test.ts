@@ -1,4 +1,4 @@
-import { encodeBeef, decodeBeef } from '../src/utils/beefEncoding'
+import { encodeBeef, decodeBeef } from '@shared/bsv/beefEncoding'
 
 describe('beefEncoding', () => {
   it('round-trips a byte array through base64', () => {

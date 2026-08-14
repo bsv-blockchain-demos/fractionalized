@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Properties } from "../lib/mongo";
+import type { Properties } from "@shared/types";
 import { useAuthContext } from "../context/walletContext";
 import { Spinner } from "./spinner";
 import { toast } from "react-hot-toast";
@@ -11,8 +11,8 @@ import MarketListings from "./dashboard/MarketListings";
 import PortfolioStats from "./dashboard/PortfolioStats";
 import { useCancelListing } from "../hooks/useCancelListing";
 import { fetchWithAuthProof } from "../utils/authProofClient";
-import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
-import { logger } from "../utils/logger";
+import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
+import { logger } from "@shared/logger";
 import { apiFetch } from "../utils/apiFetch";
 
 export function Dashboard() {

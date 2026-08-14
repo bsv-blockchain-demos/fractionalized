@@ -1,7 +1,7 @@
-import { PaymentUtxo } from '../src/utils/paymentUtxo'
+import { PaymentUtxo } from '@shared/bsv/paymentUtxo'
 import { PrivateKey, MerklePath, LockingScript, PublicKey, Transaction, Script, Beef } from '@bsv/sdk'
 import { makeWallet } from '../src/lib/serverWallet'
-import { hashFromPubkeys } from '../src/utils/hashFromPubkeys'
+import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys'
 
 describe('PaymentUtxo', () => {
   it('creates a paymentUtxo and spends it validly', async () => {

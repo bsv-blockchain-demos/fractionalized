@@ -1,5 +1,5 @@
 import type { WalletInterface } from '@bsv/sdk';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 import { getServerWallet } from './serverWallet';
 
 export type WalletAction<T> = (wallet: WalletInterface) => Promise<T>;

@@ -1,18 +1,18 @@
 "use client";
 
-import { Properties } from '../lib/mongo';
+import type { Properties } from '@shared/types';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { InvestModal } from './invest-modal';
 import { useFeatureDisplay } from '../hooks/useFeatureDisplay';
 import { toast } from 'react-hot-toast';
 import { useAuthContext } from '../context/walletContext';
-import { internalizeToBasket } from '../utils/internalizeToBasket';
-import { decodeBeef } from '../utils/beefEncoding';
-import { logger } from '../utils/logger';
+import { internalizeToBasket } from '@shared/bsv/internalizeToBasket';
+import { decodeBeef } from '@shared/bsv/beefEncoding';
+import { logger } from '@shared/logger';
 import { apiFetch } from '../utils/apiFetch';
 import { fetchWithAuthProof } from '../utils/authProofClient';
-import { AUTH_PROOF_PURPOSE } from '../lib/authProofPurposes';
+import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 
 // Extended property type that includes computed fields from the API
 type PropertyWithDetails = Properties & {

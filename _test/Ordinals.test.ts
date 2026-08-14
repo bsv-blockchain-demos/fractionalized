@@ -1,8 +1,8 @@
 import { PrivateKey, Transaction, Script, LockingScript, OP, UnlockingScript, TransactionSignature, Hash, Spend, MerklePath, PublicKey, Random, Utils } from '@bsv/sdk'
-import { OrdinalsP2PKH } from '../src/utils/ordinalsP2PKH'
-import { OrdinalsP2MS } from '../src/utils/ordinalsP2MS'
+import { OrdinalsP2PKH } from '@shared/bsv/ordinalsP2PKH'
+import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS'
 import { makeWallet } from '../src/lib/serverWallet'
-import { hashFromPubkeys } from '../src/utils/hashFromPubkeys'
+import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys'
 const { sha256, hash160 } = Hash
 
 describe('Ordinals.lock', () => {

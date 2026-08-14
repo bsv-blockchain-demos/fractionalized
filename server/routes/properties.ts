@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { connectToMongo, propertiesCollection, propertyDescriptionsCollection, sharesCollection } from '../../src/lib/mongo';
 import { toPublicProperty } from '../../src/lib/serializers';
 import { buildFacetPipeline } from '../../src/lib/propertiesPipeline';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 import { requireSession } from '../middleware/requireSession';
 
 export const propertiesRouter = Router();

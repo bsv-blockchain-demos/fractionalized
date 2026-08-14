@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getJwtSecret } from "../lib/config";
-import { logger } from "./logger";
+import { logger } from "@shared/logger";
 
 export type AuthResult = { user: string };
 

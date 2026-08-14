@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authServer } from "../lib/authProof";
+import { authServer } from "@shared/authProof";
 import { consumeNonce } from "../lib/authNonceStore";
 
 export async function verifyRequestProof(

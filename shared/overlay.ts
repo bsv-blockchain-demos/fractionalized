@@ -1,5 +1,5 @@
 import { LookupResolver, TopicBroadcaster, Transaction } from "@bsv/sdk";
-import { logger } from "../utils/logger";
+import { logger } from "./logger";
 
 const overlay = new LookupResolver({
     slapTrackers: ['https://overlay-us-1.bsvb.tech'],

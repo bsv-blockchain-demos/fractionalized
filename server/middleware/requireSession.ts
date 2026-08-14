@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { jwtVerify } from 'jose';
 import { getJwtSecret } from '../config';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 
 const COOKIE = 'verified';
 // Must match the attributes the cookie was set with, or the browser won't clear it.

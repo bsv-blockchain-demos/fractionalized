@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 import { ValidationError } from '../../src/utils/validation';
-import { logger } from '../../src/utils/logger';
+import { logger } from '@shared/logger';
 
 /**
  * Express equivalent of src/utils/apiError.ts's handleRouteError. That helper

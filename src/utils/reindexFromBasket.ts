@@ -1,6 +1,6 @@
 // src/utils/reindexFromBasket.ts
 import type { WalletInterface } from '@bsv/sdk';
-import { TOKEN_BASKET } from './internalizeToBasket';
+import { TOKEN_BASKET } from '@shared/bsv/internalizeToBasket';
 
 export interface IndexedOutput {
   outpoint: string;

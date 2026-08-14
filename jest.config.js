@@ -9,6 +9,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@server/(.*)$': '<rootDir>/server/$1',
+    '^@shared/(.*)$': '<rootDir>/shared/$1',
   },
   // `jose` ships ESM-only (no CJS build). Jest's default node_modules transform-skip
   // would otherwise choke on its `export`/`import` syntax, so allowlist just that

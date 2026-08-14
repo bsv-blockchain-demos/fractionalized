@@ -1,7 +1,7 @@
 // src/utils/fetchTokenSourceTx.ts
 import { Transaction } from '@bsv/sdk';
-import { getTransactionByTxID } from '../hooks/overlayFunctions';
-import { decodeBeef } from './beefEncoding';
+import { getTransactionByTxID } from '@shared/overlay';
+import { decodeBeef } from '@shared/bsv/beefEncoding';
 
 /**
  * Resolve a source transaction for spending an outpoint.

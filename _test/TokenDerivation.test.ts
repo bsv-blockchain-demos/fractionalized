@@ -1,7 +1,7 @@
 // _test/TokenDerivation.test.ts
 import { PrivateKey } from '@bsv/sdk'
 import { makeWallet } from '../src/lib/serverWallet'
-import { generateNonce, deriveRecipientKey, deriveMultisigPair } from '../src/utils/tokenDerivation'
+import { generateNonce, deriveRecipientKey, deriveMultisigPair } from '@shared/bsv/tokenDerivation'
 
 describe('tokenDerivation', () => {
   it('generateNonce returns a fresh base64 string each call', () => {

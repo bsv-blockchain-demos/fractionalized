@@ -4,16 +4,16 @@ import { Transaction, PublicKey } from '@bsv/sdk';
 import { connectToMongo, propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, listingBeefsCollection } from '../../src/lib/mongo';
 import type { Shares, MarketItem, ListingBeef } from '../../src/lib/mongo';
 import { traceShareChain } from '../../src/utils/shareChain';
-import { OrdinalsP2MS } from '../../src/utils/ordinalsP2MS';
-import { hashFromPubkeys } from '../../src/utils/hashFromPubkeys';
-import { decodeBeef } from '../../src/utils/beefEncoding';
-import { parseOutpoint, toOutpoint } from '../../src/utils/outpoints';
-import { getIdentityKey } from '../../src/utils/tokenDerivation';
-import { logger } from '../../src/utils/logger';
+import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS';
+import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys';
+import { decodeBeef } from '@shared/bsv/beefEncoding';
+import { parseOutpoint, toOutpoint } from '@shared/bsv/outpoints';
+import { getIdentityKey } from '@shared/bsv/tokenDerivation';
+import { logger } from '@shared/logger';
 import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
-import { AUTH_PROOF_PURPOSE } from '../../src/lib/authProofPurposes';
+import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 
 export const listingsRouter = Router();
 
