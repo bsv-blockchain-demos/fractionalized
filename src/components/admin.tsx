@@ -13,7 +13,8 @@ import { generateNonce, deriveMultisigPair } from "../utils/tokenDerivation";
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef } from "../utils/beefEncoding";
 import { logger } from "../utils/logger";
-import { apiFetch } from "../utils/apiFetch";
+import { fetchWithAuthProof } from "../utils/authProofClient";
+import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
@@ -171,18 +172,17 @@ export function Admin() {
             // Step 2: Send to backend to create property token and mint tokens
             setStep2("running");
 
-            const createPropertyResponse = await apiFetch("/api/tokenize/create-property", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
+            const createPropertyResponse = await fetchWithAuthProof(
+                "/api/tokenize/create-property",
+                userWallet!,
+                AUTH_PROOF_PURPOSE.createProperty,
+                {
                     data: _data,
                     paymentTxAction,
                     paymentNonce,
                     seller: pk,
-                }),
-            });
+                },
+            );
 
             const createPropertyData = await createPropertyResponse.json();
 

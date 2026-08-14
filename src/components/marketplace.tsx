@@ -143,7 +143,7 @@ export function Marketplace() {
             if (!pk) return;
 
             // Verify share ownership
-            const traceResult = await fetch("/api/test-chain", {
+            const traceResult = await apiFetch("/api/test-chain", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -327,13 +327,12 @@ export function Marketplace() {
                 sellerChild,
                 serverChild,
             };
-            const dbRes = await apiFetch("/api/new-listing", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(dbPayload),
-            });
+            const dbRes = await fetchWithAuthProof(
+                "/api/new-listing",
+                userWallet!,
+                AUTH_PROOF_PURPOSE.newListing,
+                dbPayload,
+            );
             if (!dbRes.ok) {
                 const err = await dbRes.json().catch(() => ({}));
                 logger.error('[handleNewListing] new-listing failed:', err);
@@ -416,11 +415,12 @@ export function Marketplace() {
             }
 
             // Send the paymentTX to the server and start ordinal transfer
-            const response = await apiFetch("/api/listing-purchase", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ marketItemId, buyerId: pk, paymentNonce, paymentTX: paymentUtxo }),
-            });
+            const response = await fetchWithAuthProof(
+                "/api/listing-purchase",
+                userWallet!,
+                AUTH_PROOF_PURPOSE.listingPurchase,
+                { marketItemId, buyerId: pk, paymentNonce, paymentTX: paymentUtxo },
+            );
             const data = await response.json();
             if (response.status !== 200) {
                 toast.error(data.error, {

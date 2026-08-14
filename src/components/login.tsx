@@ -5,6 +5,7 @@ import { useAuthContext } from "../context/walletContext";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { authClient } from "@/lib/authProof";
+import { apiFetch } from "../utils/apiFetch";
 import { logger } from "../utils/logger";
 
 export function Login() {
@@ -23,8 +24,8 @@ export function Login() {
             const SERVER_IDENTITY = process.env.NEXT_PUBLIC_SERVER_IDENTITY_KEY!;
             const proof = await authClient.createAuthProof(userWallet, SERVER_IDENTITY, 'login');
 
-            // Ask server to set JWT cookie
-            const res = await fetch("/api/auth/login", {
+            // Ask server to set JWT cookie. Not fetchWithAuthProof — the proof is built above.
+            const res = await apiFetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ request: "login", userPubKey: walletIdentityKey, proof, walletIdentityKey }),

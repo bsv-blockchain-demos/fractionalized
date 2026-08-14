@@ -14,7 +14,8 @@ import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from 
 import { internalizeToBasket } from "../utils/internalizeToBasket";
 import { decodeBeef, encodeBeef } from "../utils/beefEncoding";
 import { logger } from "../utils/logger";
-import { apiFetch } from "../utils/apiFetch";
+import { fetchWithAuthProof } from "../utils/authProofClient";
+import { AUTH_PROOF_PURPOSE } from "../lib/authProofPurposes";
 
 export interface CancelListingItem {
   _id: string;
@@ -147,16 +148,17 @@ export function useCancelListing() {
       await broadcastTX(cancelFullTx);
 
       // Persist: record reclaimed share, remove the listing + its BEEF backup.
-      const res = await apiFetch("/api/cancel-listing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await fetchWithAuthProof(
+        "/api/cancel-listing",
+        userWallet!,
+        AUTH_PROOF_PURPOSE.cancelListing,
+        {
           marketItemId: item._id,
           returnTxid: toOutpoint(cancelTx.txid as string, 0),
           cancelBeef: encodeBeef(cancelTx.tx as number[]),
           cancelNonce,
-        }),
-      });
+        },
+      );
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast.error(err?.error || "Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });

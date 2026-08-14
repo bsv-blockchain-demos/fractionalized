@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthContext } from "../context/walletContext";
+import { apiFetch } from "../utils/apiFetch";
 
 export function Navbar() {
     const pathname = usePathname();
@@ -16,7 +17,7 @@ export function Navbar() {
 
     const handleLogout = async () => {
         try {
-            const response = await fetch("/api/auth/logout", {
+            const response = await apiFetch("/api/auth/logout", {
                 method: "POST",
             });
 

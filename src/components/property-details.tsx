@@ -11,6 +11,8 @@ import { internalizeToBasket } from '../utils/internalizeToBasket';
 import { decodeBeef } from '../utils/beefEncoding';
 import { logger } from '../utils/logger';
 import { apiFetch } from '../utils/apiFetch';
+import { fetchWithAuthProof } from '../utils/authProofClient';
+import { AUTH_PROOF_PURPOSE } from '../lib/authProofPurposes';
 
 // Extended property type that includes computed fields from the API
 type PropertyWithDetails = Properties & {
@@ -63,17 +65,16 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             }
 
             // Send purchase request to API
-            const response = await apiFetch(`/api/share-purchase`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
+            const response = await fetchWithAuthProof(
+                `/api/share-purchase`,
+                userWallet!,
+                AUTH_PROOF_PURPOSE.sharePurchase,
+                {
                     propertyId,
                     investorId: pk,
                     amount: Number(amount),
-                }),
-            });
+                },
+            );
             const data = await response.json();
 
             // Handle API errors
