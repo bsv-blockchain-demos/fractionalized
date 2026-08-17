@@ -5,9 +5,8 @@ module.exports = {
   // Look for any *.test.ts(x) or *.spec.ts(x) under _test/
   testMatch: ['**/_test/**/*.(test|spec).[tj]s?(x)'],
   // Use regex fragments (Jest expects regex), not absolute paths, to avoid Windows escaping issues
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/.next/'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
     '^@server/(.*)$': '<rootDir>/server/$1',
     '^@shared/(.*)$': '<rootDir>/shared/$1',
   },

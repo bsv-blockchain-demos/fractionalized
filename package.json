@@ -2,22 +2,30 @@
   "name": "fraction",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
-    "start": "next start",
+    "dev": "npm run server:dev",
+    "server:dev": "tsx watch server/index.ts",
+    "server:start": "tsx server/index.ts",
+    "client:dev": "npm run dev -w @fraction/client",
+    "client:build": "npm run build -w @fraction/client",
+    "build": "npm run client:build",
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:client": "npm test -w @fraction/client",
+    "test:all": "npm test && npm run test:client",
+    "db:migrate": "tsx scripts/db-migrate.ts",
     "list-shares": "tsx scripts/list-shares.ts",
     "trace-chain": "tsx scripts/trace-chain.ts",
     "migrate-mint-txid": "tsx scripts/migrate-mint-txid.ts",
     "broadcast-failed-listing": "tsx scripts/broadcast-failed-listing.ts",
-    "broadcast-failed-listing-file": "tsx scripts/broadcast-failed-listing-file.ts",
-    "db:migrate": "tsx scripts/db-migrate.ts",
-    "server:dev": "tsx watch server/index.ts",
-    "server:start": "tsx server/index.ts"
+    "broadcast-failed-listing-file": "tsx scripts/broadcast-failed-listing-file.ts"
   },
   "dependencies": {
     "@bsv/auth": "^0.0.1",
@@ -30,15 +38,12 @@
     "express": "^5.2.1",
     "jose": "^6.1.0",
     "mongodb": "^6.19.0",
-    "next": "^16.2.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",
     "ts-jest": "^29.4.4"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
@@ -48,12 +53,12 @@
     "@types/react-dom": "^19",
     "@types/supertest": "^7.2.1",
     "eslint": "^9",
-    "eslint-config-next": "15.5.3",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jest": "^29",
-    "jest-environment-jsdom": "^30.3.0",
     "supertest": "^7.2.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "typescript-eslint": "^8.67.0"
   }
 }

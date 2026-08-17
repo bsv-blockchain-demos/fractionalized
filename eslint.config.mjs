@@ -1,32 +1,25 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+// Flat config, Next-free. Mirrors the rule surface the old
+// next/core-web-vitals + next/typescript pair provided
+export default [
   {
+    // .superpowers holds archived snapshots of deleted source; not the codebase.
+    ignores: ['node_modules/**', 'out/**', 'build/**', 'client/dist/**', '.superpowers/**'],
+  },
+  ...tseslint.configs.recommended,
+  {
+    files: ['**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
     rules: {
-      "react/no-unescaped-entities": "off",
-      "@typescript-eslint/no-explicit-any": "off",
-      "prefer-const": "off",
+      'react-hooks/rules-of-hooks': 'error',
+      // Found M-11 (a real hook-dependency defect) in this codebase — keep it on.
+      'react-hooks/exhaustive-deps': 'warn',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-expressions': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'prefer-const': 'off',
     },
   },
-  {
-    ignores: [
-      "node_modules/**",
-      ".next/**",
-      "out/**",
-      "build/**",
-      "next-env.d.ts",
-    ],
-  },
 ];
-
-export default eslintConfig;

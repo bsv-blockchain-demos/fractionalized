@@ -1,6 +1,9 @@
+/* eslint-disable @typescript-eslint/no-require-imports --
+   require() is required here: after jest.resetModules() a static import is already hoisted
+   and evaluated, so it cannot observe the mutated NODE_ENV. */
 describe("logger", () => {
   const origEnv = process.env.NODE_ENV;
-  // NODE_ENV is typed read-only (Next narrows it), so cast to assign it in tests.
+  // NODE_ENV is typed read-only, so cast to assign it in tests.
   const setNodeEnv = (v: string | undefined) => {
     (process.env as Record<string, string | undefined>).NODE_ENV = v;
   };

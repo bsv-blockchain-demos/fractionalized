@@ -1,0 +1,9 @@
+{
+  "name": "@fraction/shared",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@bsv/auth": "^0.0.1",
+    "@bsv/sdk": "^2.1.4"
+  }
+}

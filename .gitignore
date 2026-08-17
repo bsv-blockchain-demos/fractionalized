@@ -13,12 +13,9 @@ node_modules
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
-
 # production
 /build
+/out/
 client/dist
 
 # misc
@@ -42,7 +39,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 /scripts
 
 # listing data files

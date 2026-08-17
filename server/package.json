@@ -1,0 +1,16 @@
+{
+  "name": "@fraction/server",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@bsv/sdk": "^2.1.4",
+    "@bsv/wallet-helper": "^0.0.5",
+    "@bsv/wallet-toolbox-client": "^2.1.5",
+    "@fraction/shared": "*",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.2",
+    "express": "^5.2.1",
+    "jose": "^6.1.0",
+    "mongodb": "^6.19.0"
+  }
+}

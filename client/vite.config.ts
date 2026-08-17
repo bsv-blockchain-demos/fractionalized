@@ -19,10 +19,9 @@ export default defineConfig({
     strictPort: true,
   },
   css: {
-    // Inline (empty) postcss config wins over Vite's upward file search, which
-    // otherwise finds the root's Next-era postcss.config.mjs (@tailwindcss/postcss,
-    // not a valid Vite/postcss plugin shape) and breaks the build. @tailwindcss/vite
-    // needs no postcss config of its own.
+    // @tailwindcss/vite needs no postcss config. This inline (empty) one wins over
+    // Vite's upward file search, so a stray postcss config at the repo root can't
+    // break the client build.
     postcss: {},
   },
   test: {
