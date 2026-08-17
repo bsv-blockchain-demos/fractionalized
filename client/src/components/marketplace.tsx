@@ -17,7 +17,7 @@ import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from "@shared/bsv/t
 import { internalizeToBasket } from "@shared/bsv/internalizeToBasket";
 import { encodeBeef, decodeBeef } from "@shared/bsv/beefEncoding";
 import { useCancelListing, CancelListingItem } from '@/hooks/useCancelListing';
-import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { logger } from "@shared/logger";
 import { apiFetch } from '@/lib/apiFetch';
@@ -106,7 +106,7 @@ export function Marketplace() {
     // so fetch the seller's own listings to map the entry into a CancelListingItem first.
     const handleCancelOwnListing = useCallback(async (item: ApiListing) => {
         try {
-            const res = await fetchWithAuthProof("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
+            const res = await apiFetchStepUp("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
             if (!res.ok) {
                 throw new Error("HTTP " + res.status);
             }
@@ -351,7 +351,7 @@ export function Marketplace() {
                 sellerChild,
                 serverChild,
             };
-            const dbRes = await fetchWithAuthProof(
+            const dbRes = await apiFetchStepUp(
                 "/api/new-listing",
                 userWallet!,
                 AUTH_PROOF_PURPOSE.newListing,
@@ -462,7 +462,7 @@ export function Marketplace() {
             }
 
             // Send the paymentTX to the server and start ordinal transfer
-            const response = await fetchWithAuthProof(
+            const response = await apiFetchStepUp(
                 "/api/listing-purchase",
                 userWallet!,
                 AUTH_PROOF_PURPOSE.listingPurchase,

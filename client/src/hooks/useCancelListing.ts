@@ -12,7 +12,7 @@ import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from 
 import { internalizeToBasket } from "@shared/bsv/internalizeToBasket";
 import { decodeBeef, encodeBeef } from "@shared/bsv/beefEncoding";
 import { logger } from "@shared/logger";
-import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { ensureSessionAlive } from '@/lib/sessionPreflight';
 import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from '@/lib/pendingKeyMaterial';
@@ -171,7 +171,7 @@ export function useCancelListing() {
       await broadcastTX(cancelFullTx);
 
       // Persist: record reclaimed share, remove the listing + its BEEF backup.
-      const res = await fetchWithAuthProof(
+      const res = await apiFetchStepUp(
         "/api/cancel-listing",
         userWallet!,
         AUTH_PROOF_PURPOSE.cancelListing,

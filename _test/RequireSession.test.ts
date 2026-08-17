@@ -39,7 +39,7 @@ describe('requireSession', () => {
   test('401s with no cookie and clears nothing', async () => {
     const res = await request(harness()).get('/guarded');
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: 'Unauthorized' });
+    expect(res.body).toEqual({ error: 'Session expired' });
     expect(res.headers['set-cookie']).toBeUndefined();
   });
 

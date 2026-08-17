@@ -9,7 +9,7 @@ import { internalizeToBasket } from '@shared/bsv/internalizeToBasket';
 import { decodeBeef } from '@shared/bsv/beefEncoding';
 import { logger } from '@shared/logger';
 import { apiFetch } from '@/lib/apiFetch';
-import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 
 // Extended property type that includes computed fields from the API
@@ -63,7 +63,7 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
             }
 
             // Send purchase request to API
-            const response = await fetchWithAuthProof(
+            const response = await apiFetchStepUp(
                 `/api/share-purchase`,
                 userWallet!,
                 AUTH_PROOF_PURPOSE.sharePurchase,

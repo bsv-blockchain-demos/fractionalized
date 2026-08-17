@@ -59,4 +59,18 @@ describe('apiFetch is the only path to our API', () => {
 
     expect(offenders).toEqual([]);
   });
+
+  // apiFetchNoRedirect skips the 401 -> /login handling. That is correct for step-up calls,
+  // whose caller may already have broadcast and needs the response to surface recovery data
+  // (finding C-5). Anywhere else it silently drops session-expiry handling.
+  test('only apiFetchStepUp.ts imports apiFetchNoRedirect', () => {
+    const allowed = join('client', 'src', 'lib', 'apiFetchStepUp.ts');
+    const offenders = walk(SRC)
+      .filter((f) => relative(join(__dirname, '..'), f) !== allowed)
+      .filter((f) => /(?<![A-Za-z0-9_$])apiFetchNoRedirect/.test(stripComments(readFileSync(f, 'utf-8'))))
+      .map((f) => relative(join(__dirname, '..'), f));
+
+    // apiFetch.ts declares it, so exclude the declaration site from the offender list.
+    expect(offenders.filter((f) => f !== join('client', 'src', 'lib', 'apiFetch.ts'))).toEqual([]);
+  });
 });

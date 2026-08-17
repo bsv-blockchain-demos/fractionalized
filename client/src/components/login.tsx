@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { authClient } from "@shared/authProof";
 import { apiFetch } from '@/lib/apiFetch';
+import { SERVER_IDENTITY_KEY } from '@/lib/env';
 import { logger } from "@shared/logger";
 
 export function Login() {
@@ -19,10 +20,9 @@ export function Login() {
             if (!walletIdentityKey) return; // ensureWallet already toasted
 
             // Signed, expiry-bound, single-use proof that the user controls the wallet private key
-            const SERVER_IDENTITY = process.env.NEXT_PUBLIC_SERVER_IDENTITY_KEY!;
-            const proof = await authClient.createAuthProof(userWallet, SERVER_IDENTITY, 'login');
+            const proof = await authClient.createAuthProof(userWallet, SERVER_IDENTITY_KEY, 'login');
 
-            // Ask server to set JWT cookie. Not fetchWithAuthProof — the proof is built above.
+            // Ask server to set JWT cookie. Not apiFetchStepUp — the proof is built above.
             const res = await apiFetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

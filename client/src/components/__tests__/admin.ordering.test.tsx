@@ -22,9 +22,9 @@ vi.mock('@/context/walletContext', () => ({
   useAuthContext: () => ({ userWallet: mockWallet, ensureWallet: mockEnsureWallet }),
 }));
 
-const mockFetchWithAuthProof = vi.fn();
-vi.mock('@/lib/authProofClient', () => ({
-  fetchWithAuthProof: (...args: unknown[]) => mockFetchWithAuthProof(...args),
+const mockApiFetchStepUp = vi.fn();
+vi.mock('@/lib/apiFetchStepUp', () => ({
+  apiFetchStepUp: (...args: unknown[]) => mockApiFetchStepUp(...args),
 }));
 
 vi.mock('@/lib/sessionPreflight', () => ({
@@ -77,8 +77,8 @@ describe('admin.tsx create-property flow: pendingKeyMaterial ordering', () => {
     await renderAndFillAdmin();
 
     expect(mockCreateAction).toHaveBeenCalled();
-    // fetchWithAuthProof must never be reached: createAction failed before step 2.
-    expect(mockFetchWithAuthProof).not.toHaveBeenCalled();
+    // apiFetchStepUp must never be reached: createAction failed before step 2.
+    expect(mockApiFetchStepUp).not.toHaveBeenCalled();
 
     const records = listPendingKeyMaterial();
     expect(records).toHaveLength(1);
@@ -88,16 +88,16 @@ describe('admin.tsx create-property flow: pendingKeyMaterial ordering', () => {
 
   test('a 401 from the authenticated POST still leaves the nonce (with txid) retrievable afterward', async () => {
     mockCreateAction.mockResolvedValue({ txid: 'deadbeef'.repeat(8) });
-    mockFetchWithAuthProof.mockResolvedValue({
+    mockApiFetchStepUp.mockResolvedValue({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Unauthorized' }),
+      json: async () => ({ error: 'Session expired before auth proof' }),
     });
 
     await renderAndFillAdmin();
 
     expect(mockCreateAction).toHaveBeenCalled();
-    expect(mockFetchWithAuthProof).toHaveBeenCalled();
+    expect(mockApiFetchStepUp).toHaveBeenCalled();
 
     const records = listPendingKeyMaterial();
     expect(records).toHaveLength(1);
@@ -107,7 +107,7 @@ describe('admin.tsx create-property flow: pendingKeyMaterial ordering', () => {
 
   test('control: a successful POST clears the record', async () => {
     mockCreateAction.mockResolvedValue({ txid: 'cafebabe'.repeat(8) });
-    mockFetchWithAuthProof.mockResolvedValue({
+    mockApiFetchStepUp.mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => ({ data: { insertedId: 'prop1' } }),

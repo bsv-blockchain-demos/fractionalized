@@ -8,7 +8,7 @@ import SellingListings from "./dashboard/SellingListings";
 import MarketListings from "./dashboard/MarketListings";
 import PortfolioStats from "./dashboard/PortfolioStats";
 import { useCancelListing } from '@/hooks/useCancelListing';
-import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { logger } from "@shared/logger";
 import { apiFetch } from '@/lib/apiFetch';
@@ -46,7 +46,7 @@ export function Dashboard() {
         if (!pk) return;
 
         // Get owned shares
-        const response = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
+        const response = await apiFetchStepUp("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
@@ -102,7 +102,7 @@ export function Dashboard() {
         const pk = await ensureWallet();
         if (!pk) return;
 
-        const response = await fetchWithAuthProof("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
+        const response = await apiFetchStepUp("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
@@ -139,7 +139,7 @@ export function Dashboard() {
         if (!pk) return;
 
         // Get selling properties
-        const response = await fetchWithAuthProof("/api/my-selling", userWallet, AUTH_PROOF_PURPOSE.mySelling);
+        const response = await apiFetchStepUp("/api/my-selling", userWallet, AUTH_PROOF_PURPOSE.mySelling);
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }

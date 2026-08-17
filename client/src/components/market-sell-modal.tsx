@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuthContext } from '@/context/walletContext';
 import { Spinner } from "./spinner";
 import toast from "react-hot-toast";
-import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { logger } from "@shared/logger";
 import { apiFetch } from '@/lib/apiFetch';
@@ -137,7 +137,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
       try {
         const pk = await ensureWallet();
         if (!pk) return;
-        const res = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
+        const res = await apiFetchStepUp("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
         const data = await res.json();
         const mapped: OwnedShare[] = (data?.shares || []).map((s: any) => ({
           _id: String(s?._id ?? ""),

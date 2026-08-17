@@ -44,7 +44,7 @@ export async function requireSession(req: Request, res: Response, next: NextFunc
   const result = await checkSessionCookie(req);
   if (result.userId === null) {
     if (result.clearCookie) res.clearCookie(COOKIE, CLEAR_OPTS);
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(401).json({ error: 'Session expired' });
     return;
   }
   req.userId = result.userId;

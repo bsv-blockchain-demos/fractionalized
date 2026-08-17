@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import { SignJWT } from 'jose';
 import { createSecretKey } from 'crypto';
 import { requireAuthProof } from '@server/middleware/requireAuthProof';
+import { requireSession } from '@server/middleware/requireSession';
 
 // These cover the synchronous guard branches only — no crypto/wallet needed.
 // (protoWallet is lazy-imported AFTER these guards, so the key is never required here.)
@@ -53,5 +54,21 @@ describe('requireAuthProof: synchronous guard branches', () => {
       .send({ proof: { sig: 'x' }, walletIdentityKey: 123 });
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Missing auth proof' });
+  });
+
+  test('no session → 401 with a body distinct from requireSession\'s', async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.post('/step-up', requireAuthProof('p'), (_req, res) => { res.json({ ok: true }); });
+    app.get('/session', requireSession, (_req, res) => { res.json({ ok: true }); });
+
+    const stepUp = await request(app).post('/step-up').send({});
+    const session = await request(app).get('/session');
+
+    expect(stepUp.status).toBe(401);
+    expect(session.status).toBe(401);
+    // A caller that has already broadcast must be able to tell these apart.
+    expect(stepUp.body.error).not.toBe(session.body.error);
   });
 });

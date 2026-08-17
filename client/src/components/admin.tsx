@@ -11,7 +11,7 @@ import { generateNonce, deriveMultisigPair } from "@shared/bsv/tokenDerivation";
 import { internalizeToBasket } from "@shared/bsv/internalizeToBasket";
 import { decodeBeef } from "@shared/bsv/beefEncoding";
 import { logger } from "@shared/logger";
-import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { ensureSessionAlive } from '@/lib/sessionPreflight';
 import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from '@/lib/pendingKeyMaterial';
@@ -193,7 +193,7 @@ export function Admin() {
             // Step 2: Send to backend to create property token and mint tokens
             setStep2("running");
 
-            const createPropertyResponse = await fetchWithAuthProof(
+            const createPropertyResponse = await apiFetchStepUp(
                 "/api/tokenize/create-property",
                 userWallet!,
                 AUTH_PROOF_PURPOSE.createProperty,

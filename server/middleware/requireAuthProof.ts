@@ -17,7 +17,9 @@ export function requireAuthProof(purpose: string) {
     const session = await checkSessionCookie(req);
     if (session.userId === null) {
       if (session.clearCookie) res.clearCookie('verified', CLEAR_OPTS);
-      res.status(401).json({ error: 'Unauthorized' });
+      // Distinct from requireSession's body: a step-up caller may already have broadcast,
+      // so it must be able to tell a dead session from a rejected proof.
+      res.status(401).json({ error: 'Session expired before auth proof' });
       return;
     }
 
