@@ -77,8 +77,13 @@ describe('apiFetchStepUp', () => {
   });
 
   test('POSTs credentialed JSON carrying the proof and walletIdentityKey', async () => {
+    // Pin the base: a developer's client/.env sets VITE_API_BASE, which Vite inlines into
+    // the module at import time and would otherwise prefix the asserted URL.
+    vi.stubEnv('VITE_API_BASE', '');
+    vi.resetModules();
+    const { apiFetchStepUp: freshStepUp } = await import('@/lib/apiFetchStepUp');
     const fetchMock = stubFetch(200);
-    await apiFetchStepUp('/api/my-shares', wallet, 'fetch-my-shares', { extra: 1 });
+    await freshStepUp('/api/my-shares', wallet, 'fetch-my-shares', { extra: 1 });
     const [url, init] = lastCall(fetchMock);
     expect(url).toBe('/api/my-shares');
     expect(init.method).toBe('POST');

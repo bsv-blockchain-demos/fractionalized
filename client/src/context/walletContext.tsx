@@ -1,6 +1,10 @@
 import { WalletClient } from '@bsv/sdk'
-import { useContext, createContext, useState, useCallback, useRef, useMemo } from "react";
+import { useContext, createContext, useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { toast } from "react-hot-toast";
+import { apiFetch } from '@/lib/apiFetch';
+
+/** Session state, not wallet state: `isAuthenticated` below tracks the wallet, this tracks the cookie. */
+export type AuthStatus = 'restoring' | 'idle' | 'authenticated';
 
 type authContextType = {
     userWallet: WalletClient;
@@ -11,6 +15,8 @@ type authContextType = {
     isAuthenticated: boolean;
     checkAuth: () => Promise<boolean>;
     logout: () => void;
+    status: AuthStatus;
+    markAuthenticated: () => void;
 }
 
 const AuthContext = createContext<authContextType>({
@@ -22,13 +28,31 @@ const AuthContext = createContext<authContextType>({
     isAuthenticated: false,
     checkAuth: async () => false,
     logout: () => { },
+    status: 'restoring',
+    markAuthenticated: () => { },
 });
 
 export const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
     const [userWallet] = useState<WalletClient>(() => new WalletClient());
     const [userPubKey, setUserPubKey] = useState<string | null>(null);
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+    const [status, setStatus] = useState<AuthStatus>('restoring');
     const initPromiseRef = useRef<Promise<string | null> | null>(null);
+
+    // The `verified` cookie is httpOnly, so only the server can answer. Start 'restoring' so
+    // ProtectedRoute doesn't flash-redirect before the answer arrives; a rejected check must
+    // land on 'idle' or that loading gate hangs forever. check-session is always 200, so this
+    // never trips apiFetch's 401 redirect.
+    useEffect(() => {
+        let cancelled = false;
+        apiFetch('/api/check-session')
+            .then((res) => res.json())
+            .then((data: { authenticated?: boolean }) => { if (!cancelled) setStatus(data.authenticated ? 'authenticated' : 'idle'); })
+            .catch(() => { if (!cancelled) setStatus('idle'); });
+        return () => { cancelled = true; };
+    }, []);
+
+    const markAuthenticated = useCallback(() => setStatus('authenticated'), []);
 
     const checkAuth = useCallback(async (): Promise<boolean> => {
         const { authenticated } = await userWallet.isAuthenticated();
@@ -73,12 +97,14 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     const logout = useCallback(() => {
         setUserPubKey(null);
         setIsAuthenticated(false);
+        setStatus('idle');
         initPromiseRef.current = null;
     }, []);
 
     const value = useMemo(() => ({
         userWallet, userPubKey, ensureWallet, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout,
-    }), [userWallet, userPubKey, ensureWallet, initializeWallet, isAuthenticated, checkAuth, logout]);
+        status, markAuthenticated,
+    }), [userWallet, userPubKey, ensureWallet, initializeWallet, isAuthenticated, checkAuth, logout, status, markAuthenticated]);
 
     return (
         <AuthContext.Provider value={value}>

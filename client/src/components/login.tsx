@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useAuthContext } from '@/context/walletContext';
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { authClient } from "@shared/authProof";
 import { apiFetch } from '@/lib/apiFetch';
@@ -9,8 +9,11 @@ import { logger } from "@shared/logger";
 
 export function Login() {
     const [loading, setLoading] = useState(false);
-    const { ensureWallet, userWallet } = useAuthContext();
+    const { ensureWallet, userWallet, status, markAuthenticated } = useAuthContext();
     const navigate = useNavigate();
+    const location = useLocation();
+    // Where ProtectedRoute bounced us from, if anywhere. Middleware hardcoded /dashboard.
+    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
 
     const handleLogin = useCallback(async () => {
         try {
@@ -44,7 +47,8 @@ export function Login() {
                 id: "login-success",
             });
 
-            navigate("/", { replace: true });
+            markAuthenticated();
+            navigate(from ?? "/dashboard", { replace: true });
         } catch (e) {
             logger.error('handleLogin: Unexpected error during login:', e);
             toast.error("Unexpected error during login", {
@@ -55,7 +59,11 @@ export function Login() {
         } finally {
             setLoading(false);
         }
-    }, [ensureWallet, userWallet, navigate]);
+    }, [ensureWallet, userWallet, navigate, markAuthenticated, from]);
+
+    // Was middleware.ts:19-22 — an authenticated visitor never sees the login form.
+    // Same target as handleLogin's, so the two can't disagree about where to land.
+    if (status === 'authenticated') return <Navigate to={from ?? "/dashboard"} replace />;
 
     return (
         <div className="container mx-auto px-4 py-12">
