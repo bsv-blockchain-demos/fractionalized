@@ -5,10 +5,11 @@ import { join } from 'path';
 // shared/ <-> server/ <-> src/ boundary, not just shared/'s Node-freedom.
 
 const SHARED = join(__dirname, '..', 'shared');
-// The next plan renames src/ -> client/. Prefer client/ if it exists so this
-// guard survives that rename instead of throwing ENOENT.
-const CLIENT_ROOT = existsSync(join(__dirname, '..', 'client'))
-  ? join(__dirname, '..', 'client')
+// client/src once the frontend moved there, else the pre-migration src/.
+// Must stay first-party only: rooting this at client/ walks node_modules and dist
+// (801 files vs 47), where a dependency's own `from 'net'` would fail the guard.
+const CLIENT_ROOT = existsSync(join(__dirname, '..', 'client', 'src'))
+  ? join(__dirname, '..', 'client', 'src')
   : join(__dirname, '..', 'src');
 
 function walk(dir: string): string[] {

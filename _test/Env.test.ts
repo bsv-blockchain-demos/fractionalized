@@ -13,14 +13,14 @@ describe("utils/env", () => {
   test("SERVER_PUBLIC_KEY is read from env at import time", async () => {
     const pub = "02abc123";
     setEnv(pub);
-    const env = await import("../src/utils/env");
+    const env = await import("../client/src/lib/env");
     expect(env.SERVER_PUBLIC_KEY).toBe(pub);
     expect(() => env.assertEnv()).not.toThrow();
   });
 
   test("assertEnv throws when NEXT_PUBLIC_SERVER_PUBLIC_KEY is missing", async () => {
     setEnv(undefined);
-    const env = await import("../src/utils/env");
+    const env = await import("../client/src/lib/env");
     expect(() => env.assertEnv()).toThrow(/NEXT_PUBLIC_SERVER_PUBLIC_KEY/);
   });
 });

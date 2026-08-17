@@ -1,0 +1,298 @@
+import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from "react";
+import type { Properties } from "@shared/types";
+import { useAuthContext } from '@/context/walletContext';
+import { Spinner } from "./spinner";
+import { toast } from "react-hot-toast";
+import SellingListings from "./dashboard/SellingListings";
+import MarketListings from "./dashboard/MarketListings";
+import PortfolioStats from "./dashboard/PortfolioStats";
+import { useCancelListing } from '@/hooks/useCancelListing';
+import { fetchWithAuthProof } from '@/lib/authProofClient';
+import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
+import { logger } from "@shared/logger";
+import { apiFetch } from '@/lib/apiFetch';
+
+export function Dashboard() {
+  // User shares mapped to properties
+  const [investedCards, setInvestedCards] = useState<
+    { property: Properties; percent: number }[]
+  >([]);
+  const [selling, setSelling] = useState<Properties[]>([]);
+  const [myListings, setMyListings] = useState<Array<{
+    _id: string;
+    propertyId: string;
+    name: string;
+    location: string;
+    sellAmount: number;
+    pricePerShare: number;
+    listingNonce?: string;
+    listingOutpoint?: string;
+    listingBeef?: string;
+    tokenTxid?: string;
+  }>>([]);
+
+  const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
+  const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
+  const [loadingMyListings, setLoadingMyListings] = useState<boolean>(false);
+  const { userWallet, userPubKey, ensureWallet } = useAuthContext();
+  const { cancelListing, cancellingId } = useCancelListing();
+
+  useEffect(() => {
+    const fetchInvestedProperties = async () => {
+      setLoadingInvestments(true);
+      try {
+        const pk = await ensureWallet();
+        if (!pk) return;
+
+        // Get owned shares
+        const response = await fetchWithAuthProof("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+        const data = await response.json();
+        const shares: Array<{
+          _id: string;
+          propertyId: string;
+          amount: number; // percent
+        }> = (data?.shares || []).map((s: any) => ({
+          _id: String(s?._id ?? ""),
+          propertyId: String(s?.propertyId ?? ""),
+          amount: Number(s?.amount ?? 0),
+        }));
+
+        if (!shares.length) {
+          setInvestedCards([]);
+          return;
+        }
+
+        // Fetch property details for each share
+        const props = await Promise.all(
+          shares.map(async (s) => {
+            const res = await apiFetch(`/api/properties/${s.propertyId}`);
+            if (!res.ok) {
+              throw new Error(`Property HTTP ${res.status}`);
+            }
+            const pd = await res.json();
+            return { property: pd?.item as Properties, percent: s.amount };
+          })
+        );
+
+        // Filter out any failed/undefined items just in case
+        const valid = props.filter(
+          (p): p is { property: Properties; percent: number } => !!p?.property
+        );
+        setInvestedCards(valid);
+      } catch (e: any) {
+        logger.error(e);
+        toast.error("Failed to load your investments");
+      } finally {
+        setLoadingInvestments(false);
+      }
+    };
+    fetchInvestedProperties();
+    // Re-run if the user identity changes
+  }, [userWallet, userPubKey, ensureWallet]);
+
+  // Fetch user's market listings (unsold)
+  useEffect(() => {
+    const fetchMyListings = async () => {
+      setLoadingMyListings(true);
+      try {
+        const pk = await ensureWallet();
+        if (!pk) return;
+
+        const response = await fetchWithAuthProof("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+        const data = await response.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setMyListings(items.map((i: any) => ({
+          _id: String(i?._id ?? ""),
+          propertyId: String(i?.propertyId ?? ""),
+          name: String(i?.name ?? "Unknown Property"),
+          location: String(i?.location ?? "Unknown"),
+          sellAmount: Number(i?.sellAmount ?? 0),
+          pricePerShare: Number(i?.pricePerShare ?? 0),
+          listingNonce: i?.listingNonce ? String(i.listingNonce) : undefined,
+          listingOutpoint: i?.listingOutpoint ? String(i.listingOutpoint) : undefined,
+          listingBeef: i?.listingBeef ? String(i.listingBeef) : undefined,
+          tokenTxid: i?.tokenTxid ? String(i.tokenTxid) : undefined,
+        })));
+      } catch (e) {
+        logger.error(e);
+        toast.error("Failed to load your listings");
+      } finally {
+        setLoadingMyListings(false);
+      }
+    };
+    fetchMyListings();
+  }, [userWallet, userPubKey, ensureWallet]);
+
+  // Fetch properties the user is selling
+  useEffect(() => {
+    const fetchSellingProperties = async () => {
+      setLoadingSelling(true);
+      try {
+        const pk = await ensureWallet();
+        if (!pk) return;
+
+        // Get selling properties
+        const response = await fetchWithAuthProof("/api/my-selling", userWallet, AUTH_PROOF_PURPOSE.mySelling);
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+        const data = await response.json();
+        const props: Properties[] = data?.items || [];
+
+        // Filter out any failed/undefined items just in case
+        const valid = props.filter(
+          (p): p is Properties => !!p
+        );
+        setSelling(valid);
+      } catch (e: any) {
+        logger.error(e);
+        toast.error("Failed to load your selling properties");
+      } finally {
+        setLoadingSelling(false);
+      }
+    };
+    fetchSellingProperties();
+    // Re-run if the user identity changes
+  }, [userWallet, userPubKey, ensureWallet]);
+
+  // Cancel a listing via the shared hook, then optimistically remove it from the UI.
+  const handleCancelListing = (item: {
+    _id: string;
+    propertyId: string;
+    sellAmount: number;
+    listingNonce?: string;
+    listingOutpoint?: string;
+    listingBeef?: string;
+    tokenTxid?: string;
+  }) => {
+    cancelListing(item).then((ok) => {
+      if (ok) {
+        setMyListings((prev) => prev.filter((l) => l._id !== item._id));
+      }
+    });
+  };
+
+  const investedProperties = investedCards;
+
+  const parsePercent = (s: string) => {
+    const n = parseFloat(String(s).replace("%", ""));
+    return isNaN(n) ? 0 : n;
+  };
+
+  const formatCurrency = (amount: number) => `USD ${amount.toLocaleString()}`;
+
+  // Portfolio stats
+  const stats = useMemo(() => {
+    const totalInvestedUSD = investedProperties.reduce((sum, ip) => sum + (ip.property.priceUSD * ip.percent) / 100, 0);
+    const expectedYearlyIncomeUSD = investedProperties.reduce((sum, ip) => {
+      const annualised = parsePercent(ip.property.annualisedReturn) / 100;
+      const invested = (ip.property.priceUSD * ip.percent) / 100;
+      return sum + invested * annualised;
+    }, 0);
+    const avgGrossYield = investedProperties.length
+      ? investedProperties.reduce((sum, ip) => sum + parsePercent(ip.property.grossYield), 0) / investedProperties.length
+      : 0;
+    const positions = investedProperties.length;
+    return { totalInvestedUSD, expectedYearlyIncomeUSD, avgGrossYield, positions };
+  }, [investedProperties]);
+
+  return (
+    <div className="container mx-auto px-4 py-6">
+      {/* Your Investments */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xl font-bold text-text-primary">Your Investments</h2>
+          <Link to="/properties" className="text-sm link-accent hover:cursor-pointer">
+            Explore more properties
+          </Link>
+        </div>
+        {loadingInvestments ? (
+          <div className="p-6 rounded-lg bg-bg-tertiary border border-border-subtle text-text-secondary">
+            <div className="flex items-center gap-3">
+              <Spinner size={20} />
+              <span>Loading your investments...</span>
+            </div>
+          </div>
+        ) : investedProperties.length === 0 ? (
+          <div className="p-6 rounded-lg bg-bg-tertiary border border-border-subtle text-text-secondary">
+            You don’t have any investments yet. Browse properties to get started.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {investedProperties.map(({ property, percent }) => (
+              <Link key={String(property._id)} to={`/properties/${property._id}`} className="block">
+                <div className="card-glass overflow-hidden transition-all group">
+                  {/* Header / Image placeholder */}
+                  <div className="relative h-40 bg-gradient-to-br from-accent-primary to-accent-hover">
+                    <div className="absolute top-3 left-3 badge-dark text-xs">{percent}% owned</div>
+                    <div className="absolute top-3 right-3 badge-success text-xs">{property.status.toUpperCase()}</div>
+                    <div className="w-full h-full flex items-center justify-center opacity-60">
+                      <div className="text-white text-sm">Property Image</div>
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="p-4">
+                    <p className="text-xs text-text-secondary mb-1">{property.location}</p>
+                    <h3 className="text-lg font-semibold text-text-primary mb-3 line-clamp-2">{property.title}</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-text-secondary">Your stake</span>
+                        <span className="font-medium text-text-primary">{percent}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-secondary">Invested</span>
+                        <span className="font-medium text-text-primary">{formatCurrency((property.priceUSD * percent) / 100)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-secondary">Expected yearly income</span>
+                        <span className="font-medium" style={{ color: "var(--success)" }}>
+                          {(() => {
+                            const rate = parsePercent(property.annualisedReturn) / 100;
+                            const invested = (property.priceUSD * percent) / 100;
+                            return formatCurrency(invested * rate);
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-secondary">Gross yield</span>
+                        <span className="font-medium" style={{ color: "var(--info)" }}>{property.grossYield}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="section-divider" />
+
+      {/* Selling listings */}
+      <SellingListings selling={selling} />
+
+      <div className="section-divider" />
+
+      {/* Your Market Listings */}
+      <MarketListings
+        loading={loadingMyListings}
+        items={myListings}
+        onCancel={handleCancelListing}
+        cancellingId={cancellingId}
+      />
+
+      <div className="section-divider" />
+
+      {/* Portfolio stats */}
+      <PortfolioStats stats={stats} />
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'fs';
-import { join, relative, sep } from 'path';
+import { join, relative } from 'path';
 
 /**
  * A raw `fetch("/api/...")` in client code bypasses apiFetch's base prefix, credentials
@@ -7,13 +7,10 @@ import { join, relative, sep } from 'path';
  * Found three real offenders when written (login.tsx, navbar.tsx, marketplace.tsx).
  */
 
-const SRC = join(__dirname, '..', 'src');
+const SRC = join(__dirname, '..', 'client', 'src');
 
 /** The choke-point itself — the one file allowed to call the real `fetch`. */
-const ALLOWED = [join('src', 'utils', 'apiFetch.ts')];
-
-/** Server-side route handlers are not client code. */
-const SKIP_DIRS = [join('src', 'app', 'api')];
+const ALLOWED = [join('client', 'src', 'lib', 'apiFetch.ts')];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -36,8 +33,7 @@ const RAW_FETCH = /(?<![A-Za-z0-9_$.])fetch\s*\(/g;
 describe('apiFetch is the only path to our API', () => {
   const files = walk(SRC).filter((f) => {
     const rel = relative(join(__dirname, '..'), f);
-    if (ALLOWED.includes(rel)) return false;
-    return !SKIP_DIRS.some((d) => rel.startsWith(d + sep));
+    return !ALLOWED.includes(rel);
   });
 
   test('scans a non-trivial number of client files', () => {
