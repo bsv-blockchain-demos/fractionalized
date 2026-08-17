@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { Hash, Utils, LockingScript, OP, PublicKey, Transaction, SatoshisPerKilobyte } from '@bsv/sdk';
-import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } from '../../src/lib/mongo';
-import type { Properties } from '../../src/lib/mongo';
+import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } from '../lib/mongo';
+import type { Properties } from '../lib/mongo';
 import { toOutpoint } from '@shared/bsv/outpoints';
 import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS';
 import { PaymentUtxo } from '@shared/bsv/paymentUtxo';

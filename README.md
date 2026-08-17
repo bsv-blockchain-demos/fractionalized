@@ -13,38 +13,38 @@ The core idea is:
 
 Outputs are **not** locked to a single fixed key. Each output is locked to a unique child key derived with a per-output **nonce** (the `keyID` in a type-42 derivation), which avoids key reuse (privacy/linkability + key-exposure hygiene).
 
-- **Protocol:** `TOKEN_PROTOCOL = [2, 'fractionalized token']` (security level 2, counterparty-bound). Helpers in `src/utils/tokenDerivation.ts`.
+- **Protocol:** `TOKEN_PROTOCOL = [2, 'fractionalized token']` (security level 2, counterparty-bound). Helpers in `shared/bsv/tokenDerivation.ts`.
 - **Identity:** the type-42 counterparty is always a wallet's **root identity key** (`getPublicKey({identityKey:true})`) — the user's id (also the JWT subject) and the server's `SERVER_IDENTITY_KEY` — never a derived key. (Type-42 child keys only line up when both sides use identity keys.)
 - **Multisig outputs** (mint/change, listings) derive *both* parties' child keys from one nonce (`deriveMultisigPair`). The committed order is `[seller, server]`.
 - **Investor P2PKH** shares are locked to the investor's derived child key; only the investor can spend them.
 - **Payment UTXOs** (the prefunded fee pool + buyers' fee payments) are derived too — a 1-of-2 multisig(server+user) with a **fresh nonce per payment-change output** (no static key reuse). The fee pool's derivation chains via `properties.paymentDerivation`.
-- **Where the nonce lives:** in the owner's **wallet basket** via `internalizeAction` (`src/utils/internalizeToBasket.ts`, basket `fractionalized.tokens`) for self-custody/recovery, **and** in a DB index for O(1) hot-path lookup:
+- **Where the nonce lives:** in the owner's **wallet basket** via `internalizeAction` (`shared/bsv/internalizeToBasket.ts`, basket `fractionalized.tokens`) for self-custody/recovery, **and** in a DB index for O(1) hot-path lookup:
   - `properties.currentDerivation` — how to spend `txids.currentOutpoint` (`{keyId, counterparty, counterpartyDerivedKey, order, beef}`).
   - `properties.paymentDerivation` — how to spend the current fee-pool UTXO.
   - `shares.keyId` / `shares.counterparty` — an investor's P2PKH derivation.
   - `market_items` derivation fields — a listing multisig's derivation (server's perspective).
-- **Source transactions:** the transaction creator carries the BEEF — the server stores a carry-forward BEEF (`currentDerivation.beef`) and listings are backed up in `listing_beefs`; the overlay is a **fallback only** (`src/utils/fetchTokenSourceTx.ts`). BEEFs cross the wire base64-encoded (`src/utils/beefEncoding.ts`).
+- **Source transactions:** the transaction creator carries the BEEF — the server stores a carry-forward BEEF (`currentDerivation.beef`) and listings are backed up in `listing_beefs`; the overlay is a **fallback only** (`server/lib/fetchTokenSourceTx.ts`). BEEFs cross the wire base64-encoded (`shared/bsv/beefEncoding.ts`).
 - **Legacy / dual-path:** the locking-script templates default to the old fixed scheme (`[0,'fractionalized'] / '0' / self`), so pre-migration tokens still spend; new outputs use the derived scheme.
 
 Full design: `docs/specs/2026-06-16-derived-key-multisig-baskets-design.md`.
 
 ## How it works (high level)
 
-- **Minting (tokenize property)** — `src/app/api/tokenize/create-property/route.ts`
+- **Minting (tokenize property)** — `server/routes/tokenize.ts` (`POST /api/tokenize/create-property`)
   - Creates a *property token* output (the on-chain identity anchor referenced by every share's `OP_RETURN`).
   - Mints the “shares” ordinal (1 sat) to a derived multisig(server+seller) via `OrdinalsP2MS`, with a `bsv-20` inscription.
   - Server internalizes the mint into its basket and writes `currentDerivation`; the client (seller) internalizes its copy from the returned payload.
   - Funds future transfer fees via a prefunded multisig `PaymentUtxo` pool (per-payment derived keys; server-operational).
 
-- **Purchasing shares (primary)** — `src/app/api/share-purchase/route.ts`
+- **Purchasing shares (primary)** — `server/routes/sharePurchase.ts` (`POST /api/share-purchase`)
   - Spends the current share multisig (source from the carry-forward BEEF; overlay fallback).
   - Sends the purchased portion to the investor as a 1 sat ordinal locked to the investor's **derived** key (`OrdinalsP2PKH`); investor internalizes it.
   - Remaining shares go back as a derived multisig “change” (the new `currentOutpoint`). A final sale (all shares bought) omits the change output and marks the property `funded`.
 
 - **Marketplace (secondary)** — custodial multisig model (see also the OrdLock alternative in `docs/specs/2026-06-17-orderlock-marketplace-design.md`)
-  - **List** — `src/app/api/new-listing/route.ts`: the seller's client moves their P2PKH share into a server+seller multisig and posts the tx; the server validates the byte-exact lock + `traceShareChain`, and backs up the BEEF in `listing_beefs`.
-  - **Buy** — `src/app/api/listing-purchase/route.ts`: the server spends the listing multisig (BEEF from `listing_beefs`) to a buyer's derived P2PKH; the buyer's payment funds the fee.
-  - **Cancel** — `src/app/api/cancel-listing/route.ts`: the seller's client spends the listing multisig back to their own derived P2PKH; the server validates and removes the listing.
+  - **List** — `server/routes/listings.ts` (`POST /api/new-listing`): the seller's client moves their P2PKH share into a server+seller multisig and posts the tx; the server validates the byte-exact lock + `traceShareChain`, and backs up the BEEF in `listing_beefs`.
+  - **Buy** — `server/routes/listingPurchase.ts` (`POST /api/listing-purchase`): the server spends the listing multisig (BEEF from `listing_beefs`) to a buyer's derived P2PKH; the buyer's payment funds the fee.
+  - **Cancel** — `server/routes/listings.ts` (`POST /api/cancel-listing`): the seller's client spends the listing multisig back to their own derived P2PKH; the server validates and removes the listing.
 
 - **Integrity / chain tracing**
   - Each share stores `parentTxid` (spent outpoint) + `transferTxid` (new outpoint); `traceShareChain` walks the lineage to the original mint.
@@ -52,14 +52,29 @@ Full design: `docs/specs/2026-06-16-derived-key-multisig-baskets-design.md`.
 
 ## Key components
 
-- **Server wallet**: `src/lib/serverWallet.ts` — `@bsv/wallet-toolbox` storage + signer.
-- **Derived-key utils**: `tokenDerivation.ts`, `internalizeToBasket.ts`, `tokenIndex.ts`, `beefEncoding.ts`, `fetchTokenSourceTx.ts`, `reindexFromBasket.ts` (recovery).
+- **Server wallet**: `server/lib/makeWallet.ts` (`@bsv/wallet-toolbox` storage + signer construction) + `server/lib/serverWallet.ts` (`getServerWallet` memo).
+- **Derived-key utils**: `tokenDerivation.ts`, `internalizeToBasket.ts`, `beefEncoding.ts` (all in `shared/bsv/`), `tokenIndex.ts`, `fetchTokenSourceTx.ts` (both in `server/lib/`), `reindexFromBasket.ts` (in `src/utils/` — client-only recovery primitive, currently unused).
 - **Locking scripts**
-  - `src/utils/ordinalsP2MS.ts`: 1-of-2 multisig + ordinal inscription (derivation-parametrized `unlock`, legacy default).
-  - `src/utils/ordinalsP2PKH.ts`: single-sig investor output + ordinal inscription (derivation-parametrized `unlock`, legacy default).
-  - `src/utils/paymentUtxo.ts`: 1-of-2 multisig fee UTXO (per-payment derived keys; legacy default for back-compat).
-- **Overlay interaction**: `src/hooks/overlayFunctions.ts` — broadcast is non-fatal (overlay is supplementary indexing); queries by txid as a source-tx fallback.
-- **Auth**: JWT cookie `verified`; `src/middleware.ts`; `src/utils/apiAuth.ts`.
+  - `shared/bsv/ordinalsP2MS.ts`: 1-of-2 multisig + ordinal inscription (derivation-parametrized `unlock`, legacy default).
+  - `shared/bsv/ordinalsP2PKH.ts`: single-sig investor output + ordinal inscription (derivation-parametrized `unlock`, legacy default).
+  - `shared/bsv/paymentUtxo.ts`: 1-of-2 multisig fee UTXO (per-payment derived keys; legacy default for back-compat).
+- **Overlay interaction**: `shared/overlay.ts` — broadcast is non-fatal (overlay is supplementary indexing); queries by txid as a source-tx fallback.
+- **Auth**: JWT cookie `verified`; `server/middleware/requireSession.ts` (replaces the deleted `src/middleware.ts` Next page guard and `src/utils/apiAuth.ts` — a client-side route guard replaces the page guard in a later plan).
+
+## Code layout
+
+- `shared/` — dual-use, framework-agnostic TypeScript. MUST NOT import a Node-only
+  module (`mongodb`, `fs`, `crypto`, `dotenv`, `express`, `jose`); `mongodb` is
+  allowed only as `import type`. Must not import from `src/` or `server/`.
+  Enforced by `_test/ModuleBoundaries.test.ts`.
+- `server/` — the Express API and all server-only logic. Owns the wallet and the
+  serialized wallet queue. Must run as exactly ONE instance with autoscale
+  OFF — a correctness requirement, not a cost setting: the queue only prevents
+  UTXO double-spends within a single process.
+- `src/` — the Next client (becomes `client/` in the Vite migration). Must never
+  import from `server/`.
+
+Server env lives in `server/.env`; the root `.env` is the client's. `server/config.ts` reads only the former.
 
 ## Tech stack
 

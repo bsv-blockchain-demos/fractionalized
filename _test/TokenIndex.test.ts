@@ -1,5 +1,5 @@
 // _test/TokenIndex.test.ts
-import { recordTokenDerivation, getTokenDerivation } from '../src/lib/tokenIndex'
+import { recordTokenDerivation, getTokenDerivation } from '@server/lib/tokenIndex'
 
 function fakeCollection(initial: any = null) {
   let doc = initial

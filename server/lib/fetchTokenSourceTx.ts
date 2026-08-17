@@ -1,4 +1,3 @@
-// src/utils/fetchTokenSourceTx.ts
 import { Transaction } from '@bsv/sdk';
 import { getTransactionByTxID } from '@shared/overlay';
 import { decodeBeef } from '@shared/bsv/beefEncoding';

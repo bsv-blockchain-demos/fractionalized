@@ -1,4 +1,4 @@
-import { toPublicProperty } from "../src/lib/serializers";
+import { toPublicProperty } from "@server/lib/serializers";
 
 const raw: any = {
   _id: { toString: () => "abc123" },

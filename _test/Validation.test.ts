@@ -1,6 +1,6 @@
 import {
   ValidationError, asString, asNumberInRange, asObjectId, asEnum, escapeRegex, requireFields,
-} from "../src/utils/validation";
+} from "@server/lib/validation";
 
 describe("validation helpers", () => {
   test("asString accepts strings, rejects non-strings and over-length", () => {

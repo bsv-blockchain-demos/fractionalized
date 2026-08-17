@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express';
-import { connectToMongo, sharesCollection } from '../../src/lib/mongo';
-import { traceShareChain } from '../../src/utils/shareChain';
-import { asObjectId } from '../../src/utils/validation';
-import { checkWalletBalance } from '../../src/utils/wallet-balance';
+import { connectToMongo, sharesCollection } from '../lib/mongo';
+import { traceShareChain } from '../lib/shareChain';
+import { asObjectId } from '../lib/validation';
+import { checkWalletBalance } from '../lib/walletBalance';
 import { getWalletQueue } from '../lib/walletQueue';
 import { getServerWallet } from '../lib/serverWallet';
 import { getMinBalance } from '../config';

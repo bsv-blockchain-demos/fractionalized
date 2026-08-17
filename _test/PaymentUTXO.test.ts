@@ -1,6 +1,6 @@
 import { PaymentUtxo } from '@shared/bsv/paymentUtxo'
 import { PrivateKey, MerklePath, LockingScript, PublicKey, Transaction, Script, Beef } from '@bsv/sdk'
-import { makeWallet } from '../src/lib/serverWallet'
+import { makeWallet } from '@server/lib/makeWallet'
 import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys'
 
 describe('PaymentUtxo', () => {

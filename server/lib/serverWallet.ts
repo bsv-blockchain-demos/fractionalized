@@ -1,5 +1,5 @@
 import type { WalletInterface } from '@bsv/sdk';
-import { makeWallet } from '../../src/lib/serverWallet';
+import { makeWallet } from './makeWallet';
 import { getServerPrivateKey, getWalletStorageUrl } from '../config';
 
 let walletPromise: Promise<WalletInterface> | null = null;

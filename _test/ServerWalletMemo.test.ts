@@ -1,7 +1,7 @@
 import type { WalletInterface } from '@bsv/sdk';
 
-jest.mock('../src/lib/serverWallet', () => ({ makeWallet: jest.fn() }));
-import { makeWallet } from '../src/lib/serverWallet';
+jest.mock('@server/lib/makeWallet', () => ({ makeWallet: jest.fn() }));
+import { makeWallet } from '@server/lib/makeWallet';
 import { getServerWallet, resetServerWalletForTests } from '@server/lib/serverWallet';
 import { getWalletQueue, resetWalletQueueForTests } from '@server/lib/walletQueue';
 

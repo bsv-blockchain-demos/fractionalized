@@ -1,4 +1,3 @@
-// src/lib/tokenIndex.ts
 import type { Collection } from 'mongodb';
 
 export interface TokenDerivationRecord {

@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { ObjectId } from 'mongodb';
-import { connectToMongo, propertiesCollection, propertyDescriptionsCollection, sharesCollection } from '../../src/lib/mongo';
-import { toPublicProperty } from '../../src/lib/serializers';
-import { buildFacetPipeline } from '../../src/lib/propertiesPipeline';
+import { connectToMongo, propertiesCollection, propertyDescriptionsCollection, sharesCollection } from '../lib/mongo';
+import { toPublicProperty } from '../lib/serializers';
+import { buildFacetPipeline } from '../lib/propertiesPipeline';
 import { logger } from '@shared/logger';
 import { requireSession } from '../middleware/requireSession';
 

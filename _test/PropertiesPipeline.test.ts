@@ -1,4 +1,4 @@
-import { buildFacetPipeline } from "../src/lib/propertiesPipeline";
+import { buildFacetPipeline } from "@server/lib/propertiesPipeline";
 
 function matchStage(pipeline: any[]) {
   return pipeline.find((s) => s.$match)?.$match;

@@ -1,4 +1,4 @@
-import { connectToMongo } from '../src/lib/mongo';
+import { connectToMongo } from './lib/mongo';
 import { getWalletQueue } from './lib/walletQueue';
 
 /**

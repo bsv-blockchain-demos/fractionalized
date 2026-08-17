@@ -1,6 +1,6 @@
 import { PrivateKey, Transaction, Script, MerklePath, PublicKey } from '@bsv/sdk'
 import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS'
-import { makeWallet } from '../src/lib/serverWallet'
+import { makeWallet } from '@server/lib/makeWallet'
 import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys'
 import { generateNonce, deriveMultisigPair, TOKEN_PROTOCOL } from '@shared/bsv/tokenDerivation'
 

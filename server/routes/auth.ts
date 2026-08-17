@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { SignJWT } from 'jose';
 import { createSecretKey } from 'crypto';
 import { authServer } from '@shared/authProof';
-import { consumeNonce } from '../../src/lib/authNonceStore';
+import { consumeNonce } from '../lib/authNonceStore';
 import { getJwtSecret } from '../config';
 import { checkSessionCookie, CLEAR_OPTS } from '../middleware/requireSession';
 import { logger } from '@shared/logger';
@@ -45,7 +45,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
         }
 
         // Signed-proof check — expiry-bound, single-use proof of key ownership
-        const { default: protoWallet } = await import('../../src/lib/protoWallet');
+        const { default: protoWallet } = await import('../lib/protoWallet');
         const proofResult = await authServer.verifyAuthProof(protoWallet, proof, 'login', { consumeNonce });
         if (!proofResult.valid || proofResult.identityKey !== walletIdentityKey) {
             res.status(401).json({ message: proofResult.error ?? 'Proof identity mismatch' });

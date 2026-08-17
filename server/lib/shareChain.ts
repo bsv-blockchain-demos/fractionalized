@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { propertiesCollection, sharesCollection } from "../lib/mongo";
+import { propertiesCollection, sharesCollection } from "./mongo";
 
 export type ChainHop = {
   transferTxid: string;

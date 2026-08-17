@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb'
 const mockPropertiesCollection = { findOne: jest.fn() }
 const mockSharesCollection = { findOne: jest.fn() }
 
-jest.mock('../src/lib/mongo', () => ({
+jest.mock('@server/lib/mongo', () => ({
   __esModule: true,
   // Export only the collection singletons used by traceShareChain
   propertiesCollection: mockPropertiesCollection,
@@ -17,7 +17,7 @@ describe('traceShareChain', () => {
   })
 
   it('returns invalid when property or mintTxid is missing', async () => {
-    const { traceShareChain } = await import('../src/utils/shareChain')
+    const { traceShareChain } = await import('@server/lib/shareChain')
     mockPropertiesCollection.findOne.mockResolvedValueOnce(null)
 
     const propertyId = new ObjectId()
@@ -27,7 +27,7 @@ describe('traceShareChain', () => {
   })
 
   it('walks back hops to mintTxid and returns valid', async () => {
-    const { traceShareChain } = await import('../src/utils/shareChain')
+    const { traceShareChain } = await import('@server/lib/shareChain')
 
     const propertyId = new ObjectId()
     const mintTxid = 'minttxid.0'
@@ -65,7 +65,7 @@ describe('traceShareChain', () => {
   })
 
   it('returns invalid if a hop is missing before reaching mint', async () => {
-    const { traceShareChain } = await import('../src/utils/shareChain')
+    const { traceShareChain } = await import('@server/lib/shareChain')
 
     const propertyId = new ObjectId()
     const mintTxid = 'minttxid.0'
@@ -81,7 +81,7 @@ describe('traceShareChain', () => {
   })
 
   it('detects a cycle and returns invalid', async () => {
-    const { traceShareChain } = await import('../src/utils/shareChain')
+    const { traceShareChain } = await import('@server/lib/shareChain')
 
     const propertyId = new ObjectId()
     const mintTxid = 'minttxid.0'

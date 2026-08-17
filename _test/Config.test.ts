@@ -4,7 +4,7 @@ import {
   getWalletStorageUrl,
   getMongoUri,
   getMinBalance,
-} from "../src/lib/config";
+} from "@server/config";
 
 describe("getJwtSecret", () => {
   const original = process.env.JWT_SECRET;

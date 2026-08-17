@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { ValidationError } from '../../src/utils/validation';
+import { ValidationError } from './validation';
 import { logger } from '@shared/logger';
 
 /**

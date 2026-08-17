@@ -14,7 +14,7 @@ export function buildApp(): Express {
   app.use((req, res, next) => {
     const start = Date.now();
     // console.log, not logger.debug: logger.debug/info deliberately no-op in
-    // production (see src/utils/logger.ts), but request logging is the primary
+    // production (see shared/logger.ts), but request logging is the primary
     // diagnostic signal for a stalled wallet queue and must emit in every env.
     console.log(`[server] --> ${req.method} ${req.originalUrl}`);
     res.on('finish', () => {

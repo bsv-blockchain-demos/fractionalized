@@ -1,4 +1,4 @@
-import { escapeRegex } from "../utils/validation";
+import { escapeRegex } from "./validation";
 
 export const PROPERTY_STATUSES = ["upcoming", "open", "funded", "sold"] as const;
 

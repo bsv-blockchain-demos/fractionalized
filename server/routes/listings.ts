@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { Transaction, PublicKey } from '@bsv/sdk';
-import { connectToMongo, propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, listingBeefsCollection } from '../../src/lib/mongo';
-import type { Shares, MarketItem, ListingBeef } from '../../src/lib/mongo';
-import { traceShareChain } from '../../src/utils/shareChain';
+import { connectToMongo, propertiesCollection, sharesCollection, marketItemsCollection, locksCollection, listingBeefsCollection } from '../lib/mongo';
+import type { Shares, MarketItem, ListingBeef } from '../lib/mongo';
+import { traceShareChain } from '../lib/shareChain';
 import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS';
 import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys';
 import { decodeBeef } from '@shared/bsv/beefEncoding';

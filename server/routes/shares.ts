@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { ObjectId } from 'mongodb';
-import { connectToMongo, marketItemsCollection, propertiesCollection, sharesCollection, listingBeefsCollection } from '../../src/lib/mongo';
-import { toPublicProperty } from '../../src/lib/serializers';
+import { connectToMongo, marketItemsCollection, propertiesCollection, sharesCollection, listingBeefsCollection } from '../lib/mongo';
+import { toPublicProperty } from '../lib/serializers';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 import { logger } from '@shared/logger';
 import { sendRouteError } from '../lib/routeError';

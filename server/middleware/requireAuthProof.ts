@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { authServer } from '@shared/authProof';
-import { consumeNonce } from '../../src/lib/authNonceStore';
+import { consumeNonce } from '../lib/authNonceStore';
 import { checkSessionCookie, CLEAR_OPTS } from './requireSession';
 import { logger } from '@shared/logger';
 
@@ -31,7 +31,7 @@ export function requireAuthProof(purpose: string) {
 
     let result;
     try {
-      const { default: protoWallet } = await import('../../src/lib/protoWallet');
+      const { default: protoWallet } = await import('../lib/protoWallet');
       result = await authServer.verifyAuthProof(protoWallet, proof as never, purpose, { consumeNonce });
     } catch (e) {
       // Fail closed: respond rather than hang or crash the single process.

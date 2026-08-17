@@ -1,4 +1,4 @@
-import { connectRaw, ensureSchema } from "../src/lib/mongo";
+import { connectRaw, ensureSchema } from "../server/lib/mongo";
 
 async function main() {
   const { db } = await connectRaw();

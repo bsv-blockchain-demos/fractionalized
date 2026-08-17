@@ -1,9 +1,6 @@
 import { MongoClient, ServerApiVersion, Db, Collection, Document } from "mongodb";
-import dotenv from "dotenv";
-// Server-only module: env comes from server/.env, never the client's root .env.
-dotenv.config({ path: "server/.env" });
 import { propertiesValidator, sharesValidator, propertyDescriptionsValidator, marketItemsValidator } from "./validators";
-import { getMongoUri } from "./config";
+import { getMongoUri } from "../config";
 import { logger } from "@shared/logger";
 
 // Document shapes live in shared/ so the client can import them without the
@@ -11,7 +8,7 @@ import { logger } from "@shared/logger";
 // (and imported locally since this file uses them in `Collection<T>` handles below).
 import type {
   Properties, PropertyDescription, ShareLock, Shares, MarketItem, ListingBeef,
-} from '../../shared/types';
+} from '@shared/types';
 export type { Properties, PropertyDescription, ShareLock, Shares, MarketItem, ListingBeef };
 
 // Extract database name from URI
