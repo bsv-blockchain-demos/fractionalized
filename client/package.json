@@ -1,0 +1,35 @@
+{
+  "name": "@fraction/client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-router-dom": "^7",
+    "react-hot-toast": "^2.6.0",
+    "@bsv/sdk": "^2.1.4",
+    "@bsv/auth": "^0.0.1",
+    "@bsv/wallet-toolbox-client": "^2.1.5",
+    "@fontsource-variable/inter": "^5"
+  },
+  "devDependencies": {
+    "vite": "^6",
+    "@vitejs/plugin-react": "^4",
+    "@tailwindcss/vite": "^4",
+    "tailwindcss": "^4",
+    "vitest": "^3",
+    "jsdom": "^26",
+    "@testing-library/react": "^16",
+    "@testing-library/jest-dom": "^6",
+    "typescript": "^5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}

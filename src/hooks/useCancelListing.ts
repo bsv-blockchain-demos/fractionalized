@@ -16,6 +16,17 @@ import { decodeBeef, encodeBeef } from "@shared/bsv/beefEncoding";
 import { logger } from "@shared/logger";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
+import { ensureSessionAlive } from "../utils/sessionPreflight";
+import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from "../utils/pendingKeyMaterial";
+
+// Broadcast happened, server never got the nonce — surface it.
+function notifyRecoveryData(nonce: string | undefined, txid: string | undefined, context: string) {
+  if (!nonce) return;
+  logPendingKeyMaterial({ id: nonce, purpose: AUTH_PROOF_PURPOSE.cancelListing, nonce, counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: 0, txid }, context);
+  toast.error("Your cancellation was broadcast but the server update failed. Recovery data was saved locally — contact support before retrying.", {
+    duration: 8000, position: "top-center", id: "recovery-data-saved",
+  });
+}
 
 export interface CancelListingItem {
   _id: string;
@@ -43,9 +54,14 @@ export function useCancelListing() {
     }
 
     setCancellingId(item._id);
+    let cancelNonce: string | undefined;
+    let cancelTxid: string | undefined;
+    let cancelConfirmed = false;
     try {
       const pk = await ensureWallet();
       if (!pk) return false;
+
+      if (!(await ensureSessionAlive())) return false;
 
       const listingOutpoint = item.listingOutpoint;
       const { vout: listingVout } = parseOutpoint(listingOutpoint);
@@ -61,8 +77,15 @@ export function useCancelListing() {
       );
 
       // Reclaim output: seller's own derived P2PKH (fresh nonce) — same shape as any held share.
-      const cancelNonce = generateNonce();
+      cancelNonce = generateNonce();
       const ownKey = await deriveOwnKey(userWallet!, SERVER_IDENTITY_KEY, cancelNonce);
+
+      // Persist before broadcast: without the nonce the output is unspendable.
+      savePendingKeyMaterial({
+        id: cancelNonce, purpose: AUTH_PROOF_PURPOSE.cancelListing, nonce: cancelNonce,
+        counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: Date.now(),
+      });
+
       const reclaimLockingScript = new OrdinalsP2PKH().lock(
         /* address */ Hash.hash160(ownKey, "hex") as number[],
         /* assetId */ listingOutpoint.replace(".", "_"),
@@ -142,6 +165,8 @@ export function useCancelListing() {
         toast.error("Failed to sign transaction", { duration: 5000, position: "top-center", id: "cancel-error" });
         return false;
       }
+      cancelTxid = cancelTx.txid;
+      attachTxid(cancelNonce, cancelTxid);
 
       // Broadcast to overlay (non-fatal).
       const cancelFullTx = Transaction.fromBEEF(cancelTx.tx as number[]);
@@ -162,8 +187,12 @@ export function useCancelListing() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast.error(err?.error || "Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
+        notifyRecoveryData(cancelNonce, cancelTxid, "cancel-listing request failed after broadcast");
         return false;
       }
+
+      clearPendingKeyMaterial(cancelNonce);
+      cancelConfirmed = true;
 
       // Internalize the reclaimed P2PKH (output 0) into the seller's basket.
       try {
@@ -182,6 +211,9 @@ export function useCancelListing() {
     } catch (e) {
       logger.error("[cancelListing] Error:", e);
       toast.error("Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
+      if (!cancelConfirmed && cancelTxid) {
+        notifyRecoveryData(cancelNonce, cancelTxid, "cancel-listing flow failed after broadcast");
+      }
       return false;
     } finally {
       setCancellingId(null);

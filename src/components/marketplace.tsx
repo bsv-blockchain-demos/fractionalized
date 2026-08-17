@@ -23,6 +23,8 @@ import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { logger } from "@shared/logger";
 import { apiFetch } from "../utils/apiFetch";
+import { ensureSessionAlive } from "../utils/sessionPreflight";
+import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from "../utils/pendingKeyMaterial";
 
 type ApiListing = {
     _id: string;
@@ -45,6 +47,15 @@ type payloadData = {
     keyId?: string;
     counterparty?: string;
 };
+
+// Broadcast happened, server never got the nonce — surface it.
+function notifyRecoveryData(purpose: string, nonce: string | undefined, txid: string | undefined, context: string) {
+    if (!nonce) return;
+    logPendingKeyMaterial({ id: nonce, purpose, nonce, counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: 0, txid }, context);
+    toast.error("Your transaction was broadcast but the server update failed. Recovery data was saved locally — contact support before retrying.", {
+        duration: 8000, position: "top-center", id: "recovery-data-saved",
+    });
+}
 
 const sortFns: Record<string, (a: ApiListing, b: ApiListing) => number> = {
     "relevance": () => 0,
@@ -138,9 +149,14 @@ export function Marketplace() {
 
         setLoading(true);
 
+        let listingNonce: string | undefined;
+        let newListingTxid: string | undefined;
+        let listingConfirmed = false;
         try {
             const pk = await ensureWallet();
             if (!pk) return;
+
+            if (!(await ensureSessionAlive())) return;
 
             // Verify share ownership
             const traceResult = await apiFetch("/api/test-chain", {
@@ -179,11 +195,18 @@ export function Marketplace() {
             const assetId = transferTxid.replace(".", "_");
 
             // Derive both listing-multisig child keys (seller signs with sellerChild; serverChild rebuilds the script).
-            const listingNonce = generateNonce();
+            listingNonce = generateNonce();
             const { selfKey: sellerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, listingNonce);
 
             // Multisig lock for the new output, committed order [seller, server].
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(sellerChild), PublicKey.fromString(serverChild)]);
+
+            // Persist before broadcast: without the nonce the output is unspendable.
+            savePendingKeyMaterial({
+                id: listingNonce, purpose: AUTH_PROOF_PURPOSE.newListing, nonce: listingNonce,
+                counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: Date.now(),
+            });
+
             const ordinalLockingScript = new OrdinalsP2MS().lock(
                 /* oneOfTwoHash */ oneOfTwoHash,
                 /* assetId */ assetId,
@@ -299,6 +322,9 @@ export function Marketplace() {
                 return;
             }
 
+            newListingTxid = newListingTx.txid as string;
+            attachTxid(listingNonce, newListingTxid);
+
             const newListingFullTx = Transaction.fromBEEF(newListingTx.tx as number[]);
 
             // Broadcast the transaction
@@ -341,8 +367,12 @@ export function Marketplace() {
                     position: "top-center",
                     id: "listing-error",
                 });
+                notifyRecoveryData(AUTH_PROOF_PURPOSE.newListing, listingNonce, newListingTxid, "new-listing request failed after broadcast");
                 return;
             }
+
+            clearPendingKeyMaterial(listingNonce);
+            listingConfirmed = true;
 
             // Record the listing output in the seller's basket (seller's perspective: counterparty=server, order self-first).
             await internalizeToBasket(
@@ -370,6 +400,10 @@ export function Marketplace() {
                 position: "top-center",
                 id: "listing-error",
             });
+            // Don't re-notify once recorded server-side: internalizeToBasket can throw post-POST.
+            if (!listingConfirmed && newListingTxid) {
+                notifyRecoveryData(AUTH_PROOF_PURPOSE.newListing, listingNonce, newListingTxid, "new-listing flow failed after broadcast");
+            }
         } finally {
             setLoading(false);
         }
@@ -378,17 +412,28 @@ export function Marketplace() {
     const handlePurchase = async (
         { marketItemId, buyerId }: { marketItemId: string; buyerId: string }
     ) => {
+        let paymentNonce: string | undefined;
+        let paymentTxid: string | undefined;
+        let purchaseConfirmed = false;
         try {
             const pk = await ensureWallet();
             if (!pk) return;
 
+            if (!(await ensureSessionAlive())) return;
+
             setPurchaseLoading(true);
             // Create the paymentTX with a per-output type-42 derived 1-of-2 multisig (buyer + server).
             // Committed order [buyer, server] => server is self-second when it spends the fee.
-            const paymentNonce = generateNonce();
+            paymentNonce = generateNonce();
             const { selfKey: buyerChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, paymentNonce);
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(buyerChild), PublicKey.fromString(serverChild)]);
             const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
+
+            // Persist before broadcast: without the nonce the output is unspendable.
+            savePendingKeyMaterial({
+                id: paymentNonce, purpose: AUTH_PROOF_PURPOSE.listingPurchase, nonce: paymentNonce,
+                counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: Date.now(),
+            });
 
             const paymentUtxo = await userWallet!.createAction({
                 description: "Payment",
@@ -413,6 +458,10 @@ export function Marketplace() {
                 });
                 throw new Error("Failed to create payment");
             }
+            if (paymentUtxo.txid) {
+                paymentTxid = paymentUtxo.txid;
+                attachTxid(paymentNonce, paymentTxid);
+            }
 
             // Send the paymentTX to the server and start ordinal transfer
             const response = await fetchWithAuthProof(
@@ -430,6 +479,9 @@ export function Marketplace() {
                 });
                 throw new Error(data.error);
             }
+
+            clearPendingKeyMaterial(paymentNonce);
+            purchaseConfirmed = true;
 
             // Internalize the purchased share output into the buyer's wallet basket.
             if (data?.received) {
@@ -460,6 +512,9 @@ export function Marketplace() {
                 position: "top-center",
                 id: "purchase-error",
             });
+            if (!purchaseConfirmed && paymentTxid) {
+                notifyRecoveryData(AUTH_PROOF_PURPOSE.listingPurchase, paymentNonce, paymentTxid, "listing-purchase flow failed after payment was broadcast");
+            }
         } finally {
             setPurchaseLoading(false);
         }

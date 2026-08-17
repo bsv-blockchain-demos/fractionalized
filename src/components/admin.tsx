@@ -15,9 +15,20 @@ import { decodeBeef } from "@shared/bsv/beefEncoding";
 import { logger } from "@shared/logger";
 import { fetchWithAuthProof } from "../utils/authProofClient";
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
+import { ensureSessionAlive } from "../utils/sessionPreflight";
+import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from "../utils/pendingKeyMaterial";
 
 type Status = "upcoming" | "open" | "funded" | "sold";
 type StepStatus = "idle" | "running" | "success" | "error";
+
+// Broadcast happened, server never got the nonce — surface it.
+function notifyRecoveryData(nonce: string | undefined, txid: string | undefined, context: string) {
+    if (!nonce) return;
+    logPendingKeyMaterial({ id: nonce, purpose: AUTH_PROOF_PURPOSE.createProperty, nonce, counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: 0, txid }, context);
+    toast.error("Payment was sent but the server update failed. Recovery data was saved locally — contact support before retrying.", {
+        duration: 8000, position: "top-center", id: "recovery-data-saved",
+    });
+}
 
 export function Admin() {
     // Character limits (must match server validators in validators.ts)
@@ -134,11 +145,15 @@ export function Admin() {
         const pk = await ensureWallet();
         if (!pk) { setProcessing(false); return; } // ensureWallet toasts; blocks absent/locked wallet
 
+        if (!(await ensureSessionAlive())) { setProcessing(false); return; }
+
+        let paymentNonce: string | undefined;
+        let paymentTxid: string | undefined;
         try {
             // Step 1: Create payment UTXO
             // Multisig 1 of 2 so server can use funds for transfer fees.
             // Per-output type-42 derived keys; committed order [user, server] (server self-second on spend).
-            const paymentNonce = generateNonce();
+            paymentNonce = generateNonce();
             const { selfKey: userChild, counterpartyKey: serverChild } = await deriveMultisigPair(userWallet!, SERVER_IDENTITY_KEY, paymentNonce);
             const oneOfTwoHash = hashFromPubkeys([PublicKey.fromString(userChild), PublicKey.fromString(serverChild)]);
             const paymentLockingScript = new PaymentUtxo().lock(/* oneOfTwoHash */ oneOfTwoHash);
@@ -146,6 +161,12 @@ export function Admin() {
             // Calculate required sats for payment UTXO
             // Estimated at 2 sats in fees per share sold, minimum 3 to ensure changeSats >= 1
             const requiredSats = Math.max(3, Math.ceil(Number(_data.sell.percentToSell) * 120));
+
+            // Persist before broadcast: without the nonce the output is unspendable.
+            savePendingKeyMaterial({
+                id: paymentNonce, purpose: AUTH_PROOF_PURPOSE.createProperty, nonce: paymentNonce,
+                counterpartyIdentityKey: SERVER_IDENTITY_KEY, createdAt: Date.now(),
+            });
 
             const paymentTxAction = await userWallet?.createAction({
                 description: "Payment UTXO for property creation",
@@ -165,6 +186,8 @@ export function Admin() {
             if (!paymentTxAction?.txid) {
                 throw new Error("Failed to create payment UTXO");
             }
+            paymentTxid = paymentTxAction.txid;
+            attachTxid(paymentNonce, paymentTxid);
 
             setStep1("success");
             currentStep = 2; // Moving to step 2
@@ -191,6 +214,7 @@ export function Admin() {
                 const details = arr.join("; ");
                 toast.error(`Validation failed. Please fix: ${details}`, { duration: 6000, position: 'top-center', id: 'validation-failed' });
                 if (arr.length > 0) focusErrorField(arr);
+                notifyRecoveryData(paymentNonce, paymentTxid, "create-property validation failed after payment was broadcast");
                 setStep2("error");
                 setProcessing(false);
                 return;
@@ -200,6 +224,7 @@ export function Admin() {
                 throw new Error(createPropertyData?.error || "Failed to create property");
             }
 
+            clearPendingKeyMaterial(paymentNonce);
             setStep2("success");
 
             // Internalize the minted multisig output into the seller's own wallet basket
@@ -238,6 +263,8 @@ export function Admin() {
                 setStep1("error");
             } else if (currentStep === 2) {
                 setStep2("error");
+                // Already broadcast (step 2 needs a txid) — don't lose the nonce.
+                notifyRecoveryData(paymentNonce, paymentTxid, "create-property request failed after payment was broadcast");
             }
 
             toast.error(e instanceof Error ? e.message : 'An error occurred during tokenization');
