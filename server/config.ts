@@ -1,9 +1,11 @@
 // The single source of validated env/secrets for the server. SERVER-ONLY —
 // never import this from client code (it would bundle secrets into the browser build).
 import dotenv from 'dotenv';
-// Server env lives ONLY in server/.env. Root .env is the client's (NEXT_PUBLIC_*/VITE_*)
-// and must never be read here. No-op when absent; in prod the host env is already set.
-dotenv.config({ path: 'server/.env' });
+import path from 'path';
+// Server env lives ONLY in server/.env; the client's VITE_* vars live in client/.env
+// and must never be read here. Resolved from this module, not cwd, so it loads whether
+// the process starts at the repo root or in server/. No-op when absent; prod uses host env.
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 function requireEnv(name: string): string {
   const v = process.env[name];

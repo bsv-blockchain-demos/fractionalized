@@ -53,32 +53,38 @@ Full design: `docs/specs/2026-06-16-derived-key-multisig-baskets-design.md`.
 ## Key components
 
 - **Server wallet**: `server/lib/makeWallet.ts` (`@bsv/wallet-toolbox` storage + signer construction) + `server/lib/serverWallet.ts` (`getServerWallet` memo).
-- **Derived-key utils**: `tokenDerivation.ts`, `internalizeToBasket.ts`, `beefEncoding.ts` (all in `shared/bsv/`), `tokenIndex.ts`, `fetchTokenSourceTx.ts` (both in `server/lib/`), `reindexFromBasket.ts` (in `src/utils/` — client-only recovery primitive, currently unused).
+- **Derived-key utils**: `tokenDerivation.ts`, `internalizeToBasket.ts`, `beefEncoding.ts` (all in `shared/bsv/`), `tokenIndex.ts`, `fetchTokenSourceTx.ts` (both in `server/lib/`), `reindexFromBasket.ts` (in `client/src/lib/` — client-only recovery primitive, currently unused).
 - **Locking scripts**
   - `shared/bsv/ordinalsP2MS.ts`: 1-of-2 multisig + ordinal inscription (derivation-parametrized `unlock`, legacy default).
   - `shared/bsv/ordinalsP2PKH.ts`: single-sig investor output + ordinal inscription (derivation-parametrized `unlock`, legacy default).
   - `shared/bsv/paymentUtxo.ts`: 1-of-2 multisig fee UTXO (per-payment derived keys; legacy default for back-compat).
 - **Overlay interaction**: `shared/overlay.ts` — broadcast is non-fatal (overlay is supplementary indexing); queries by txid as a source-tx fallback.
-- **Auth**: JWT cookie `verified`; `server/middleware/requireSession.ts` (replaces the deleted `src/middleware.ts` Next page guard and `src/utils/apiAuth.ts` — a client-side route guard replaces the page guard in a later plan).
+- **Auth**: JWT cookie `verified`; `server/middleware/requireSession.ts` guards the API, and `client/src/components/routing/ProtectedRoute.tsx` guards routes in the browser (replacing the deleted Next `middleware.ts` page guard).
+- **Client API access**: every request goes through `client/src/lib/apiFetch.ts` (prefixes `VITE_API_BASE`, sends `credentials: 'include'`, redirects to `/login` on 401). Enforced by `_test/ApiFetchChokepoint.test.ts`.
 
 ## Code layout
 
 - `shared/` — dual-use, framework-agnostic TypeScript. MUST NOT import a Node-only
   module (`mongodb`, `fs`, `crypto`, `dotenv`, `express`, `jose`); `mongodb` is
-  allowed only as `import type`. Must not import from `src/` or `server/`.
+  allowed only as `import type`. Must not import from `client/` or `server/`.
   Enforced by `_test/ModuleBoundaries.test.ts`.
 - `server/` — the Express API and all server-only logic. Owns the wallet and the
   serialized wallet queue. Must run as exactly ONE instance with autoscale
   OFF — a correctness requirement, not a cost setting: the queue only prevents
   UTXO double-spends within a single process.
-- `src/` — the Next client (becomes `client/` in the Vite migration). Must never
-  import from `server/`.
+- `client/` — the Vite/React SPA (npm workspace `@fraction/client`). Must never
+  import from `server/`. Also enforced by `_test/ModuleBoundaries.test.ts`.
+- `_test/` — jest suites for `server/` and `shared/`. Client tests are vitest and
+  live beside their sources under `client/src/**/__tests__/`.
 
-Server env lives in `server/.env`; the root `.env` is the client's. `server/config.ts` reads only the former.
+The two sides run on **separate origins** and share no env file: server vars live in
+`server/.env` (read only by `server/config.ts` and `scripts/*`), client vars in
+`client/.env` (Vite loads `.env` from its own root). There is no root `.env`.
 
 ## Tech stack
 
-- Next.js (App Router, webpack — see note below)
+- React 19 + Vite 6 SPA, React Router 7, Tailwind CSS 4
+- Express 5 API (single process, serialized wallet queue)
 - MongoDB (collections enforce JSON-schema validators)
 - `@bsv/sdk`, `@bsv/wallet-toolbox`, `@bsv/wallet-helper`, `@bsv/auth`
 
@@ -96,24 +102,31 @@ Server env lives in `server/.env`; the root `.env` is the client's. `server/conf
 npm install
 ```
 
-> **Bundler:** this project pins webpack (`next dev --webpack` / `next build --webpack`) because the `next.config.ts` `webpack` config is required to stub `react-native-get-random-values` server-side. Next 16 defaults to Turbopack, which would reject that config.
+Installs all three workspaces (`client`, `server`, `shared`) from the repo root.
 
 ### Environment variables
 
-Set the following (for local dev, a `.env` file works):
+Two files, copied from their examples. Nothing reads a root `.env`.
 
-- `MONGODB_URI`
+**`server/.env`** (see `server/.env.example`) — secrets, never bundled:
+
+- `MONGODB_URI` (must include the database name)
 - `SERVER_PRIVATE_KEY` (server wallet private key, hex)
-- `NEXT_PUBLIC_SERVER_IDENTITY_KEY` (server wallet **identity** key, compressed hex — the type-42 derivation counterparty *and* the auth-proof server identity; must equal the server wallet's `getIdentityKey()`)
-- `NEXT_PUBLIC_SERVER_PUBLIC_KEY` (server's `[0,'fractionalized']/'0'` key — largely vestigial post-migration; kept for back-compat / `assertEnv`)
 - `WALLET_STORAGE_URL` (wallet-toolbox storage URL)
-- `JWT_SECRET` (used to sign the `verified` cookie)
+- `JWT_SECRET` (signs the `verified` cookie; min 32 chars, distinct from the private key)
+- `MIN_BALANCE` (output count for the `/api/ready` probe)
+- `PORT` (default 3001)
+- `ALLOWED_ORIGINS` (credentialed CORS allowlist, comma-separated; dev: `http://localhost:5173`)
+
+**`client/.env`** (see `client/.env.example`) — public, inlined into the browser bundle:
+
+- `VITE_API_BASE` (API origin, e.g. `http://localhost:3001`; empty = same-origin)
+- `VITE_SERVER_IDENTITY_KEY` (server wallet **identity** key, compressed hex — the type-42 derivation counterparty *and* the auth-proof server identity; must equal the server wallet's `getIdentityKey()`. The client refuses to boot without it.)
 
 Notes:
 - **Do not commit real secrets** (private keys, JWT secrets, production DB URIs).
 - The login route sets cookies with `secure: true`. Over plain `http://localhost` the browser may refuse to set the cookie; run behind HTTPS (or adjust cookie policy in code) for local dev.
-
-See `.env.example` at the repo root for the full list of required keys with descriptions.
+- The session cookie is `SameSite=Strict` and still rides the `5173 → 3001` fetch: port is not part of a *site*. Both origins must share one registrable domain in production.
 
 ### Database setup
 
@@ -121,18 +134,62 @@ Run `npm run db:migrate` once per environment before first use. This creates the
 
 ### Secrets & rotation
 
-- Never commit real secrets — `.env.example` is a template only and contains no values.
-- In production, store `SERVER_PRIVATE_KEY` and `JWT_SECRET` in a secrets manager (e.g. Vercel environment variables or a KMS), not in checked-in files.
+- Never commit real secrets — the `.env.example` files are templates and contain no values.
+- In production, store `SERVER_PRIVATE_KEY` and `JWT_SECRET` in a secrets manager (the host's environment settings or a KMS), not in checked-in files.
 - Keep `SERVER_PRIVATE_KEY` and `JWT_SECRET` as distinct values — never reuse one secret for both purposes.
 - Rotate either secret immediately if it is ever exposed (committed, logged, or leaked).
 
 ### Run
 
+Two processes, two origins. Terminal 1 — the API:
+
 ```bash
-npm run dev
+npm run server:dev
 ```
 
-Open `http://localhost:3000`.
+Terminal 2 — the client:
+
+```bash
+npm run client:dev
+```
+
+Open `http://localhost:5173`. Vite uses `strictPort`, so if 5173 is taken it fails
+rather than moving to 5174 — a silent port change would no longer match
+`ALLOWED_ORIGINS` and CORS failures look like auth bugs.
+
+### Tests and checks
+
+```bash
+npm run lint          # eslint, repo-wide
+npx tsc --noEmit                   # server + shared
+npx tsc -p client/tsconfig.json    # client
+npm test              # jest: server + shared (_test/)
+npm run test:client   # vitest: client
+npm run build         # client production build (vite)
+```
+
+`_test/PaymentUTXO.test.ts` hits the live network and is expected to fail without
+funded UTXOs.
+
+## Deploying
+
+Two origins on one registrable domain (required for the `SameSite=Strict` session cookie):
+
+- **Client** — `npm run client:build`, serve `client/dist` as static files at
+  `app.<domain>`. Requires SPA history fallback (all paths → `index.html`), or every
+  deep link 404s. Build-time env: `VITE_API_BASE=https://api.<domain>`,
+  `VITE_SERVER_IDENTITY_KEY`.
+- **API** — `npm run server:start` at `api.<domain>`. Env: `MONGODB_URI`,
+  `SERVER_PRIVATE_KEY`, `WALLET_STORAGE_URL`, `JWT_SECRET`, `MIN_BALANCE`,
+  `PORT`, `ALLOWED_ORIGINS=https://app.<domain>`.
+
+**The API MUST run as exactly ONE instance with autoscale OFF.** This is a
+correctness requirement, not a cost setting: the serialized wallet queue only
+prevents UTXO double-spends within a single process. A second instance
+reintroduces the race the migration exists to fix. Do not use pm2 cluster mode.
+
+Run `npm run db:migrate` before first boot — the server fail-fasts if the
+required unique indexes are missing.
 
 ## Main API routes
 
