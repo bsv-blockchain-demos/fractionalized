@@ -9,6 +9,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@shared': path.resolve(__dirname, '../shared'),
+      // See src/lib/nodeCryptoStub.ts. First-party node: imports are still blocked by
+      // _test/ModuleBoundaries.test.ts, so this cannot mask a real leak from our own code.
+      'node:crypto': path.resolve(__dirname, 'src/lib/nodeCryptoStub.ts'),
     },
   },
   server: {

@@ -178,4 +178,37 @@ describe('client graph is Node-free', () => {
 
     expect(offenders).toEqual([]);
   });
+
+  // client/vite.config.ts aliases node:crypto to an empty stub, to silence the warning Vite's
+  // dep optimizer emits when @bsv/sdk probes for it. That alias would also silently swallow a
+  // REAL first-party node: import, so scan for those here rather than relying on a build error.
+  test('no client file imports a Node built-in', () => {
+    const offenders: string[] = [];
+
+    for (const file of clientFiles) {
+      const content = stripComments(readFileSync(file, 'utf-8'));
+      // The stub itself is the one file allowed to exist for this purpose; it imports nothing.
+      if (/nodeCryptoStub\.ts$/.test(file)) continue;
+
+      for (const re of [
+        /import\s+(type\s+)?[^;]*?from\s*['"]([^'"]+)['"]/g,
+        /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+        /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+      ]) {
+        let m: RegExpExecArray | null;
+        re.lastIndex = 0;
+        while ((m = re.exec(content))) {
+          const isTypeOnly = re.source.includes('type') && m[1] === 'type ';
+          const moduleName = m[m.length - 1];
+          if (isTypeOnly) continue;
+          if (FORBIDDEN.some((f) => moduleName === f || moduleName.startsWith(f))) {
+            const line = content.slice(0, m.index).split('\n').length;
+            offenders.push(`${file}:${line}: ${moduleName}`);
+          }
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
 });
