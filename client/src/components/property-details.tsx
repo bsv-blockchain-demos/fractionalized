@@ -9,6 +9,7 @@ import { internalizeToBasket } from '@shared/bsv/internalizeToBasket';
 import { decodeBeef } from '@shared/bsv/beefEncoding';
 import { logger } from '@shared/logger';
 import { apiFetch } from '@/lib/apiFetch';
+import { PropertyImage } from './properties/PropertyImage';
 import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 
@@ -189,6 +190,14 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div className="relative h-72 mb-8 rounded-lg overflow-hidden bg-gradient-to-br from-accent-primary to-accent-hover">
+                <PropertyImage images={property.images} alt={property.title}>
+                    <div className="w-full h-full flex items-center justify-center opacity-60">
+                        <div className="text-white text-sm">Property Image</div>
+                    </div>
+                </PropertyImage>
             </div>
 
             {/* Investment Metrics */}

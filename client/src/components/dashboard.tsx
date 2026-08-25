@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Properties } from "@shared/types";
 import { useAuthContext } from '@/context/walletContext';
 import { Spinner } from "./spinner";
+import { PropertyImage } from './properties/PropertyImage';
 import { toast } from "react-hot-toast";
 import SellingListings from "./dashboard/SellingListings";
 import MarketListings from "./dashboard/MarketListings";
@@ -233,9 +234,11 @@ export function Dashboard() {
                   <div className="relative h-40 bg-gradient-to-br from-accent-primary to-accent-hover">
                     <div className="absolute top-3 left-3 badge-dark text-xs">{percent}% owned</div>
                     <div className="absolute top-3 right-3 badge-success text-xs">{property.status.toUpperCase()}</div>
-                    <div className="w-full h-full flex items-center justify-center opacity-60">
-                      <div className="text-white text-sm">Property Image</div>
-                    </div>
+                    <PropertyImage images={property.images} alt={property.title}>
+                      <div className="w-full h-full flex items-center justify-center opacity-60">
+                        <div className="text-white text-sm">Property Image</div>
+                      </div>
+                    </PropertyImage>
                   </div>
 
                   {/* Body */}

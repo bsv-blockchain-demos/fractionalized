@@ -21,6 +21,7 @@ import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
 import { logger } from "@shared/logger";
 import { apiFetch } from '@/lib/apiFetch';
+import { PropertyImage } from './properties/PropertyImage';
 import { ensureSessionAlive } from '@/lib/sessionPreflight';
 import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from '@/lib/pendingKeyMaterial';
 
@@ -33,6 +34,7 @@ type ApiListing = {
     pricePerShare: number;
     name: string;
     location: string;
+    images?: string[];
 };
 
 type payloadData = {
@@ -580,11 +582,14 @@ export function Marketplace() {
                         key={item._id}
                         className="card-glass group bg-bg-secondary border border-border-subtle rounded-xl overflow-hidden hover:shadow-md transition-shadow"
                     >
-                        {/* Image placeholder */}
-                        <div className="h-36 bg-bg-primary/60 flex items-center justify-center">
-                            <div className="w-14 h-14 bg-accent-primary/20 rounded-lg flex items-center justify-center">
-                                <span className="text-accent-primary font-semibold">IMG</span>
-                            </div>
+                        <div className="relative h-36 bg-bg-primary/60 overflow-hidden">
+                            <PropertyImage images={item.images} alt={item.name}>
+                                <div className="w-full h-full flex items-center justify-center">
+                                    <div className="w-14 h-14 bg-accent-primary/20 rounded-lg flex items-center justify-center">
+                                        <span className="text-accent-primary font-semibold">IMG</span>
+                                    </div>
+                                </div>
+                            </PropertyImage>
                         </div>
 
                         <div className="p-4 space-y-3">

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { PublicProperty } from '@shared/types';
+import { PropertyImage } from './PropertyImage';
 
 export interface PropertyGridProps {
   items: PublicProperty[];
@@ -22,7 +23,6 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {items.map((property) => {
-        const photos = (property.images ?? []).filter((u) => u && u.trim() !== "");
         return (
           <Link key={property._id} to={`/properties/${property._id}`} className="block">
             <div className="card-glass overflow-hidden transition-all cursor-pointer group">
@@ -43,20 +43,11 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
                 >
                   {String(property.status || '').toUpperCase()}
                 </div>
-                {photos.length > 1 && (
-                  <div className="absolute bottom-3 right-3 badge-dark text-xs">1/{photos.length}</div>
-                )}
-                {photos.length > 0 ? (
-                  <img
-                    src={photos[0]}
-                    alt={property.title ?? "Property"}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
+                <PropertyImage images={property.images} alt={property.title}>
                   <div className="w-full h-full flex items-center justify-center opacity-60">
                     <div className="text-white text-sm">Property Image</div>
                   </div>
-                )}
+                </PropertyImage>
               </div>
 
               {/* Property Details */}

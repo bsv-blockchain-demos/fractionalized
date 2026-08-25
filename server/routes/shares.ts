@@ -57,6 +57,7 @@ sharesRouter.get('/listings', requireSession, async (req: Request, res: Response
                     createdAt: 1,
                     name: { $ifNull: ["$property.title", "Unknown Property"] },
                     location: { $ifNull: ["$property.location", "Unknown"] },
+                    images: { $ifNull: ["$property.images", []] },
                 },
             },
             { $sort: { createdAt: -1 } },
@@ -75,6 +76,7 @@ sharesRouter.get('/listings', requireSession, async (req: Request, res: Response
             pricePerShare: Number(i.pricePerShare ?? 0),
             name: String(i.name ?? "Unknown Property"),
             location: String(i.location ?? "Unknown"),
+            images: Array.isArray(i.images) ? i.images.map(String) : [],
           }));
 
         res.json({ items: normalized, page: safePage, limit: safeLimit });
