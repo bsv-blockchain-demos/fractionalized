@@ -1,30 +1,8 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useAuthContext } from '@/context/walletContext';
 import { Spinner } from "./spinner";
-import toast from "react-hot-toast";
-import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
-import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
-import { logger } from "@shared/logger";
-import { apiFetch } from '@/lib/apiFetch';
-
-type OwnedShare = {
-  _id: string;
-  propertyId: string;
-  amount: number; // percent
-  transferTxid: string;
-  propertyTitle?: string;
-  // Share P2PKH derivation (absent for legacy shares).
-  keyId?: string;
-  counterparty?: string;
-};
-
-type Property = {
-  _id: string;
-  title: string;
-  location: string;
-  priceUSD: number;
-  tokenTxid: string;
-};
+import { useMyShares, type OwnedShare } from '@/hooks/queries/useMyPortfolio';
+import { useProperty } from '@/hooks/queries/useProperties';
+import { useQueryErrorToast } from '@/hooks/queries/useQueryErrorToast';
 
 // Custom dropdown component for share selection
 function CustomShareDropdown({
@@ -118,78 +96,26 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
     counterparty?: string;
   }) => void;
 }) {
-  const { userWallet, userPubKey, ensureWallet } = useAuthContext();
-  const [loadingData, setLoadingData] = useState(false);
-  const [shares, setShares] = useState<OwnedShare[]>([]);
   const [selectedShareId, setSelectedShareId] = useState<string>("");
-  const [property, setProperty] = useState<Property | null>(null);
   const [pricePerShare, setPricePerShare] = useState<number>(0);
+
+  // Shared with the dashboard's read: one proof and one nonce for both.
+  const { data: shares = [], isLoading: loadingData, isError: sharesError } = useMyShares(open);
+  useQueryErrorToast(sharesError, "Failed to load your shares", "my-shares-error");
+
+  // Falls back to the first share until the user picks one.
+  const activeShareId = selectedShareId || shares[0]?._id || "";
   const selectedShare = useMemo(
-    () => shares.find(s => s._id === selectedShareId) || null,
-    [shares, selectedShareId]
+    () => shares.find((s: OwnedShare) => s._id === activeShareId) ?? null,
+    [shares, activeShareId]
   );
 
-  // Load user's shares when modal opens
-  useEffect(() => {
-    if (!open) return;
-    const run = async () => {
-      setLoadingData(true);
-      try {
-        const pk = await ensureWallet();
-        if (!pk) return;
-        const res = await apiFetchStepUp("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
-        const data = await res.json();
-        const mapped: OwnedShare[] = (data?.shares || []).map((s: any) => ({
-          _id: String(s?._id ?? ""),
-          propertyId: String(s?.propertyId ?? ""),
-          amount: Number(s?.amount ?? 0),
-          transferTxid: String(s?.transferTxid ?? ""),
-          propertyTitle: String(s?.propertyTitle ?? ""),
-          // Share derivation (from /api/my-shares) — needed to unlock the P2PKH when listing.
-          keyId: s?.keyId ? String(s.keyId) : undefined,
-          counterparty: s?.counterparty ? String(s.counterparty) : undefined,
-        }));
-        setShares(mapped);
-        if (mapped.length) setSelectedShareId(mapped[0]._id);
-      } catch (e) {
-        logger.error(e);
-      } finally {
-        setLoadingData(false);
-      }
-    };
-    run();
-  }, [open, userWallet, userPubKey, ensureWallet]);
+  const { data: property = null } = useProperty(selectedShare?.propertyId);
 
-  // Load property details and set default price when share changes
+  // First estimate: property price / 100 (price per % share).
   useEffect(() => {
-    const loadProperty = async () => {
-      if (!selectedShare) {
-        setProperty(null);
-        return;
-      }
-      try {
-        const res = await apiFetch(`/api/properties/${selectedShare.propertyId}`);
-        if (!res.ok) throw new Error("Property fetch failed");
-        const { item } = await res.json();
-        const prop: Property = {
-          _id: String(item?._id ?? selectedShare.propertyId),
-          title: String(item?.title ?? "Property"),
-          location: String(item?.location ?? ""),
-          priceUSD: Number(item?.priceUSD ?? 0),
-          tokenTxid: String(item?.txids?.tokenTxid ?? ""),
-        };
-        setProperty(prop);
-        // First estimate: property price / 100 (price per % share)
-        const estimate = Math.max(0, Math.round((prop.priceUSD / 100) * 100) / 100);
-        setPricePerShare(estimate);
-      } catch (e) {
-        logger.error(e);
-        setProperty(null);
-        setPricePerShare(0);
-      }
-    };
-    loadProperty();
-  }, [selectedShare]);
+    setPricePerShare(property ? Math.max(0, Math.round((property.priceUSD / 100) * 100) / 100) : 0);
+  }, [property]);
 
   if (!open) return null;
 
@@ -244,7 +170,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
               <label className="block text-xs text-text-secondary mb-1">Select share</label>
               <CustomShareDropdown
                 shares={shares}
-                selectedShareId={selectedShareId}
+                selectedShareId={activeShareId}
                 onSelect={setSelectedShareId}
                 disabled={loading}
               />
@@ -298,7 +224,7 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
                     propertyId: selectedShare.propertyId,
                     pricePerShare: Number(pricePerShare) || 0,
                     transferTxid: selectedShare.transferTxid,
-                    tokenTxid: property.tokenTxid,
+                    tokenTxid: String(property.txids?.tokenTxid ?? ""),
                     keyId: selectedShare.keyId,
                     counterparty: selectedShare.counterparty,
                   };

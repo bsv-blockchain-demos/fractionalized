@@ -1,186 +1,56 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useMemo, useState } from "react";
-import type { Properties } from "@shared/types";
+import { useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuthContext } from '@/context/walletContext';
 import { Spinner } from "./spinner";
 import { PropertyImage } from './properties/PropertyImage';
-import { toast } from "react-hot-toast";
 import SellingListings from "./dashboard/SellingListings";
-import MarketListings from "./dashboard/MarketListings";
+import MarketListings, { type MarketListingItem } from "./dashboard/MarketListings";
 import PortfolioStats from "./dashboard/PortfolioStats";
 import { useCancelListing } from '@/hooks/useCancelListing';
-import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
-import { AUTH_PROOF_PURPOSE } from "@shared/authProofPurposes";
-import { logger } from "@shared/logger";
-import { apiFetch } from '@/lib/apiFetch';
+import { useMyListings, useMyShares, useMySelling } from '@/hooks/queries/useMyPortfolio';
+import { usePropertiesByIds, type PropertyDetail } from '@/hooks/queries/useProperties';
+import { useQueryErrorToast } from '@/hooks/queries/useQueryErrorToast';
+import { qk } from '@/lib/queryKeys';
 
 export function Dashboard() {
-  // User shares mapped to properties
-  const [investedCards, setInvestedCards] = useState<
-    { property: Properties; percent: number }[]
-  >([]);
-  const [selling, setSelling] = useState<Properties[]>([]);
-  const [myListings, setMyListings] = useState<Array<{
-    _id: string;
-    propertyId: string;
-    name: string;
-    location: string;
-    sellAmount: number;
-    pricePerShare: number;
-    listingNonce?: string;
-    listingOutpoint?: string;
-    listingBeef?: string;
-    tokenTxid?: string;
-  }>>([]);
-
-  const [loadingInvestments, setLoadingInvestments] = useState<boolean>(false);
-  const [loadingSelling, setLoadingSelling] = useState<boolean>(false);
-  const [loadingMyListings, setLoadingMyListings] = useState<boolean>(false);
-  const { userWallet, userPubKey, ensureWallet } = useAuthContext();
+  const { userPubKey, ensureWallet } = useAuthContext();
   const { cancelListing, cancellingId } = useCancelListing();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchInvestedProperties = async () => {
-      setLoadingInvestments(true);
-      try {
-        const pk = await ensureWallet();
-        if (!pk) return;
+  useEffect(() => { ensureWallet(true); }, [ensureWallet]);
 
-        // Get owned shares
-        const response = await apiFetchStepUp("/api/my-shares", userWallet, AUTH_PROOF_PURPOSE.myShares);
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
-        const data = await response.json();
-        const shares: Array<{
-          _id: string;
-          propertyId: string;
-          amount: number; // percent
-        }> = (data?.shares || []).map((s: any) => ({
-          _id: String(s?._id ?? ""),
-          propertyId: String(s?.propertyId ?? ""),
-          amount: Number(s?.amount ?? 0),
-        }));
+  const sharesQuery = useMyShares();
+  const listingsQuery = useMyListings();
+  const sellingQuery = useMySelling();
+  useQueryErrorToast(sharesQuery.isError, "Failed to load your investments", "my-shares-error");
+  useQueryErrorToast(listingsQuery.isError, "Failed to load your listings", "my-listings-error");
+  useQueryErrorToast(sellingQuery.isError, "Failed to load your selling properties", "my-selling-error");
 
-        if (!shares.length) {
-          setInvestedCards([]);
-          return;
-        }
+  const myShares = useMemo(() => sharesQuery.data ?? [], [sharesQuery.data]);
+  const myListings = listingsQuery.data ?? [];
+  const selling = sellingQuery.data ?? [];
 
-        // Fetch property details for each share
-        const props = await Promise.all(
-          shares.map(async (s) => {
-            const res = await apiFetch(`/api/properties/${s.propertyId}`);
-            if (!res.ok) {
-              throw new Error(`Property HTTP ${res.status}`);
-            }
-            const pd = await res.json();
-            return { property: pd?.item as Properties, percent: s.amount };
-          })
-        );
+  // One query per id — shared with the detail page and the sell modal, so the old
+  // per-share loop of identical requests collapses.
+  const propertyQueries = usePropertiesByIds(myShares.map((s) => s.propertyId));
+  const investedProperties = useMemo(
+    () => myShares
+      .map((s, i) => ({ property: propertyQueries[i]?.data as PropertyDetail | undefined, percent: s.amount }))
+      .filter((c): c is { property: PropertyDetail; percent: number } => !!c.property),
+    [myShares, propertyQueries],
+  );
+  const loadingInvestments = sharesQuery.isLoading || propertyQueries.some((q) => q.isLoading);
 
-        // Filter out any failed/undefined items just in case
-        const valid = props.filter(
-          (p): p is { property: Properties; percent: number } => !!p?.property
-        );
-        setInvestedCards(valid);
-      } catch (e: any) {
-        logger.error(e);
-        toast.error("Failed to load your investments");
-      } finally {
-        setLoadingInvestments(false);
-      }
-    };
-    fetchInvestedProperties();
-    // Re-run if the user identity changes
-  }, [userWallet, userPubKey, ensureWallet]);
-
-  // Fetch user's market listings (unsold)
-  useEffect(() => {
-    const fetchMyListings = async () => {
-      setLoadingMyListings(true);
-      try {
-        const pk = await ensureWallet();
-        if (!pk) return;
-
-        const response = await apiFetchStepUp("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
-        const data = await response.json();
-        const items = Array.isArray(data?.items) ? data.items : [];
-        setMyListings(items.map((i: any) => ({
-          _id: String(i?._id ?? ""),
-          propertyId: String(i?.propertyId ?? ""),
-          name: String(i?.name ?? "Unknown Property"),
-          location: String(i?.location ?? "Unknown"),
-          sellAmount: Number(i?.sellAmount ?? 0),
-          pricePerShare: Number(i?.pricePerShare ?? 0),
-          listingNonce: i?.listingNonce ? String(i.listingNonce) : undefined,
-          listingOutpoint: i?.listingOutpoint ? String(i.listingOutpoint) : undefined,
-          listingBeef: i?.listingBeef ? String(i.listingBeef) : undefined,
-          tokenTxid: i?.tokenTxid ? String(i.tokenTxid) : undefined,
-        })));
-      } catch (e) {
-        logger.error(e);
-        toast.error("Failed to load your listings");
-      } finally {
-        setLoadingMyListings(false);
-      }
-    };
-    fetchMyListings();
-  }, [userWallet, userPubKey, ensureWallet]);
-
-  // Fetch properties the user is selling
-  useEffect(() => {
-    const fetchSellingProperties = async () => {
-      setLoadingSelling(true);
-      try {
-        const pk = await ensureWallet();
-        if (!pk) return;
-
-        // Get selling properties
-        const response = await apiFetchStepUp("/api/my-selling", userWallet, AUTH_PROOF_PURPOSE.mySelling);
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
-        const data = await response.json();
-        const props: Properties[] = data?.items || [];
-
-        // Filter out any failed/undefined items just in case
-        const valid = props.filter(
-          (p): p is Properties => !!p
-        );
-        setSelling(valid);
-      } catch (e: any) {
-        logger.error(e);
-        toast.error("Failed to load your selling properties");
-      } finally {
-        setLoadingSelling(false);
-      }
-    };
-    fetchSellingProperties();
-    // Re-run if the user identity changes
-  }, [userWallet, userPubKey, ensureWallet]);
-
-  // Cancel a listing via the shared hook, then optimistically remove it from the UI.
-  const handleCancelListing = (item: {
-    _id: string;
-    propertyId: string;
-    sellAmount: number;
-    listingNonce?: string;
-    listingOutpoint?: string;
-    listingBeef?: string;
-    tokenTxid?: string;
-  }) => {
+  const handleCancelListing = (item: MarketListingItem) => {
     cancelListing(item).then((ok) => {
-      if (ok) {
-        setMyListings((prev) => prev.filter((l) => l._id !== item._id));
+      if (ok && userPubKey) {
+        queryClient.invalidateQueries({ queryKey: qk.myListings(userPubKey) });
+        // Cancel reclaims the share into a new shares doc, so this list is stale too.
+        queryClient.invalidateQueries({ queryKey: qk.myShares(userPubKey) });
       }
     });
   };
-
-  const investedProperties = investedCards;
 
   const parsePercent = (s: string) => {
     const n = parseFloat(String(s).replace("%", ""));
@@ -286,7 +156,7 @@ export function Dashboard() {
 
       {/* Your Market Listings */}
       <MarketListings
-        loading={loadingMyListings}
+        loading={listingsQuery.isLoading}
         items={myListings}
         onCancel={handleCancelListing}
         cancellingId={cancellingId}

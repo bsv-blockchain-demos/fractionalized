@@ -15,6 +15,7 @@
     "@bsv/wallet-toolbox-client": "^2.1.5",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
+    "@tanstack/react-query": "^5.102.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",

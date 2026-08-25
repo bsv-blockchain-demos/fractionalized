@@ -11,6 +11,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { ProtectedRoute } from '../routing/ProtectedRoute';
 import { Dashboard } from '../dashboard';
 
@@ -41,20 +43,28 @@ function ctx(status: string, userPubKey: string | null) {
   return { status, userPubKey, userWallet, ensureWallet };
 }
 
-function renderDashboard() {
-  return render(
+// A fresh element per call: React bails out of re-rendering an identical element reference,
+// which would stop ProtectedRoute ever re-evaluating on rerender.
+const tree = () => (
+  <QueryClientProvider client={queryClient}>
     <MemoryRouter initialEntries={['/dashboard']}>
       <Routes>
         <Route path="/login" element={<div>login page</div>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       </Routes>
-    </MemoryRouter>,
-  );
+    </MemoryRouter>
+  </QueryClientProvider>
+);
+
+function renderDashboard() {
+  return render(tree());
 }
 
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // A cached entry would let the second case pass without ever fetching.
+  queryClient.clear();
   apiFetchStepUp.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
   apiFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
 });
@@ -70,14 +80,11 @@ describe('logout does not fire authenticated requests (M-11)', () => {
     const callsWhileAuthenticated = apiFetchStepUp.mock.calls.length;
 
     useAuthContext.mockReturnValue(ctx('idle', null));
-    rerender(
-      <MemoryRouter initialEntries={['/dashboard']}>
-        <Routes>
-          <Route path="/login" element={<div>login page</div>} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    // Real logout() clears the cache. Without this the count assertion below is vacuous:
+    // a warm cache means no refetch on re-render whether or not the subtree unmounted.
+    // Cleared, a still-mounted dashboard refetches immediately — which is the regression.
+    queryClient.clear();
+    rerender(tree());
 
     // Count BEFORE asserting the redirect. The effects await ensureWallet(), so a re-fire needs
     // a real settle window to reach apiFetchStepUp — and if the redirect assertion ran first it
@@ -86,6 +93,24 @@ describe('logout does not fire authenticated requests (M-11)', () => {
     expect(apiFetchStepUp.mock.calls.length).toBe(callsWhileAuthenticated);
 
     await waitFor(() => expect(screen.getByText('login page')).toBeInTheDocument());
+  });
+
+  // The count assertion above can no longer fail on its own: the step-up queries carry
+  // `enabled: status === 'authenticated' && !!userPubKey`, so a disabled query stays put even
+  // against a cleared cache. That gate is now the real defence, so assert it directly —
+  // mounted, unguarded, unauthenticated, and it must still not fetch.
+  it('fires nothing when unauthenticated, even mounted outside the guard', async () => {
+    useAuthContext.mockReturnValue(ctx('idle', null));
+    queryClient.clear();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter><Dashboard /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await new Promise((r) => setTimeout(r, 60));
+    expect(apiFetchStepUp).not.toHaveBeenCalled();
   });
 
   it('unmounts the protected subtree rather than leaving it mounted', async () => {

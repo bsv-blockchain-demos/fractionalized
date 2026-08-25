@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from 'react-router-dom';
+import { useQueryClient } from "@tanstack/react-query";
 import { MarketSellModal } from "./market-sell-modal";
 import { MarketPurchaseModal } from "./market-purchase-modal";
 import { useAuthContext } from '@/context/walletContext';
@@ -23,19 +24,10 @@ import { logger } from "@shared/logger";
 import { apiFetch } from '@/lib/apiFetch';
 import { PropertyImage } from './properties/PropertyImage';
 import { ensureSessionAlive } from '@/lib/sessionPreflight';
+import { useListings, type ApiListing } from '@/hooks/queries/useListings';
+import { myListingsOptions } from '@/hooks/queries/useMyPortfolio';
+import { qk } from '@/lib/queryKeys';
 import { savePendingKeyMaterial, attachTxid, clearPendingKeyMaterial, logPendingKeyMaterial } from '@/lib/pendingKeyMaterial';
-
-type ApiListing = {
-    _id: string;
-    propertyId: string;
-    sellerId: string;
-    shareId: string;
-    sellAmount: number;
-    pricePerShare: number;
-    name: string;
-    location: string;
-    images?: string[];
-};
 
 type payloadData = {
     shareId: string;
@@ -86,35 +78,18 @@ export function Marketplace() {
     const { userWallet, userPubKey, ensureWallet } = useAuthContext();
     const { cancelListing, cancellingId } = useCancelListing();
 
-    const [items, setItems] = useState<ApiListing[]>([]);
-
-    const fetchListings = useCallback(async () => {
-        try {
-            const res = await apiFetch("/api/listings");
-            const data = await res.json();
-            setItems(Array.isArray(data?.items) ? data.items : []);
-        } catch (e) {
-            logger.error(e);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchListings();
-    }, [fetchListings]);
+    const queryClient = useQueryClient();
+    const { data: items = [] } = useListings();
 
     useEffect(() => { ensureWallet(true); }, [ensureWallet]);
 
-    // Cancel a listing the viewer owns. /api/listings lacks the cancel derivation data,
-    // so fetch the seller's own listings to map the entry into a CancelListingItem first.
+    // Cancel a listing the viewer owns. /api/listings lacks the cancel derivation data, so the
+    // seller's own listings supply it — via the cache the dashboard already filled where possible.
     const handleCancelOwnListing = useCallback(async (item: ApiListing) => {
+        if (!userPubKey) return;
         try {
-            const res = await apiFetchStepUp("/api/my-listings", userWallet, AUTH_PROOF_PURPOSE.myListings);
-            if (!res.ok) {
-                throw new Error("HTTP " + res.status);
-            }
-            const data = await res.json();
-            const myItems: any[] = Array.isArray(data?.items) ? data.items : [];
-            const found = myItems.find((i) => String(i?._id) === String(item._id));
+            const myItems = await queryClient.ensureQueryData(myListingsOptions(userPubKey, userWallet));
+            const found = myItems.find((i) => String(i._id) === String(item._id));
             if (!found) {
                 toast.error("Could not find your listing to cancel", {
                     duration: 5000, position: "top-center", id: "cancel-error",
@@ -126,15 +101,18 @@ export function Marketplace() {
                 _id: String(found._id),
                 propertyId: String(found.propertyId ?? item.propertyId),
                 sellAmount: Number(found.sellAmount ?? item.sellAmount),
-                listingNonce: found.listingNonce ? String(found.listingNonce) : undefined,
-                listingOutpoint: found.listingOutpoint ? String(found.listingOutpoint) : undefined,
-                listingBeef: found.listingBeef ? String(found.listingBeef) : undefined,
-                tokenTxid: found.tokenTxid ? String(found.tokenTxid) : undefined,
+                listingNonce: found.listingNonce,
+                listingOutpoint: found.listingOutpoint,
+                listingBeef: found.listingBeef,
+                tokenTxid: found.tokenTxid,
             };
 
             const ok = await cancelListing(cancelItem);
             if (ok) {
-                setItems((prev) => prev.filter((l) => l._id !== item._id));
+                queryClient.invalidateQueries({ queryKey: qk.listings() });
+                queryClient.invalidateQueries({ queryKey: qk.myListings(userPubKey) });
+                // Cancel reclaims the share into a new shares doc, so this list is stale too.
+                queryClient.invalidateQueries({ queryKey: qk.myShares(userPubKey) });
             }
         } catch (e) {
             logger.error("[handleCancelOwnListing] Error:", e);
@@ -142,7 +120,7 @@ export function Marketplace() {
                 duration: 5000, position: "top-center", id: "cancel-error",
             });
         }
-    }, [cancelListing]);
+    }, [cancelListing, queryClient, userPubKey, userWallet]);
 
     const handleNewListing = useCallback(async (payload: payloadData) => {
         const { shareId, propertyId, pricePerShare, transferTxid, tokenTxid, keyId: shareKeyId, counterparty: shareCounterparty } = payload;
@@ -501,6 +479,10 @@ export function Marketplace() {
                     logger.error('[handlePurchase] Failed to internalize purchased share:', e);
                 }
             }
+
+            // Nothing removed the bought listing from the list before this.
+            queryClient.invalidateQueries({ queryKey: qk.listings() });
+            queryClient.invalidateQueries({ queryKey: qk.myShares(pk) });
 
             // Show success state instead of closing modal
             setPurchaseSuccess(true);

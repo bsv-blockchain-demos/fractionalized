@@ -2,6 +2,7 @@ import { WalletClient } from '@bsv/sdk'
 import { useContext, createContext, useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import { apiFetch } from '@/lib/apiFetch';
+import { queryClient } from '@/lib/queryClient';
 
 /** Session state, not wallet state: `isAuthenticated` below tracks the wallet, this tracks the cookie. */
 export type AuthStatus = 'restoring' | 'idle' | 'authenticated';
@@ -38,6 +39,14 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
     const [status, setStatus] = useState<AuthStatus>('restoring');
     const initPromiseRef = useRef<Promise<string | null> | null>(null);
+    // Mirrors userPubKey so ensureWallet can read it without depending on it: ensureWallet
+    // is what SETS the pubkey, so taking it as a dep made every effect keyed on ensureWallet
+    // re-run the instant it landed — a second fetch, signature and consumed nonce per effect.
+    const pubKeyRef = useRef<string | null>(null);
+    const rememberPubKey = useCallback((pk: string | null) => {
+        pubKeyRef.current = pk;
+        setUserPubKey(pk);
+    }, []);
 
     // The `verified` cookie is httpOnly, so only the server can answer. Start 'restoring' so
     // ProtectedRoute doesn't flash-redirect before the answer arrives; a rejected check must
@@ -63,7 +72,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     // Returns the identity pubkey, or null (fails closed) if the wallet is absent/locked.
     // Use the return value, not the context userPubKey (stale until re-render). `silent` mutes toasts.
     const ensureWallet = useCallback((silent: boolean = false): Promise<string | null> => {
-        if (userPubKey) return Promise.resolve(userPubKey);
+        if (pubKeyRef.current) return Promise.resolve(pubKeyRef.current);
         if (!initPromiseRef.current) {
             const p = (async (): Promise<string | null> => {
                 try {
@@ -73,7 +82,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
                         return null;
                     }
                     const { publicKey } = await userWallet.getPublicKey({ identityKey: true });
-                    setUserPubKey(publicKey);
+                    rememberPubKey(publicKey);
                     setIsAuthenticated(true);
                     if (!silent) { toast.success('Wallet connected successfully', { duration: 5000, position: 'top-center', id: 'wallet-connect-success' }); }
                     return publicKey;
@@ -87,7 +96,7 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
             p.then((pk) => { if (!pk) initPromiseRef.current = null; }).catch(() => { initPromiseRef.current = null; });
         }
         return initPromiseRef.current;
-    }, [userWallet, userPubKey]);
+    }, [userWallet, rememberPubKey]);
 
     // Back-compat wrapper for the Login button.
     const initializeWallet = useCallback(async (): Promise<void> => {
@@ -95,11 +104,14 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
     }, [ensureWallet]);
 
     const logout = useCallback(() => {
-        setUserPubKey(null);
+        rememberPubKey(null);
         setIsAuthenticated(false);
         setStatus('idle');
         initPromiseRef.current = null;
-    }, []);
+        // Without this the previous identity's private reads stay resident and a wallet
+        // switch in the same tab can serve them from cache.
+        queryClient.clear();
+    }, [rememberPubKey]);
 
     const value = useMemo(() => ({
         userWallet, userPubKey, ensureWallet, initializeWallet, isAuthenticated, setIsAuthenticated, checkAuth, logout,

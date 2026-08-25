@@ -2,8 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FilterSortModal, type FilterState, type SortOption } from './filter-sort-modal';
 import PropertyGrid from './properties/PropertyGrid';
-import type { PublicProperty } from '@shared/types';
-import { apiFetch } from '@/lib/apiFetch';
+import { usePropertiesList } from '@/hooks/queries/useProperties';
 
 type Status = 'all' | 'upcoming' | 'open' | 'funded' | 'sold';
 
@@ -27,12 +26,8 @@ export function Properties() {
     const [isFilterOpen, setFilterOpen] = useState(false);
     const [filters, setFilters] = useState<FilterState>(defaultFilters);
     const [sortBy, setSortBy] = useState<SortOption>('price_desc');
-    const [properties, setProperties] = useState<PublicProperty[]>([]);
     const [page, setPage] = useState<number>(1);
     const PAGE_SIZE = 20;
-    const [total, setTotal] = useState<number>(0);
-    const [loading, setLoading] = useState<boolean>(false);
-    const [loadError, setLoadError] = useState(false);
     const [searchParams, setSearchParams] = useSearchParams();
 
     // Initialize state from URL on mount
@@ -54,58 +49,31 @@ export function Properties() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Part of the query key, so it must be a stable string.
+    const filtersJSON = useMemo(() => JSON.stringify(filters), [filters]);
+
+    const { data, isPending, isFetching, isError } = usePropertiesList({
+        page, limit: PAGE_SIZE, sortBy, activeStatus, filters: filtersJSON,
+    });
+    const properties = data?.items ?? [];
+    const total = data?.total ?? 0;
+    const loading = isPending;
+    const loadError = isError;
+
+    // Mirror the params in the browser URL so back/forward works, without navigating away.
     useEffect(() => {
-        const fetchProperties = async () => {
-            try {
-                setLoading(true);
-                // Build query string for GET and update URL so back/forward works
-                const qs = new URLSearchParams();
-                qs.set('page', String(page));
-                qs.set('limit', String(PAGE_SIZE));
-                qs.set('sortBy', sortBy);
-                qs.set('activeStatus', activeStatus);
-                if (filters) qs.set('filters', JSON.stringify(filters));
-
-                const url = `/api/properties?${qs.toString()}`;
-                // Reflect same params in browser URL (without navigating away)
-                const viewQS = new URLSearchParams();
-                viewQS.set('page', String(page));
-                viewQS.set('sortBy', sortBy);
-                viewQS.set('status', activeStatus);
-                viewQS.set('filters', JSON.stringify(filters));
-                setSearchParams(viewQS, { replace: true });
-
-                const response = await apiFetch(url, { method: 'GET' });
-                if (!response.ok) {
-                    setProperties([]);
-                    setTotal(0);
-                    setLoadError(true);
-                    return;
-                }
-                const data = await response.json();
-                setLoadError(false);
-                setProperties(data.items || []);
-                setTotal(data.total || 0);
-            } catch (e) {
-                setProperties([]);
-                setTotal(0);
-                setLoadError(true);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProperties();
-    }, [filters, sortBy, activeStatus, page]);
+        const viewQS = new URLSearchParams();
+        viewQS.set('page', String(page));
+        viewQS.set('sortBy', sortBy);
+        viewQS.set('status', activeStatus);
+        viewQS.set('filters', filtersJSON);
+        setSearchParams(viewQS, { replace: true });
+    }, [page, sortBy, activeStatus, filtersJSON, setSearchParams]);
 
     const parsePercent = (s: string) => {
         const n = parseFloat(String(s).replace('%', ''));
         return isNaN(n) ? 0 : n;
     };
-
-    const filtered = useMemo(() => {
-        // Server already handled filtering and sorting; just return the page of results
-        return properties;
-    }, [properties]);
 
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -189,15 +157,15 @@ export function Properties() {
             )}
 
             {/* Empty state */}
-            {!loading && !loadError && filtered.length === 0 && (
+            {!loading && !loadError && properties.length === 0 && (
                 <div className="flex items-center justify-center py-10">
                     <span className="text-sm text-text-secondary">No properties found.</span>
                 </div>
             )}
 
             {/* Grid */}
-            {!loading && !loadError && filtered.length > 0 && (
-                <PropertyGrid items={filtered} />
+            {!loading && !loadError && properties.length > 0 && (
+                <PropertyGrid items={properties} />
             )}
 
             {/* Pagination Controls */}
@@ -206,7 +174,7 @@ export function Properties() {
                     type="button"
                     className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1 || loading}
+                    disabled={page === 1 || isFetching}
                 >
                     ← Previous
                 </button>
@@ -215,7 +183,7 @@ export function Properties() {
                     type="button"
                     className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-secondary text-text-primary text-sm btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => setPage((p) => p + 1)}
-                    disabled={page >= totalPages || loading}
+                    disabled={page >= totalPages || isFetching}
                 >
                     Next →
                 </button>

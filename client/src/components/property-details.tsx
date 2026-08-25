@@ -1,6 +1,6 @@
-import type { Properties } from '@shared/types';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { InvestModal } from './invest-modal';
 import { useFeatureDisplay } from '@/hooks/useFeatureDisplay';
 import { toast } from 'react-hot-toast';
@@ -8,48 +8,17 @@ import { useAuthContext } from '@/context/walletContext';
 import { internalizeToBasket } from '@shared/bsv/internalizeToBasket';
 import { decodeBeef } from '@shared/bsv/beefEncoding';
 import { logger } from '@shared/logger';
-import { apiFetch } from '@/lib/apiFetch';
+import { useProperty } from '@/hooks/queries/useProperties';
+import { qk } from '@/lib/queryKeys';
 import { PropertyImage } from './properties/PropertyImage';
 import { apiFetchStepUp } from '@/lib/apiFetchStepUp';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 
-// Extended property type that includes computed fields from the API
-type PropertyWithDetails = Properties & {
-    description?: {
-        details: string;
-        features: string[];
-    };
-    whyInvest?: { title: string; text: string }[];
-    availablePercent?: number | null;
-    totalSold?: number;
-};
-
 export function PropertyDetails({ propertyId }: { propertyId: string }) {
-    const [property, setProperty] = useState<PropertyWithDetails | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-
     const { userWallet, ensureWallet, userPubKey } = useAuthContext();
+    const queryClient = useQueryClient();
 
-    useEffect(() => {
-        async function fetchProperty() {
-            setLoading(true);
-            try {
-                const res = await apiFetch(`/api/properties/${propertyId}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-
-                const item = data?.item;
-                if (item) {
-                    setProperty(item);
-                }
-            } catch (e) {
-                logger.error("Failed to load property details:", e);
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchProperty();
-    }, [propertyId]);
+    const { data: property, isPending: loading } = useProperty(propertyId);
 
     useEffect(() => { ensureWallet(true); }, [ensureWallet]);
 
@@ -103,20 +72,9 @@ export function PropertyDetails({ propertyId }: { propertyId: string }) {
                 }
             }
 
-            // Update local property state to reflect the purchase
-            setProperty((prev) => {
-                if (!prev) return prev;
-                const newRemainingPercent = (prev.availablePercent || 0) - Number(amount);
-                return {
-                    ...prev,
-                    // Only increment investor count if this is a new investor
-                    investors: (prev.investors || 0) + (data.isNewInvestor ? 1 : 0),
-                    availablePercent: newRemainingPercent,
-                    totalSold: (prev.totalSold || 0) + Number(amount),
-                    // Update status to funded if all shares are sold
-                    ...(newRemainingPercent <= 0 && { status: "funded" as const })
-                };
-            });
+            // Availability, investor count and status all moved server-side.
+            queryClient.invalidateQueries({ queryKey: qk.property(propertyId) });
+            queryClient.invalidateQueries({ queryKey: qk.myShares(pk) });
 
             // Show success state
             setInvestSuccess(true);
