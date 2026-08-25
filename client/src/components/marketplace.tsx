@@ -367,7 +367,13 @@ export function Marketplace() {
                 "List share (seller side)",
             );
 
-            // Show success state instead of closing modal
+            // new-listing inserts both a market item and a new share doc, so all three are
+            // stale. Without this, closing the modal instead of following the (full-reload)
+            // "View Marketplace" link left the listing looking like it was never created.
+            queryClient.invalidateQueries({ queryKey: qk.listings() });
+            queryClient.invalidateQueries({ queryKey: qk.myListings(pk) });
+            queryClient.invalidateQueries({ queryKey: qk.myShares(pk) });
+
             setSellSuccess(true);
             toast.success("Share listed for sale", { duration: 4000, position: "top-center", id: "list-success" });
         } catch (e) {
@@ -385,7 +391,7 @@ export function Marketplace() {
         } finally {
             setLoading(false);
         }
-    }, [userWallet, ensureWallet]);
+    }, [userWallet, ensureWallet, queryClient]);
 
     const handlePurchase = async (
         { marketItemId, buyerId }: { marketItemId: string; buyerId: string }
