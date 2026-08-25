@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FilterSortModal, type FilterState, type SortOption } from './filter-sort-modal';
 import PropertyGrid from './properties/PropertyGrid';
+import type { PublicProperty } from '@shared/types';
 import { apiFetch } from '@/lib/apiFetch';
 
 type Status = 'all' | 'upcoming' | 'open' | 'funded' | 'sold';
@@ -26,7 +27,7 @@ export function Properties() {
     const [isFilterOpen, setFilterOpen] = useState(false);
     const [filters, setFilters] = useState<FilterState>(defaultFilters);
     const [sortBy, setSortBy] = useState<SortOption>('price_desc');
-    const [properties, setProperties] = useState<any[]>([]);
+    const [properties, setProperties] = useState<PublicProperty[]>([]);
     const [page, setPage] = useState<number>(1);
     const PAGE_SIZE = 20;
     const [total, setTotal] = useState<number>(0);
@@ -196,7 +197,7 @@ export function Properties() {
 
             {/* Grid */}
             {!loading && !loadError && filtered.length > 0 && (
-                <PropertyGrid items={filtered as any} />
+                <PropertyGrid items={filtered} />
             )}
 
             {/* Pagination Controls */}

@@ -106,3 +106,28 @@ export interface ListingBeef {
   beef: string;            // base64
   createdAt: Date;
 }
+
+/**
+ * What the API actually returns for a property. Built by explicit construction in
+ * server/lib/serializers.ts, so a new DB field can never leak by default. Client code
+ * should type API responses with this, never with `Properties` (the DB shape).
+ */
+export interface PublicProperty {
+  _id: string;
+  title?: string;
+  location?: string;
+  priceUSD?: number;
+  status?: string;
+  annualisedReturn?: string;
+  currentValuationUSD?: number;
+  grossYield?: string;
+  netYield?: string;
+  investmentBreakdown?: Properties["investmentBreakdown"];
+  features?: Record<string, number>;
+  images?: string[];
+  sell?: { percentToSell: number; remainingPercent?: number };
+  availablePercent?: number | null;
+  totalSold?: number;
+  investors?: number;
+  txids?: { tokenTxid?: string };
+}

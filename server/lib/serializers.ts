@@ -1,24 +1,4 @@
-import type { Properties } from "./mongo";
-
-export interface PublicProperty {
-  _id: string;
-  title?: string;
-  location?: string;
-  priceUSD?: number;
-  status?: string;
-  annualisedReturn?: string;
-  currentValuationUSD?: number;
-  grossYield?: string;
-  netYield?: string;
-  investmentBreakdown?: Properties["investmentBreakdown"];
-  features?: Record<string, number>;
-  images?: string[];
-  sell?: { percentToSell: number; remainingPercent?: number };
-  availablePercent?: number | null;
-  totalSold?: number;
-  investors?: number;
-  txids?: { tokenTxid?: string };
-}
+import type { Properties, PublicProperty } from "@shared/types";
 
 // Built by explicit construction: any field NOT listed here is excluded by default,
 // so new schema fields can never accidentally leak.

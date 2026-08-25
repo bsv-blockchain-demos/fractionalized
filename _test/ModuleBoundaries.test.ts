@@ -26,9 +26,13 @@ function walk(dir: string): string[] {
 // or is preceded by whitespace, so a string containing `http://` is left alone.
 function stripComments(content: string): string {
   return content
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // CRLF first: core.autocrlf=true, so a fresh Windows clone checks out \r\n. JS `.`
+    // does not match \r, so `.*$` never reaches end-of-line and NOTHING gets stripped.
+    .replace(/\r\n/g, '\n')
+    // Blank block comments in place so reported line numbers stay accurate.
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
     .split('\n')
-    .map((line) => line.replace(/(^|\s)\/\/.*$/, '$1'))
+    .map((line) => line.replace(/(^|\s)\/\/[^\n]*$/, '$1'))
     .join('\n');
 }
 

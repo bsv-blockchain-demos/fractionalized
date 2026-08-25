@@ -1,24 +1,8 @@
 import { Link } from 'react-router-dom';
-
-export interface PropertyItem {
-  _id: string | { toString: () => string };
-  status?: string;
-  location?: string;
-  title?: string;
-  priceUSD?: number;
-  investors?: number;
-  annualisedReturn?: string;
-  currentValuationUSD?: number;
-  grossYield?: string;
-  availablePercent?: number | null;
-  totalSold?: number;
-  sell?: {
-    percentToSell: number;
-  };
-}
+import type { PublicProperty } from '@shared/types';
 
 export interface PropertyGridProps {
-  items: PropertyItem[];
+  items: PublicProperty[];
 }
 
 const formatCurrency = (amount: number | undefined) => {
@@ -38,9 +22,9 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {items.map((property) => {
-        const id = typeof property._id === "string" ? property._id : property._id?.toString?.();
+        const photos = (property.images ?? []).filter((u) => u && u.trim() !== "");
         return (
-          <Link key={id} to={`/properties/${id}`} className="block">
+          <Link key={property._id} to={`/properties/${property._id}`} className="block">
             <div className="card-glass overflow-hidden transition-all cursor-pointer group">
               {/* Property Image */}
               <div className="relative h-48 bg-gradient-to-br from-accent-primary to-accent-hover">
@@ -59,12 +43,20 @@ export default function PropertyGrid({ items }: PropertyGridProps) {
                 >
                   {String(property.status || '').toUpperCase()}
                 </div>
-                {/* Image pagination indicator */}
-                <div className="absolute bottom-3 right-3 badge-dark text-xs">1/{Math.floor(Math.random() * 9) + 1}</div>
-                {/* Placeholder for property image */}
-                <div className="w-full h-full flex items-center justify-center opacity-60">
-                  <div className="text-white text-sm">Property Image</div>
-                </div>
+                {photos.length > 1 && (
+                  <div className="absolute bottom-3 right-3 badge-dark text-xs">1/{photos.length}</div>
+                )}
+                {photos.length > 0 ? (
+                  <img
+                    src={photos[0]}
+                    alt={property.title ?? "Property"}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center opacity-60">
+                    <div className="text-white text-sm">Property Image</div>
+                  </div>
+                )}
               </div>
 
               {/* Property Details */}
