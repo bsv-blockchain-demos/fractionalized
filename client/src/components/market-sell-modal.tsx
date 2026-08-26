@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useMemo, useState, useRef } from "react";
 import { Spinner } from "./spinner";
 import { useMyShares, type OwnedShare } from '@/hooks/queries/useMyPortfolio';
@@ -135,12 +136,13 @@ export function MarketSellModal({ open, loading, success, onClose, onListed }: {
               Your share is now listed on the marketplace
             </p>
             <div className="flex items-center justify-center gap-3">
-              <a
-                href="/marketplace"
+              <Link
+                to="/dashboard"
+                onClick={onClose}
                 className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors btn-glow"
               >
-                View Marketplace
-              </a>
+                View Dashboard
+              </Link>
               <button
                 onClick={onClose}
                 className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary hover:bg-bg-secondary transition-colors"

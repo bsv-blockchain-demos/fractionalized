@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from 'react-router-dom';
 import { Spinner } from "./spinner";
 
 type InvestModalProps = {
@@ -80,12 +81,13 @@ export function InvestModal({
                 Expected annual return: <span className="font-semibold text-green-500">{formatCurrency(expectedAnnualReturnUSD)}</span>
               </p>
               <div className="flex items-center justify-center gap-3">
-                <a
-                  href="/dashboard"
+                <Link
+                  to="/dashboard"
+                  onClick={onClose}
                   className="px-4 py-2 rounded-lg bg-accent-primary text-white hover:bg-accent-hover transition-colors btn-glow"
                 >
                   View Dashboard
-                </a>
+                </Link>
                 <button
                   onClick={onClose}
                   className="px-4 py-2 rounded-lg border border-border-subtle bg-bg-primary text-text-primary hover:bg-bg-secondary transition-colors"
