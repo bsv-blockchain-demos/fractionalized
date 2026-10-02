@@ -33,5 +33,6 @@
     "typescript": "^5",
     "vite": "^6",
     "vitest": "^3"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE.txt"
 }
