@@ -1,6 +1,6 @@
 # Fractionalized Real Estate (BSV)
 
-Demo app showing how to tokenize a real-estate listing and sell fractional “shares” using the BSV blockchain.
+A BSV demo for creating property-listing tokens and transferring fractional share tokens through a primary sale and secondary marketplace. The application models listings and token balances; it does not connect those tokens to a property-title registry.
 
 The core idea is:
 - A *property* is represented by a reference UTXO.
@@ -26,7 +26,7 @@ Outputs are **not** locked to a single fixed key. Each output is locked to a uni
 - **Source transactions:** the transaction creator carries the BEEF — the server stores a carry-forward BEEF (`currentDerivation.beef`) and listings are backed up in `listing_beefs`; the overlay is a **fallback only** (`server/lib/fetchTokenSourceTx.ts`). BEEFs cross the wire base64-encoded (`shared/bsv/beefEncoding.ts`).
 - **Legacy / dual-path:** the locking-script templates default to the old fixed scheme (`[0,'fractionalized'] / '0' / self`), so pre-migration tokens still spend; new outputs use the derived scheme.
 
-Full design: `docs/specs/2026-06-16-derived-key-multisig-baskets-design.md`.
+See [tokenDerivation.ts](shared/bsv/tokenDerivation.ts) for the implemented derivation helpers.
 
 ## How it works (high level)
 
@@ -41,7 +41,7 @@ Full design: `docs/specs/2026-06-16-derived-key-multisig-baskets-design.md`.
   - Sends the purchased portion to the investor as a 1 sat ordinal locked to the investor's **derived** key (`OrdinalsP2PKH`); investor internalizes it.
   - Remaining shares go back as a derived multisig “change” (the new `currentOutpoint`). A final sale (all shares bought) omits the change output and marks the property `funded`.
 
-- **Marketplace (secondary)** — custodial multisig model (see also the OrdLock alternative in `docs/specs/2026-06-17-orderlock-marketplace-design.md`)
+- **Marketplace (secondary)** uses a seller/server multisig for listed shares.
   - **List** — `server/routes/listings.ts` (`POST /api/new-listing`): the seller's client moves their P2PKH share into a server+seller multisig and posts the tx; the server validates the byte-exact lock + `traceShareChain`, and backs up the BEEF in `listing_beefs`.
   - **Buy** — `server/routes/listingPurchase.ts` (`POST /api/listing-purchase`): the server spends the listing multisig (BEEF from `listing_beefs`) to a buyer's derived P2PKH; the buyer's payment funds the fee.
   - **Cancel** — `server/routes/listings.ts` (`POST /api/cancel-listing`): the seller's client spends the listing multisig back to their own derived P2PKH; the server validates and removes the listing.
@@ -92,14 +92,18 @@ The two sides run on **separate origins** and share no env file: server vars liv
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22 and npm
 - A MongoDB instance (connection string must include a database name)
-- A BSV wallet-toolbox storage service (see `WALLET_STORAGE_URL`)
+- A compatible BRC-100 client wallet, a funded server wallet and Wallet Toolbox storage (see `WALLET_STORAGE_URL`). The server wallet selects mainnet in `server/lib/serverWallet.ts`.
 
 ### Install
 
 ```bash
-npm install
+git clone https://github.com/bsv-blockchain-demos/fractionalized.git
+cd fractionalized
+npm ci
+cp server/.env.example server/.env
+cp client/.env.example client/.env
 ```
 
 Installs all three workspaces (`client`, `server`, `shared`) from the repo root.
@@ -168,8 +172,16 @@ npm run test:client   # vitest: client
 npm run build         # client production build (vite)
 ```
 
-`_test/PaymentUTXO.test.ts` hits the live network and is expected to fail without
-funded UTXOs.
+The Jest suite mixes local tests with remote-wallet integration tests. `PaymentUTXO`, `Ordinals`, `TokenDerivation`, `DerivedKeyMultisig` and `OrdinalsP2PKHDerived` initialise real wallet storage; `PaymentUTXO` also requires funded outputs. Review those files before running the complete suite.
+
+For a small local check after installation:
+
+```sh
+npm test -- --runInBand --runTestsByPath _test/Config.test.ts _test/Validation.test.ts _test/WalletQueue.test.ts
+npm run test:client
+```
+
+The client production build does not type-check the API. Run both TypeScript commands above as separate checks.
 
 ## Deploying
 
@@ -201,7 +213,11 @@ required unique indexes are missing.
 
 ## Security notes
 
-- This repo is a demo; treat it as educational code.
-- The current marketplace is **custodial** (the server co-holds a key in listing multisigs and could move a listed share). A trustless OrdLock alternative is specced in `docs/specs/2026-06-17-orderlock-marketplace-design.md`.
+- This repository is demonstration software.
+- Listed shares use a 1-of-2 seller/server multisig. The server can spend a listed share; buyers rely on the server to carry out settlement correctly.
 - Server-side minting means the server has signing capability; **protect `SERVER_PRIVATE_KEY`** and rotate it if it was ever committed.
 - Production deployments should include proper rate limiting, request validation, monitoring, and key management (HSM / vault).
+
+## Licence
+
+No licence file is included in this checkout. Confirm the intended licence before redistributing the project.
