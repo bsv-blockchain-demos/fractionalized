@@ -5,7 +5,7 @@ import { OrdinalsP2MS } from "@shared/bsv/ordinalsP2MS";
 import { OrdinalsP2PKH } from "@shared/bsv/ordinalsP2PKH";
 import { broadcastTX } from "@shared/overlay";
 import { calcTokenTransfer } from "@shared/calcTokenTransfer";
-import { Hash, Transaction, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
+import { Hash, Transaction } from "@bsv/sdk";
 import { parseOutpoint, toOutpoint } from "@shared/bsv/outpoints";
 import { SERVER_IDENTITY_KEY } from '@/lib/env';
 import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from "@shared/bsv/tokenDerivation";
@@ -106,18 +106,8 @@ export function useCancelListing() {
         /* protocolID */ TOKEN_PROTOCOL,
       );
 
-      // Preimage tx mirroring the intended spend for the correct ordinal signature.
-      const preimageTx = new Transaction();
-      preimageTx.addInput({
-        sourceTransaction: fullListingTx,
-        sourceOutputIndex: listingVout,
-        unlockingScriptTemplate: ordinalUnlockFrame,
-      });
-      preimageTx.addOutput({ satoshis: 1, lockingScript: reclaimLockingScript });
-      await preimageTx.fee(new SatoshisPerKilobyte(100));
-      await preimageTx.sign();
-      const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
-      const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
+      // Upper bound, not one measured signature: the wallet rejects a longer final script.
+      const ordinalUnlockingScriptLength = await ordinalUnlockFrame.estimateLength();
 
       const actionRes = await userWallet!.createAction({
         description: "Cancel listing",

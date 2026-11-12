@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { ObjectId, type Document } from 'mongodb';
-import { Beef, Hash, PublicKey, SatoshisPerKilobyte, Transaction, UnlockingScript } from '@bsv/sdk';
+import { Beef, Hash, PublicKey, SatoshisPerKilobyte, Transaction } from '@bsv/sdk';
 import { connectToMongo, propertiesCollection, sharesCollection, locksCollection } from '../lib/mongo';
 import type { Shares } from '../lib/mongo';
 import { OrdinalsP2PKH } from '@shared/bsv/ordinalsP2PKH';
@@ -262,18 +262,16 @@ sharePurchaseRouter.post(
             });
 
             await preimageTx.fee(new SatoshisPerKilobyte(100))
-            await preimageTx.sign()
 
             // fee() drops the payment change when the pool can't cover it (e.g. a final sale draining it).
             const paymentChangeOutput = preimageTx.outputs[paymentChangeIndex];
             const hasPaymentChange = !!paymentChangeOutput;
             const paymentChangeSats = (paymentChangeOutput?.satoshis as number) ?? 0;
 
-            // Get unlocking script lengths from preimage transaction
-            const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
-            const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript;
-            const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
-            const paymentUnlockingScriptLength = paymentUnlockingScript.toHex().length / 2;
+            // Upper bounds, not one measured signature: DER length varies, and the wallet rejects
+            // a final script longer than declared.
+            const ordinalUnlockingScriptLength = await ordinalUnlockingFrame.estimateLength();
+            const paymentUnlockingScriptLength = await paymentUnlockFrame.estimateLength();
 
             const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
                 {
