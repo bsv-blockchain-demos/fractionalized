@@ -160,8 +160,8 @@ sharePurchaseRouter.post(
             const cur = property.currentDerivation;
             const ordinalUnlockingFrame = cur?.keyId
                 ? new OrdinalsP2MS().unlock(wallet, cur.keyId, cur.counterparty, cur.counterpartyDerivedKey,
-                    "single", true, undefined, undefined, cur.order === 'self-first', TOKEN_PROTOCOL)
-                : new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", true, undefined, undefined, false);
+                    "all", false, undefined, undefined, cur.order === 'self-first', TOKEN_PROTOCOL)
+                : new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "all", false, undefined, undefined, false);
 
             // Payment unlock: recorded type-42 derivation, else legacy static key.
             // Legacy lock was [server, seller] (server first => firstPubkeyIsWallet=true).
@@ -172,8 +172,8 @@ sharePurchaseRouter.post(
                     /* keyID */ pd.keyId,
                     /* counterparty */ pd.counterparty,
                     /* otherPubkey */ pd.counterpartyDerivedKey,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* firstPubkeyIsWallet */ pd.order === 'self-first',
@@ -184,8 +184,8 @@ sharePurchaseRouter.post(
                     /* keyID */ "0",
                     /* counterparty */ "self",
                     /* otherPubkey */ property.seller,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* firstPubkeyIsWallet */ true,

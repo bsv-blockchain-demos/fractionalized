@@ -197,16 +197,16 @@ export function Marketplace() {
             const ordinalUnlockFrame = shareKeyId
                 ? new OrdinalsP2PKH().unlock(
                     /* wallet */ userWallet!,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* derivation */ { protocolID: TOKEN_PROTOCOL, keyID: shareKeyId, counterparty: shareCounterparty as string },
                 )
                 : new OrdinalsP2PKH().unlock(
                     /* wallet */ userWallet!,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                 );
             const preimageTx = new Transaction();
             preimageTx.addInput({
