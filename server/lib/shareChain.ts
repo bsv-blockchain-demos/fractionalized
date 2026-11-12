@@ -64,7 +64,7 @@ export async function traceShareChain(opts: {
     visited.add(current);
 
     // Find the share record whose transferTxid equals current
-    let share = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: current } as any);
+    const share = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: current });
     if (!share) {
       // If we've reached the mint outpoint, we're done
       if (current === mintTxid) {
@@ -80,7 +80,7 @@ export async function traceShareChain(opts: {
         const changeOutputShare = await sharesCollection.findOne({
           propertyId: propertyObjectId,
           transferTxid: `${txid}.0`
-        } as any);
+        });
 
         if (changeOutputShare) {
           // Found the share at output 0, continue chain from its parent

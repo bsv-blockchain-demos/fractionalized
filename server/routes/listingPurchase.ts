@@ -18,6 +18,7 @@ import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { parseListingPurchase } from '../lib/requestBodies';
 import { claimListingForSale, releaseListingClaim } from '../lib/listingClaim';
 
 export const listingPurchaseRouter = Router();
@@ -60,7 +61,7 @@ listingPurchaseRouter.post(
     requireAuthProof(AUTH_PROOF_PURPOSE.listingPurchase),
     async (req: Request, res: Response) => {
         const userId = req.userId as string;
-        const { marketItemId, buyerId, paymentNonce, paymentTX } = req.body;
+        const { marketItemId, buyerId, paymentNonce, paymentTX } = parseListingPurchase(req.body);
 
         // Verify the investoryId (requester) is the logged in user
         if (userId !== buyerId) {
@@ -119,8 +120,8 @@ listingPurchaseRouter.post(
                     createdAt: new Date(),
                 });
                 lockId = lockRes.insertedId;
-            } catch (e: any) {
-                if (e?.code === 11000) {
+            } catch (e) {
+                if ((e as { code?: number })?.code === 11000) {
                     res.status(409).json({ error: "Another transfer is in progress for this seller and property" });
                     return;
                 }

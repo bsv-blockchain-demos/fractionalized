@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Document } from 'mongodb';
 import { Beef, Hash, PublicKey, SatoshisPerKilobyte, Transaction, UnlockingScript } from '@bsv/sdk';
 import { connectToMongo, propertiesCollection, sharesCollection, locksCollection } from '../lib/mongo';
 import type { Shares } from '../lib/mongo';
@@ -20,6 +20,7 @@ import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { parseSharePurchase } from '../lib/requestBodies';
 
 export const sharePurchaseRouter = Router();
 
@@ -55,7 +56,7 @@ sharePurchaseRouter.post(
     requireAuthProof(AUTH_PROOF_PURPOSE.sharePurchase),
     async (req: Request, res: Response) => {
         const userId = req.userId as string;
-        const { propertyId, investorId, amount } = req.body;
+        const { propertyId, investorId, amount } = parseSharePurchase(req.body);
         logger.debug("InvestorId", investorId)
 
         // Verify the investoryId (requester) is the logged in user
@@ -77,21 +78,6 @@ sharePurchaseRouter.post(
                 throw new Error("Failed to create wallet");
             }
             const propertyObjectId = new ObjectId(propertyId);
-            if (typeof investorId !== "string") {
-                res.status(400).json({ error: "Invalid investorId" });
-                return;
-            }
-
-            if (amount <= 0) {
-                res.status(400).json({ error: "Invalid amount" });
-                return;
-            } else if (amount > 100) {
-                res.status(400).json({ error: "Amount must be less than 100%" });
-                return;
-            } else if (typeof amount !== 'number') {
-                res.status(400).json({ error: "Invalid amount" });
-                return;
-            }
 
             // Acquire per-(propertyId, investorId) lock; unique index enforces single holder
             try {
@@ -102,9 +88,9 @@ sharePurchaseRouter.post(
                     createdAt: new Date(),
                 });
                 lockId = lockRes.insertedId;
-            } catch (e: any) {
+            } catch (e) {
                 // Duplicate key error => lock already held
-                if (e?.code === 11000) {
+                if ((e as { code?: number })?.code === 11000) {
                     res.status(409).json({ error: "Another transfer is in progress for this investor and property" });
                     return;
                 }
@@ -459,7 +445,7 @@ sharePurchaseRouter.post(
             // Atomically update remainingPercent, investor count, and check if fully funded
             if (percentToSell != null) {
                 const newRemainingPercent = (property?.sell?.remainingPercent ?? percentToSell) - amount;
-                const updateFields: any = {
+                const updateFields: Document = {
                     "sell.remainingPercent": newRemainingPercent
                 };
 
@@ -469,7 +455,7 @@ sharePurchaseRouter.post(
                 }
 
                 // Increment investor count only if this is a new investor
-                const updateOperation: any = { $set: updateFields };
+                const updateOperation: Document = { $set: updateFields };
                 if (isNewInvestor) {
                     updateOperation.$inc = { investors: 1 };
                 }

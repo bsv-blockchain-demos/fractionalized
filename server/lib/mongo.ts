@@ -78,7 +78,7 @@ export async function ensureSchema(db: Db): Promise<void> {
   // properties collection
   if (!existing.has("properties")) {
     await db.createCollection("properties", {
-      validator: propertiesValidator as any,
+      validator: propertiesValidator as Document,
       validationLevel: "strict",
     });
   } else {
@@ -96,7 +96,7 @@ export async function ensureSchema(db: Db): Promise<void> {
   // shares collection
   if (!existing.has("shares")) {
     await db.createCollection("shares", {
-      validator: sharesValidator as any,
+      validator: sharesValidator as Document,
       validationLevel: "strict",
     });
   } else {
@@ -114,7 +114,7 @@ export async function ensureSchema(db: Db): Promise<void> {
   // property_descriptions collection
   if (!existing.has("property_descriptions")) {
     await db.createCollection("property_descriptions", {
-      validator: propertyDescriptionsValidator as any,
+      validator: propertyDescriptionsValidator as Document,
       validationLevel: "strict",
     });
   } else {
@@ -132,7 +132,7 @@ export async function ensureSchema(db: Db): Promise<void> {
   // market_items collection
   if (!existing.has("market_items")) {
     await db.createCollection("market_items", {
-      validator: marketItemsValidator as any,
+      validator: marketItemsValidator as Document,
       validationLevel: "strict",
     });
   } else {
@@ -171,9 +171,9 @@ export async function ensureSchema(db: Db): Promise<void> {
   try {
     const desiredIndexName = "txids.tokenTxid_unique";
     // Drop conflicting legacy index if present (e.g., auto-named txids.tokenTxid_1)
-    const existingIndexes = await propertiesColl.listIndexes().toArray().catch(() => [] as any[]);
+    const existingIndexes = await propertiesColl.listIndexes().toArray().catch(() => [] as Document[]);
     // Attempt to drop any legacy lowercase or uppercase index variants
-    const conflictingIndexes = existingIndexes.filter((i: any) => (
+    const conflictingIndexes = existingIndexes.filter((i: Document) => (
       i.name === "txids.tokenTxid_1" ||
       i.name === "txids.TokenTxid_1" ||
       (i.key && (i.key["txids.tokenTxid"] === 1 || i.key["txids.TokenTxid"] === 1) && i.name !== desiredIndexName)

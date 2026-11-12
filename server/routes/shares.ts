@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Document } from 'mongodb';
 import { connectToMongo, marketItemsCollection, propertiesCollection, sharesCollection, listingBeefsCollection } from '../lib/mongo';
 import { toPublicProperty } from '../lib/serializers';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
@@ -67,7 +67,7 @@ sharesRouter.get('/listings', requireSession, async (req: Request, res: Response
 
         const items = await cursor.toArray();
         // Normalize ids to strings for the client
-        const normalized = items.map((i: any) => ({
+        const normalized = items.map((i: Document) => ({
             _id: String(i._id),
             propertyId: String(i.propertyId instanceof ObjectId ? i.propertyId : i.propertyId),
             sellerId: String(i.sellerId),
@@ -214,7 +214,7 @@ sharesRouter.post(
             ]);
 
             const items = await cursor.toArray();
-            const normalized = items.map((i: any) => ({
+            const normalized = items.map((i: Document) => ({
                 _id: String(i._id),
                 propertyId: String(i.propertyId instanceof ObjectId ? i.propertyId : i.propertyId),
                 sellerId: String(i.sellerId),

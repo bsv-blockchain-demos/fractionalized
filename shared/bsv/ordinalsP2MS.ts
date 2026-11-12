@@ -31,7 +31,7 @@ export class OrdinalsP2MS implements ScriptTemplate {
         shares: number,
         type: "deploy+mint" | "transfer"
     ): LockingScript {
-        let inscription: any;
+        let inscription: Record<string, string>;
         if (type === "deploy+mint") {
             inscription = {
                 p: "bsv-20",

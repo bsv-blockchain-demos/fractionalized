@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { ObjectId } from 'mongodb';
-import { Transaction, LockingScript, UnlockingScript, Beef } from '@bsv/sdk';
+import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey } from '@bsv/sdk';
 import type { Request, Response, NextFunction } from 'express';
 
 // M-2: sale vs cancel on the same listing. Auth and wallet are stubbed; Mongo is real,
@@ -26,8 +26,8 @@ import { connectRaw, ensureSchema } from '@server/lib/mongo';
 import { claimListingForSale, takeListingForCancel, CLAIM_TTL_MS } from '@server/lib/listingClaim';
 import { encodeBeef } from '@shared/bsv/beefEncoding';
 
-const SELLER = 'seller-key';
-const BUYER = 'buyer-key';
+const SELLER = PrivateKey.fromRandom().toPublicKey().toString();
+const BUYER = PrivateKey.fromRandom().toPublicKey().toString();
 const OP_TRUE = () => LockingScript.fromHex('51');
 
 let mongod: MongoMemoryServer;
@@ -96,7 +96,7 @@ const cancel = (body: object) =>
   request(buildApp()).post('/api/cancel-listing').set('x-test-user', SELLER).send(body);
 const purchase = (marketItemId: string, buyer = BUYER) =>
   request(buildApp()).post('/api/listing-purchase').set('x-test-user', buyer)
-    .send({ marketItemId, buyerId: buyer, paymentNonce: 'n', paymentTX: {} });
+    .send({ marketItemId, buyerId: buyer, paymentNonce: 'n', paymentTX: { txid: 'ab'.repeat(32), tx: [1] } });
 
 describe('M-2: cancel-listing', () => {
   test('rejects cancelling a sold listing and records no reclaimed share', async () => {
