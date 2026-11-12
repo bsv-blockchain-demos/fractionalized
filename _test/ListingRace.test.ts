@@ -1,5 +1,4 @@
 import request from 'supertest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import { ObjectId } from 'mongodb';
 import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey } from '@bsv/sdk';
 import type { Request, Response, NextFunction } from 'express';
@@ -22,7 +21,7 @@ jest.mock('@shared/bsv/tokenDerivation', () => ({
 }));
 
 import { buildApp } from '@server/app';
-import { connectRaw, ensureSchema } from '@server/lib/mongo';
+import { startMongo, stopMongo, clearMongo } from './mongoHarness';
 import { claimListingForSale, takeListingForCancel, CLAIM_TTL_MS } from '@server/lib/listingClaim';
 import { encodeBeef } from '@shared/bsv/beefEncoding';
 
@@ -30,29 +29,10 @@ const SELLER = PrivateKey.fromRandom().toPublicKey().toString();
 const BUYER = PrivateKey.fromRandom().toPublicKey().toString();
 const OP_TRUE = () => LockingScript.fromHex('51');
 
-let mongod: MongoMemoryServer;
-let db: Awaited<ReturnType<typeof connectRaw>>;
-
-beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongod.getUri('fraction_test');
-  db = await connectRaw();
-  await ensureSchema(db.db);
-}, 120000);
-
-afterAll(async () => {
-  await (globalThis as { _fractionMongoClient?: { close(): Promise<void> } })._fractionMongoClient?.close();
-  await mongod?.stop();
-});
-
-beforeEach(async () => {
-  await Promise.all([
-    db.propertiesCollection.deleteMany({}),
-    db.sharesCollection.deleteMany({}),
-    db.marketItemsCollection.deleteMany({}),
-    db.locksCollection.deleteMany({}),
-  ]);
-});
+let db: Awaited<ReturnType<typeof startMongo>>;
+beforeAll(async () => { db = await startMongo(); }, 120000);
+afterAll(stopMongo);
+beforeEach(() => clearMongo(db));
 
 // Seeds a listing whose output is spent by a well-formed cancel tx. The property has no
 // txids, so a purchase that gets past the claim fails before any wallet/chain work.
