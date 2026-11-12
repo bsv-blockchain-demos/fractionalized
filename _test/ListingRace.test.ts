@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { ObjectId } from 'mongodb';
-import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey } from '@bsv/sdk';
+import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey, MerklePath } from '@bsv/sdk';
 import type { Request, Response, NextFunction } from 'express';
 
 // M-2: sale vs cancel on the same listing. Auth and wallet are stubbed; Mongo is real,
@@ -36,15 +36,18 @@ beforeEach(() => clearMongo(db));
 
 // Seeds a listing whose output is spent by a well-formed cancel tx. The property has no
 // txids, so a purchase that gets past the claim fails before any wallet/chain work.
-async function seedListing(state: Record<string, unknown> = {}) {
-  const listingTx = new Transaction(1, [], [{ satoshis: 1, lockingScript: OP_TRUE() }], 0);
+async function seedListing(state: Record<string, unknown> = {}, cancelUnlockHex = '51') {
+  // Mined listing tx, carried in the cancel BEEF the way the wallet's signAction returns it.
+  const listingTx = new Transaction(1, [{
+    sourceTXID: '00'.repeat(32), sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
+  }], [{ satoshis: 1, lockingScript: LockingScript.fromHex('5187') }], 0); // OP_1 OP_EQUAL
+  listingTx.merklePath = MerklePath.fromCoinbaseTxidAndHeight(listingTx.id('hex'), 1);
   const listingOutpoint = `${listingTx.id('hex')}.0`;
   const cancelTx = new Transaction(1, [{
-    sourceTXID: listingTx.id('hex'), sourceOutputIndex: 0, sequence: 0xffffffff,
-    unlockingScript: UnlockingScript.fromHex('51'),
+    sourceTransaction: listingTx, sourceOutputIndex: 0, sequence: 0xffffffff,
+    unlockingScript: UnlockingScript.fromHex(cancelUnlockHex),
   }], [{ satoshis: 1, lockingScript: OP_TRUE() }], 0);
-  const beef = new Beef();
-  beef.mergeRawTx(cancelTx.toBinary());
+  const beef = Beef.fromBinary(cancelTx.toBEEF());
 
   const propertyId = new ObjectId();
   await db.propertiesCollection.insertOne({ _id: propertyId, seller: SELLER, txids: {} } as never);
@@ -91,6 +94,14 @@ describe('M-2: cancel-listing', () => {
     const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: 'someone' });
     const res = await cancel(l.cancelBody);
     expect(res.status).toBe(409);
+    expect(await l.reclaimedShares()).toBe(0);
+    expect(await l.marketItem()).not.toBeNull();
+  });
+
+  test("rejects a cancel tx whose spend doesn't verify", async () => {
+    const l = await seedListing({}, '52'); // pushes 2 against an OP_1 OP_EQUAL lock
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
     expect(await l.reclaimedShares()).toBe(0);
     expect(await l.marketItem()).not.toBeNull();
   });

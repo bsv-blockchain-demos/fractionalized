@@ -86,6 +86,11 @@ listingsRouter.post(
                 res.status(400).json({ error: "Invalid cancel beef" });
                 return;
             }
+            // The multisig already limits who can spend; this only keeps a junk cancel out of the DB.
+            if (!(await cancelTx.verify('scripts only').catch(() => false))) {
+                res.status(400).json({ error: "Cancel tx does not verify" });
+                return;
+            }
 
             const spendsListing = cancelTx.inputs.some(
                 (i) => (i.sourceTXID || i.sourceTransaction?.id('hex')) === listingTxid && i.sourceOutputIndex === listingVout
