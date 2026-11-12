@@ -18,6 +18,7 @@ import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { claimListingForSale, releaseListingClaim } from '../lib/listingClaim';
 
 export const listingPurchaseRouter = Router();
 
@@ -69,6 +70,7 @@ listingPurchaseRouter.post(
 
         let lockId: ObjectId | null = null;
         let transfer: { txid: string; atomicBeef: number[] } | undefined;
+        let claimed = false;
         try {
             await connectToMongo();
 
@@ -82,6 +84,11 @@ listingPurchaseRouter.post(
             if (!marketItem) {
                 throw new Error("Market item not found");
             }
+            if (!(await claimListingForSale(marketItem._id, buyerId))) {
+                res.status(409).json({ error: "Listing is sold or already being purchased" });
+                return;
+            }
+            claimed = true;
             const share = await sharesCollection.findOne({ _id: new ObjectId(marketItem.shareId) });
             if (!share) {
                 throw new Error("Share not found");
@@ -323,7 +330,10 @@ listingPurchaseRouter.post(
             await listingBeefsCollection.deleteOne({ listingId: marketItemId });
 
             // Update listing
-            const listingRes = await marketItemsCollection.updateOne({ _id: new ObjectId(marketItemId) }, { $set: { sold: true } }, { upsert: true });
+            const listingRes = await marketItemsCollection.updateOne(
+                { _id: new ObjectId(marketItemId) },
+                { $set: { sold: true }, $unset: { saleClaimedAt: '', saleClaimedBy: '' } },
+            );
             if (!listingRes.modifiedCount) {
                 throw new Error("Failed to update listing");
             }
@@ -368,6 +378,11 @@ listingPurchaseRouter.post(
                     await locksCollection.deleteOne({ _id: lockId });
                 }
             } catch { }
+            // Nothing broadcast: the listing is still spendable, so free it. After a broadcast
+            // the output is gone; leave the claim to expire rather than re-open a spent listing.
+            if (claimed && !transfer) {
+                await releaseListingClaim(new ObjectId(marketItemId), buyerId).catch((e) => logger.error(e));
+            }
         }
     },
 );

@@ -92,6 +92,8 @@ export interface MarketItem {
   pricePerShare: number; // price per share
   createdAt: Date; // created at
   sold?: boolean; // sold
+  saleClaimedAt?: Date;  // set while a purchase is in flight (server/lib/listingClaim.ts)
+  saleClaimedBy?: string;
   // Listing multisig(seller+server) derivation, server's perspective (spends deriving against seller).
   keyId?: string;
   counterparty?: string;          // sellerId identity key

@@ -14,6 +14,7 @@ import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { takeListingForCancel } from '../lib/listingClaim';
 
 export const listingsRouter = Router();
 
@@ -143,14 +144,23 @@ listingsRouter.post(
                 keyId: cancelNonce,
                 counterparty: serverIdentityKey,
             };
-            const shareRes = await sharesCollection.insertOne(reclaimedShare);
-            if (!shareRes.insertedId) {
-                throw new Error("Failed to record reclaimed share");
+            // Take the listing atomically first, so a concurrent purchase can't also claim it (M-2).
+            const taken = await takeListingForCancel(marketItem._id, userIdFromToken);
+            if (!taken) {
+                res.status(409).json({ error: "Listing is sold or being purchased" });
+                return;
+            }
+            try {
+                const shareRes = await sharesCollection.insertOne(reclaimedShare);
+                if (!shareRes.insertedId) {
+                    throw new Error("Failed to record reclaimed share");
+                }
+            } catch (e) {
+                await marketItemsCollection.insertOne(taken);
+                throw e;
             }
 
-            // Remove the listing from the active marketplace (listings/my-listings filter sold=false|missing).
             await listingBeefsCollection.deleteOne({ listingId: marketItemId });
-            await marketItemsCollection.deleteOne({ _id: new ObjectId(marketItemId) });
 
             res.status(200).json({
                 status: "success",
