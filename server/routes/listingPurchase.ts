@@ -247,7 +247,7 @@ listingPurchaseRouter.post(
                 txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockingFrame;
                 txToSign.inputs[0].sourceTransaction = fullOrdinalTx;
                 txToSign.inputs[1].unlockingScriptTemplate = paymentUnlockFrame;
-                txToSign.inputs[1].sourceTransaction = paymentTX;
+                txToSign.inputs[1].sourceTransaction = Transaction.fromBEEF(paymentTX.tx);
 
                 // Sign the complete transaction
                 await txToSign.sign();
