@@ -31,6 +31,9 @@ describe('parseListingPurchase', () => {
 describe('parseCancelListing', () => {
   const ok = { marketItemId: ID, returnTxid: TXID, cancelBeef: 'AAAA', cancelNonce: 'n' };
   test('accepts a well-formed body', () => expect(parseCancelListing(ok)).toEqual(ok));
+  // useCancelListing sends toOutpoint(txid, 0); the route normalizes either form.
+  test('accepts the outpoint form the client sends', () =>
+    expect(parseCancelListing({ ...ok, returnTxid: OUTPOINT }).returnTxid).toBe(OUTPOINT));
   test.each([
     ['bad returnTxid', { ...ok, returnTxid: 'abc' }],
     ['missing beef', { ...ok, cancelBeef: undefined }],
