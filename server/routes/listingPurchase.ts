@@ -352,6 +352,14 @@ listingPurchaseRouter.post(
             pushToOverlay();
         } catch (e) {
             logger.error(e);
+            if (transfer) {
+                // Broadcast already: the output is gone, so mark the listing sold even though a
+                // later write failed. Leaving the claim to expire would re-open a spent listing.
+                await marketItemsCollection.updateOne(
+                    { _id: new ObjectId(marketItemId) },
+                    { $set: { sold: true }, $unset: { saleClaimedAt: '', saleClaimedBy: '' } },
+                ).catch((e2) => logger.error(e2));
+            }
             res.status(500).json({ error: "Internal server error" });
             if (transfer) {
                 // signAction already broadcast this tx to chain; a post-enqueue
@@ -379,8 +387,7 @@ listingPurchaseRouter.post(
                     await locksCollection.deleteOne({ _id: lockId });
                 }
             } catch { }
-            // Nothing broadcast: the listing is still spendable, so free it. After a broadcast
-            // the output is gone; leave the claim to expire rather than re-open a spent listing.
+            // Nothing broadcast: the listing is still spendable, so free it.
             if (claimed && !transfer) {
                 await releaseListingClaim(new ObjectId(marketItemId), buyerId).catch((e) => logger.error(e));
             }

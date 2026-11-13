@@ -22,7 +22,7 @@ jest.mock('@shared/bsv/tokenDerivation', () => ({
 
 import { buildApp } from '@server/app';
 import { startMongo, stopMongo, clearMongo } from './mongoHarness';
-import { claimListingForSale, takeListingForCancel, CLAIM_TTL_MS } from '@server/lib/listingClaim';
+import { claimListingForSale, takeListingForCancel, reserveListingForCancel, cancelReservation, CLAIM_TTL_MS } from '@server/lib/listingClaim';
 import { encodeBeef } from '@shared/bsv/beefEncoding';
 
 const SELLER = PrivateKey.fromRandom().toPublicKey().toString();
@@ -70,13 +70,17 @@ async function seedListing(state: Record<string, unknown> = {}, cancelUnlockHex 
       cancelBeef: encodeBeef(beef.toBinary()),
       cancelNonce: 'nonce',
     },
+    cancelTxid: cancelTx.id('hex'),
     reclaimedShares: () => db.sharesCollection.countDocuments({ parentTxid: listingOutpoint }),
+    reclaimedShare: () => db.sharesCollection.findOne({ parentTxid: listingOutpoint }),
     marketItem: () => db.marketItemsCollection.findOne({ _id: marketItemId }),
   };
 }
 
 const cancel = (body: object) =>
   request(buildApp()).post('/api/cancel-listing').set('x-test-user', SELLER).send(body);
+const reserve = (marketItemId: string, user = SELLER) =>
+  request(buildApp()).post('/api/cancel-listing/reserve').set('x-test-user', user).send({ marketItemId });
 const purchase = (marketItemId: string, buyer = BUYER) =>
   request(buildApp()).post('/api/listing-purchase').set('x-test-user', buyer)
     .send({ marketItemId, buyerId: buyer, paymentNonce: 'n', paymentTX: { txid: 'ab'.repeat(32), tx: [1] } });
@@ -113,6 +117,55 @@ describe('M-2: cancel-listing', () => {
     expect(await l.reclaimedShares()).toBe(1);
     expect(await l.marketItem()).toBeNull();
   });
+
+  test('records the reclaimed outpoint from the verified cancel tx', async () => {
+    const l = await seedListing();
+    expect((await cancel({ ...l.cancelBody, returnTxid: `${l.cancelTxid}.0` })).status).toBe(200);
+    expect((await l.reclaimedShare())?.transferTxid).toBe(`${l.cancelTxid}.0`);
+  });
+
+  test('rejects a returnTxid that is not the cancel tx', async () => {
+    const l = await seedListing();
+    const res = await cancel({ ...l.cancelBody, returnTxid: 'ab'.repeat(32) });
+    expect(res.status).toBe(400);
+    expect(await l.reclaimedShares()).toBe(0);
+    expect(await l.marketItem()).not.toBeNull();
+  });
+});
+
+// The seller broadcasts the cancel before POSTing it, so the claim has to be taken BEFORE the
+// broadcast: reserve -> sign + broadcast -> cancel. Otherwise a purchase holding the claim makes
+// the cancel 409 after it is already on chain, and releases the claim onto a spent outpoint.
+describe('M-2: cancel reservation', () => {
+  test('a reservation blocks a purchase', async () => {
+    const l = await seedListing();
+    expect((await reserve(l.marketItemId)).status).toBe(200);
+    expect((await purchase(l.marketItemId)).status).toBe(409);
+  });
+
+  test('cannot reserve a listing a purchase holds', async () => {
+    const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: 'other-buyer' });
+    expect((await reserve(l.marketItemId)).status).toBe(409);
+  });
+
+  test('cannot reserve a sold listing', async () => {
+    const l = await seedListing({ sold: true });
+    expect((await reserve(l.marketItemId)).status).toBe(409);
+  });
+
+  test('the seller can cancel while holding the reservation', async () => {
+    const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: cancelReservation(SELLER) });
+    expect((await cancel(l.cancelBody)).status).toBe(200);
+    expect(await l.reclaimedShares()).toBe(1);
+    expect(await l.marketItem()).toBeNull();
+  });
+
+  test('an expired reservation still lets its seller confirm an already-broadcast cancel', async () => {
+    const l = await seedListing({
+      saleClaimedAt: new Date(Date.now() - CLAIM_TTL_MS - 1000), saleClaimedBy: cancelReservation(SELLER),
+    });
+    expect((await cancel(l.cancelBody)).status).toBe(200);
+  });
 });
 
 describe('M-2: listing-purchase', () => {
@@ -146,12 +199,15 @@ describe('M-2: listing-purchase', () => {
   });
 });
 
-test('M-2: concurrent buyers and a cancel — exactly one wins', async () => {
+test.each([
+  ['a cancel reservation', (id: ObjectId) => reserveListingForCancel(id, SELLER)],
+  ['a direct cancel', (id: ObjectId) => takeListingForCancel(id, SELLER).then(Boolean)],
+])('M-2: concurrent buyers and %s — exactly one wins', async (_name, seller) => {
   const l = await seedListing();
   const id = new ObjectId(l.marketItemId);
   const results = await Promise.all([
     ...['b1', 'b2', 'b3', 'b4'].map((b) => claimListingForSale(id, b)),
-    takeListingForCancel(id, SELLER).then(Boolean),
+    seller(id),
   ]);
   expect(results.filter(Boolean)).toHaveLength(1);
 });

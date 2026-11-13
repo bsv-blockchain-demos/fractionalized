@@ -10,7 +10,8 @@ import type { Properties } from './mongo';
 const PUBKEY = /^0[23][0-9a-fA-F]{64}$/;
 const TXID = /^[0-9a-fA-F]{64}$/;
 const OUTPOINT = new RegExp(outpointPattern);
-const TXID_OR_OUTPOINT = /^[0-9a-fA-F]{64}([._]\d+)?$/;
+// The reclaim is always output 0 of the cancel tx; the client sends `${txid}.0`.
+const CANCEL_RETURN = /^[0-9a-fA-F]{64}(\.0)?$/;
 const MAX_SHORT = 256; // nonces, ids
 
 type Obj = Record<string, unknown>;
@@ -58,11 +59,15 @@ export function parseCancelListing(body: unknown) {
   const b = asObject(body, 'body');
   return {
     marketItemId: asId(b.marketItemId, 'marketItemId'),
-    // The client sends an outpoint (useCancelListing); the route normalizes either form.
-    returnTxid: asMatch(b.returnTxid, 'returnTxid', TXID_OR_OUTPOINT),
+    returnTxid: asMatch(b.returnTxid, 'returnTxid', CANCEL_RETURN),
     cancelBeef: asString(b.cancelBeef, 'cancelBeef'),
     cancelNonce: short(b.cancelNonce, 'cancelNonce'),
   };
+}
+
+export function parseCancelReserve(body: unknown) {
+  const b = asObject(body, 'body');
+  return { marketItemId: asId(b.marketItemId, 'marketItemId') };
 }
 
 export function parseNewListing(body: unknown) {

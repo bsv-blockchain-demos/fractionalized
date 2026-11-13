@@ -36,6 +36,8 @@ describe('parseCancelListing', () => {
     expect(parseCancelListing({ ...ok, returnTxid: OUTPOINT }).returnTxid).toBe(OUTPOINT));
   test.each([
     ['bad returnTxid', { ...ok, returnTxid: 'abc' }],
+    ['returnTxid with _ separator', { ...ok, returnTxid: `${TXID}_0` }],
+    ['returnTxid at a vout other than 0', { ...ok, returnTxid: `${TXID}.3` }],
     ['missing beef', { ...ok, cancelBeef: undefined }],
     ['numeric nonce', { ...ok, cancelNonce: 5 }],
   ])('rejects %s', (_n, body) => rejects(() => parseCancelListing(body)));

@@ -139,3 +139,35 @@ test('listing-purchase signs both inputs with valid unlocking scripts and record
   expect((await db.marketItemsCollection.findOne({ _id: marketItemId }))?.sold).toBe(true);
   expect(await db.sharesCollection.countDocuments({ investorId: BUYER })).toBe(1);
 });
+
+test('a DB failure after broadcast marks the listing sold instead of letting it reopen', async () => {
+  const { marketItemId, paymentTX } = await seed();
+  let signable: Transaction | undefined;
+  fakeAction.createAction.mockImplementation(async (args: { inputs: { outpoint: string }[]; outputs: { lockingScript: string; satoshis: number }[] }) => {
+    signable = new Transaction();
+    for (const i of args.inputs) {
+      const [txid, vout] = i.outpoint.split('.');
+      signable.addInput({ sourceTXID: txid, sourceOutputIndex: Number(vout), unlockingScript: new UnlockingScript() });
+    }
+    for (const o of args.outputs) signable.addOutput({ lockingScript: LockingScript.fromHex(o.lockingScript), satoshis: o.satoshis });
+    const beef = new Beef();
+    beef.mergeRawTx(signable.toBinary());
+    return { signableTransaction: { reference: 'ref', tx: beef.toBinary() } };
+  });
+  fakeAction.signAction.mockImplementation(async () => {
+    const beef = new Beef();
+    beef.mergeRawTx(signable!.toBinary());
+    return { txid: signable!.id('hex'), tx: beef.toBinary() };
+  });
+  const insert = jest.spyOn(db.sharesCollection, 'insertOne').mockRejectedValueOnce(new Error('db down'));
+
+  const res = await request(buildApp()).post('/api/listing-purchase').set('x-test-user', BUYER)
+    .send({ marketItemId: marketItemId.toString(), buyerId: BUYER, paymentNonce: PAYMENT_NONCE, paymentTX });
+  insert.mockRestore();
+
+  expect(res.status).toBe(500);
+  expect(fakeAction.signAction).toHaveBeenCalled(); // it did broadcast
+  const item = await db.marketItemsCollection.findOne({ _id: marketItemId });
+  expect(item?.sold).toBe(true);
+  expect(item?.saleClaimedAt).toBeUndefined();
+});

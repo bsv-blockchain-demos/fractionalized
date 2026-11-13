@@ -61,6 +61,20 @@ export function useCancelListing() {
 
       if (!(await ensureSessionAlive())) return false;
 
+      // Claim the listing before broadcasting: a 409 here means a purchase got there first and
+      // nothing has been spent yet (M-2).
+      const reserve = await apiFetchStepUp(
+        "/api/cancel-listing/reserve",
+        userWallet!,
+        AUTH_PROOF_PURPOSE.cancelListingReserve,
+        { marketItemId: item._id },
+      );
+      if (!reserve.ok) {
+        const err = await reserve.json().catch(() => ({}));
+        toast.error(err?.error || "Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
+        return false;
+      }
+
       const listingOutpoint = item.listingOutpoint;
       const { vout: listingVout } = parseOutpoint(listingOutpoint);
 

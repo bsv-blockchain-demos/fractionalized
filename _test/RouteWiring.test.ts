@@ -29,6 +29,7 @@ const GUARDED_ENDPOINTS: Array<{ method: Method; path: string }> = [
   { method: 'post', path: '/api/listing-purchase' },
   { method: 'post', path: '/api/new-listing' },
   { method: 'post', path: '/api/cancel-listing' },
+  { method: 'post', path: '/api/cancel-listing/reserve' },
   { method: 'post', path: '/api/my-shares' },
   { method: 'post', path: '/api/my-listings' },
   { method: 'post', path: '/api/my-selling' },

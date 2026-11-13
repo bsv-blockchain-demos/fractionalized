@@ -7,17 +7,53 @@ import { traceShareChain } from '../lib/shareChain';
 import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS';
 import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys';
 import { decodeBeef } from '@shared/bsv/beefEncoding';
-import { parseOutpoint, toOutpoint } from '@shared/bsv/outpoints';
+import { parseOutpoint, toOutpoint, toTxid } from '@shared/bsv/outpoints';
 import { getIdentityKey } from '@shared/bsv/tokenDerivation';
 import { logger } from '@shared/logger';
 import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
-import { parseCancelListing, parseNewListing } from '../lib/requestBodies';
-import { takeListingForCancel } from '../lib/listingClaim';
+import { parseCancelListing, parseCancelReserve, parseNewListing } from '../lib/requestBodies';
+import { reserveListingForCancel, takeListingForCancel } from '../lib/listingClaim';
 
 export const listingsRouter = Router();
+
+/**
+ * POST /api/cancel-listing/reserve — the seller claims their listing BEFORE signing and
+ * broadcasting a cancel (M-2). The cancel is broadcast client-side, so claiming at
+ * /cancel-listing would be too late: a purchase holding the claim would 409 a cancel that is
+ * already on chain. 409 here means a purchase or sale got there first; nothing was broadcast.
+ */
+listingsRouter.post(
+    '/cancel-listing/reserve',
+    requireSession,
+    requireAuthProof(AUTH_PROOF_PURPOSE.cancelListingReserve),
+    async (req: Request, res: Response) => {
+        const userIdFromToken = req.userId as string;
+        const { marketItemId } = parseCancelReserve(req.body);
+        try {
+            await connectToMongo();
+            const marketItem = await marketItemsCollection.findOne({ _id: new ObjectId(marketItemId) });
+            if (!marketItem) {
+                res.status(404).json({ error: "Market item not found" });
+                return;
+            }
+            if (marketItem.sellerId !== userIdFromToken) {
+                res.status(403).json({ error: "You can't cancel someone else's listing" });
+                return;
+            }
+            if (!(await reserveListingForCancel(marketItem._id, userIdFromToken))) {
+                res.status(409).json({ error: "Listing is sold or being purchased" });
+                return;
+            }
+            res.json({ status: "reserved" });
+        } catch (e) {
+            logger.error(e);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    },
+);
 
 /**
  * POST /api/cancel-listing — cancel a secondary-market listing and return the
@@ -91,6 +127,11 @@ listingsRouter.post(
                 res.status(400).json({ error: "Cancel tx does not verify" });
                 return;
             }
+            const cancelTxid = cancelTx.id('hex');
+            if (toTxid(returnTxid) !== cancelTxid) {
+                res.status(400).json({ error: "returnTxid is not the cancel tx" });
+                return;
+            }
 
             const spendsListing = cancelTx.inputs.some(
                 (i) => (i.sourceTXID || i.sourceTransaction?.id('hex')) === listingTxid && i.sourceOutputIndex === listingVout
@@ -135,7 +176,7 @@ listingsRouter.post(
                 investorId: marketItem.sellerId,
                 amount: marketItem.sellAmount,
                 parentTxid: listingOutpoint,
-                transferTxid: toOutpoint(returnTxid as string, 0),
+                transferTxid: toOutpoint(cancelTxid, 0),
                 createdAt: new Date(),
                 keyId: cancelNonce,
                 counterparty: serverIdentityKey,

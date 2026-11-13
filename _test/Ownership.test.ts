@@ -124,6 +124,10 @@ test("cancel-listing refuses someone else's listing", async () => {
   expect(res.status).toBe(403);
   expect(await db.marketItemsCollection.countDocuments({ _id: marketItemId })).toBe(1);
   expect(await db.sharesCollection.countDocuments({ investorId: MALLORY })).toBe(0);
+
+  const reserve = await post('/api/cancel-listing/reserve', MALLORY, { marketItemId: marketItemId.toString() });
+  expect(reserve.status).toBe(403);
+  expect((await db.marketItemsCollection.findOne({ _id: marketItemId }))?.saleClaimedBy).toBeUndefined();
 });
 
 describe('purchases must be made as the session user', () => {
