@@ -61,8 +61,8 @@ describe('apiFetch is the only path to our API', () => {
   });
 
   // apiFetchNoRedirect skips the 401 -> /login handling. That is correct for step-up calls,
-  // whose caller may already have broadcast and needs the response to surface recovery data
-  // (finding C-5). Anywhere else it silently drops session-expiry handling.
+  // whose caller may already have broadcast and needs the response to surface recovery data.
+  // Anywhere else it silently drops session-expiry handling.
   test('only apiFetchStepUp.ts imports apiFetchNoRedirect', () => {
     const allowed = join('client', 'src', 'lib', 'apiFetchStepUp.ts');
     const offenders = walk(SRC)

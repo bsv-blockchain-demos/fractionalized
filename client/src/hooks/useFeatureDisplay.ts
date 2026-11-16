@@ -93,9 +93,9 @@ export function useFeatureDisplay(features: FeatureMap | undefined) {
       const baseLabel = camelToWords(rawKey);
       const label = pluralizeLabel(baseLabel, Number(count));
       const icon = pickIcon(rawKey);
-      return { key: rawKey, count: Number(count), label, icon, score } as any;
+      return { key: rawKey, count: Number(count), label, icon, score };
     });
-    scored.sort((a: any, b: any) => a.score - b.score || a.label.localeCompare(b.label));
-    return scored.map((s: any) => ({ key: s.key, count: s.count, label: s.label, icon: s.icon }));
+    scored.sort((a, b) => a.score - b.score || a.label.localeCompare(b.label));
+    return scored.map((s) => ({ key: s.key, count: s.count, label: s.label, icon: s.icon }));
   }, [features]);
 }

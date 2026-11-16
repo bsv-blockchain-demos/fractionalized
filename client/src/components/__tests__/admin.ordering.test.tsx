@@ -1,5 +1,5 @@
 /**
- * C-5 regression: the nonce must survive a rejected createAction AND a 401 from the
+ * Regression: the nonce must survive a rejected createAction AND a 401 from the
  * POST. Drives the real Admin component so the ordering can't drift silently.
  */
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';

@@ -1,10 +1,14 @@
 import { Router, type Request, type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { connectToMongo, propertiesCollection, propertyDescriptionsCollection, sharesCollection } from '../lib/mongo';
+import type { Properties } from '../lib/mongo';
 import { toPublicProperty } from '../lib/serializers';
 import { buildFacetPipeline } from '../lib/propertiesPipeline';
 import { logger } from '@shared/logger';
 import { requireSession } from '../middleware/requireSession';
+
+/** A $facet items row: the property plus fields computed in propertiesPipeline. */
+type FacetRow = Properties & { availablePercent?: number | null; totalSold?: number };
 
 export const propertiesRouter = Router();
 
@@ -23,13 +27,13 @@ propertiesRouter.post('/', requireSession, async (req: Request, res: Response) =
     const pipeline = buildFacetPipeline(body);
     const [result] = await propertiesCollection.aggregate(pipeline).toArray();
     const rawItems = result?.items || [];
-    const items = rawItems.map((it: any) =>
+    const items = rawItems.map((it: FacetRow) =>
       toPublicProperty(it, { availablePercent: it.availablePercent, totalSold: it.totalSold, investors: it.investors }),
     );
     const total = (result?.total?.[0]?.count as number) || 0;
 
     res.json({ items, total, page: body.page ?? 1, limit: body.limit ?? 20 });
-  } catch (e: any) {
+  } catch (e) {
     logger.error('/api/properties error:', e);
     res.status(500).json({ error: 'Failed to fetch properties' });
   }
@@ -49,7 +53,7 @@ propertiesRouter.get('/', requireSession, async (req: Request, res: Response) =>
     const sortBy = (req.query.sortBy as string | undefined) || 'price_desc';
     const activeStatus = (req.query.activeStatus as string | undefined) || 'all';
     const filtersParam = req.query.filters as string | undefined;
-    let filters: any = {};
+    let filters: unknown = {};
     if (filtersParam) {
       try { filters = JSON.parse(filtersParam); } catch {}
     }
@@ -59,7 +63,7 @@ propertiesRouter.get('/', requireSession, async (req: Request, res: Response) =>
     const pipeline = buildFacetPipeline({ page, limit, sortBy, activeStatus, filters });
     const [result] = await propertiesCollection.aggregate(pipeline).toArray();
     const rawItems = result?.items || [];
-    const items = rawItems.map((it: any) =>
+    const items = rawItems.map((it: FacetRow) =>
       toPublicProperty(it, { availablePercent: it.availablePercent, totalSold: it.totalSold, investors: it.investors }),
     );
     const total = (result?.total?.[0]?.count as number) || 0;

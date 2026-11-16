@@ -11,7 +11,7 @@ function withBase(input: RequestInfo | URL): RequestInfo | URL {
 
 /**
  * No 401 handling. For step-up calls that may already have broadcast an output:
- * a hard navigate would destroy the in-memory recovery data (finding C-5).
+ * a hard navigate would destroy the in-memory recovery data.
  */
 export function apiFetchNoRedirect(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return fetch(withBase(input), { credentials: "include", ...init });

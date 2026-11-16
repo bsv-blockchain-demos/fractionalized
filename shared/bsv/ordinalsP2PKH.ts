@@ -33,7 +33,7 @@ export class OrdinalsP2PKH implements ScriptTemplate {
             pubKeyHash = address;
         }
 
-        let inscription: any;
+        let inscription: Record<string, string>;
         if (type === "deploy+mint") {
             inscription = {
                 p: "bsv-20",

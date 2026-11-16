@@ -1,18 +1,23 @@
+import type { Document } from "mongodb";
 import { escapeRegex } from "./validation";
 
 export const PROPERTY_STATUSES = ["upcoming", "open", "funded", "sold"] as const;
 
 // Helper to build aggregation pipeline based on filters and sorting, returning a $facet
-export function buildFacetPipeline(body: any) {
+interface FacetBody { page?: unknown; limit?: unknown; filters?: Record<string, unknown>; sortBy?: unknown; activeStatus?: unknown }
+
+export function buildFacetPipeline(body: unknown) {
   const {
     page = 1,
     limit = 20,
-    filters = {},
+    filters: rawFilters = {},
     sortBy = "price_desc",
     activeStatus = "all",
-  } = body || {};
+  } = (body ?? {}) as FacetBody;
+  // A JSON `filters` of null / a string must not crash the property reads below.
+  const filters: Record<string, unknown> = rawFilters && typeof rawFilters === "object" ? rawFilters : {};
 
-  const match: Record<string, any> = {};
+  const match: Document = {};
 
   // Status handling: only ever accept known string statuses (no operator injection).
   if (typeof activeStatus === "string" && activeStatus !== "all" &&
@@ -96,7 +101,7 @@ export function buildFacetPipeline(body: any) {
   ];
 
   // Apply percent range filters if provided
-  const percentMatch: Record<string, any> = {};
+  const percentMatch: Document = {};
   if (filters.grossYieldMin != null) percentMatch.grossYieldNum = { ...(percentMatch.grossYieldNum || {}), $gte: Number(filters.grossYieldMin) };
   if (filters.grossYieldMax != null) percentMatch.grossYieldNum = { ...(percentMatch.grossYieldNum || {}), $lte: Number(filters.grossYieldMax) };
   if (filters.netYieldMin != null) percentMatch.netYieldNum = { ...(percentMatch.netYieldNum || {}), $gte: Number(filters.netYieldMin) };
@@ -138,7 +143,7 @@ export function buildFacetPipeline(body: any) {
   const skip = Math.max(0, (Number(page) - 1) * safeLimit);
 
   // Build $facet pipeline to get items and total in one go
-  const facetPipeline: any[] = [];
+  const facetPipeline: Document[] = [];
   if (Object.keys(match).length > 0) {
     facetPipeline.push({ $match: match });
   }

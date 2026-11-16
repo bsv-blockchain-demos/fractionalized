@@ -9,7 +9,7 @@ import { OrdinalsP2MS } from "@shared/bsv/ordinalsP2MS";
 import { broadcastTX, getTransactionByTxID } from "@shared/overlay";
 import { calcTokenTransfer } from "@shared/calcTokenTransfer";
 import { PaymentUtxo } from "@shared/bsv/paymentUtxo";
-import { Hash, Transaction, PublicKey, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
+import { Hash, Transaction, PublicKey } from "@bsv/sdk";
 import { parseOutpoint, toOutpoint } from "@shared/bsv/outpoints";
 import { SERVER_IDENTITY_KEY } from '@/lib/env';
 import toast from "react-hot-toast";
@@ -197,33 +197,19 @@ export function Marketplace() {
             const ordinalUnlockFrame = shareKeyId
                 ? new OrdinalsP2PKH().unlock(
                     /* wallet */ userWallet!,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* derivation */ { protocolID: TOKEN_PROTOCOL, keyID: shareKeyId, counterparty: shareCounterparty as string },
                 )
                 : new OrdinalsP2PKH().unlock(
                     /* wallet */ userWallet!,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                 );
-            const preimageTx = new Transaction();
-            preimageTx.addInput({
-                sourceTransaction: fullTx,
-                sourceOutputIndex: vout,
-                unlockingScriptTemplate: ordinalUnlockFrame,
-            });
-            preimageTx.addOutput({
-                satoshis: 1,
-                lockingScript: ordinalLockingScript,
-            });
-
-            // Sign the ordinal input (index 0) against the preimage transaction
-            await preimageTx.fee(new SatoshisPerKilobyte(100));
-            await preimageTx.sign();
-            const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
-            const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
+            // Upper bound, not one measured signature: the wallet rejects a longer final script.
+            const ordinalUnlockingScriptLength = await ordinalUnlockFrame.estimateLength();
 
             // Create the transaction with unlockingScriptLength
             const actionRes = await userWallet!.createAction({
@@ -262,7 +248,7 @@ export function Marketplace() {
             const reference = actionRes.signableTransaction.reference;
             const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
-            // Add unlocking script template to input (reuse frame from preimage)
+            // Unlock frame signs the final tx (SIGHASH_ALL)
             txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockFrame;
             txToSign.inputs[0].sourceTransaction = fullTx;
 

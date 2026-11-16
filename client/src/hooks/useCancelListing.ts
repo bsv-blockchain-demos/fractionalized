@@ -5,7 +5,7 @@ import { OrdinalsP2MS } from "@shared/bsv/ordinalsP2MS";
 import { OrdinalsP2PKH } from "@shared/bsv/ordinalsP2PKH";
 import { broadcastTX } from "@shared/overlay";
 import { calcTokenTransfer } from "@shared/calcTokenTransfer";
-import { Hash, Transaction, SatoshisPerKilobyte, UnlockingScript } from "@bsv/sdk";
+import { Hash, Transaction } from "@bsv/sdk";
 import { parseOutpoint, toOutpoint } from "@shared/bsv/outpoints";
 import { SERVER_IDENTITY_KEY } from '@/lib/env';
 import { generateNonce, deriveMultisigPair, deriveOwnKey, TOKEN_PROTOCOL } from "@shared/bsv/tokenDerivation";
@@ -61,6 +61,20 @@ export function useCancelListing() {
 
       if (!(await ensureSessionAlive())) return false;
 
+      // Claim the listing before broadcasting: a 409 here means a purchase got there first and
+      // nothing has been spent yet.
+      const reserve = await apiFetchStepUp(
+        "/api/cancel-listing/reserve",
+        userWallet!,
+        AUTH_PROOF_PURPOSE.cancelListingReserve,
+        { marketItemId: item._id },
+      );
+      if (!reserve.ok) {
+        const err = await reserve.json().catch(() => ({}));
+        toast.error(err?.error || "Failed to cancel listing", { duration: 5000, position: "top-center", id: "cancel-error" });
+        return false;
+      }
+
       const listingOutpoint = item.listingOutpoint;
       const { vout: listingVout } = parseOutpoint(listingOutpoint);
 
@@ -98,26 +112,16 @@ export function useCancelListing() {
         /* keyID */ item.listingNonce,
         /* counterparty */ SERVER_IDENTITY_KEY,
         /* otherPubkey */ serverChild,
-        /* signOutputs */ "single",
-        /* anyoneCanPay */ true,
+        /* signOutputs */ "all",
+        /* anyoneCanPay */ false,
         /* sourceSatoshis */ undefined,
         /* lockingScript */ undefined,
         /* firstPubkeyIsWallet */ true,
         /* protocolID */ TOKEN_PROTOCOL,
       );
 
-      // Preimage tx mirroring the intended spend for the correct ordinal signature.
-      const preimageTx = new Transaction();
-      preimageTx.addInput({
-        sourceTransaction: fullListingTx,
-        sourceOutputIndex: listingVout,
-        unlockingScriptTemplate: ordinalUnlockFrame,
-      });
-      preimageTx.addOutput({ satoshis: 1, lockingScript: reclaimLockingScript });
-      await preimageTx.fee(new SatoshisPerKilobyte(100));
-      await preimageTx.sign();
-      const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
-      const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
+      // Upper bound, not one measured signature: the wallet rejects a longer final script.
+      const ordinalUnlockingScriptLength = await ordinalUnlockFrame.estimateLength();
 
       const actionRes = await userWallet!.createAction({
         description: "Cancel listing",

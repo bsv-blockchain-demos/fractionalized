@@ -18,6 +18,8 @@ import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { parseListingPurchase } from '../lib/requestBodies';
+import { claimListingForSale, releaseListingClaim } from '../lib/listingClaim';
 
 export const listingPurchaseRouter = Router();
 
@@ -59,7 +61,7 @@ listingPurchaseRouter.post(
     requireAuthProof(AUTH_PROOF_PURPOSE.listingPurchase),
     async (req: Request, res: Response) => {
         const userId = req.userId as string;
-        const { marketItemId, buyerId, paymentNonce, paymentTX } = req.body;
+        const { marketItemId, buyerId, paymentNonce, paymentTX } = parseListingPurchase(req.body);
 
         // Verify the investoryId (requester) is the logged in user
         if (userId !== buyerId) {
@@ -69,6 +71,7 @@ listingPurchaseRouter.post(
 
         let lockId: ObjectId | null = null;
         let transfer: { txid: string; atomicBeef: number[] } | undefined;
+        let claimed = false;
         try {
             await connectToMongo();
 
@@ -82,6 +85,11 @@ listingPurchaseRouter.post(
             if (!marketItem) {
                 throw new Error("Market item not found");
             }
+            if (!(await claimListingForSale(marketItem._id, buyerId))) {
+                res.status(409).json({ error: "Listing is sold or already being purchased" });
+                return;
+            }
+            claimed = true;
             const share = await sharesCollection.findOne({ _id: new ObjectId(marketItem.shareId) });
             if (!share) {
                 throw new Error("Share not found");
@@ -112,8 +120,8 @@ listingPurchaseRouter.post(
                     createdAt: new Date(),
                 });
                 lockId = lockRes.insertedId;
-            } catch (e: any) {
-                if (e?.code === 11000) {
+            } catch (e) {
+                if ((e as { code?: number })?.code === 11000) {
                     res.status(409).json({ error: "Another transfer is in progress for this seller and property" });
                     return;
                 }
@@ -142,8 +150,6 @@ listingPurchaseRouter.post(
                 /* type */ "transfer"
             );
 
-            // Payment unlocking will be signed against a preimage (frame-based)
-
             // Server spends the listing multisig by deriving against the seller; legacy listings use the self/0 form.
             const ordinalUnlockingFrame = marketItem.keyId
                 ? new OrdinalsP2MS().unlock(
@@ -151,8 +157,8 @@ listingPurchaseRouter.post(
                     /* keyID */ marketItem.keyId,
                     /* counterparty */ marketItem.counterparty as string,
                     /* otherPubkey */ marketItem.counterpartyDerivedKey as string,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* firstPubkeyIsWallet */ marketItem.order === 'self-first',
@@ -163,8 +169,8 @@ listingPurchaseRouter.post(
                     /* keyID */ "0",
                     /* counterparty */ "self",
                     /* otherPubkey */ share.investorId,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* firstPubkeyIsWallet */ true
@@ -178,8 +184,8 @@ listingPurchaseRouter.post(
                 /* keyID */ paymentNonce,
                 /* counterparty */ buyerId,
                 /* otherPubkey */ buyerPaymentChild,
-                /* signOutputs */ "single",
-                /* anyoneCanPay */ true,
+                /* signOutputs */ "all",
+                /* anyoneCanPay */ false,
                 /* sourceSatoshis */ undefined,
                 /* lockingScript */ undefined,
                 /* firstPubkeyIsWallet */ false,
@@ -236,11 +242,11 @@ listingPurchaseRouter.post(
                 const reference = actionRes.signableTransaction.reference;
                 const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
-                // Add unlocking script templates to inputs (reuse frames from preimage)
+                // Unlock frames sign the final tx (SIGHASH_ALL)
                 txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockingFrame;
                 txToSign.inputs[0].sourceTransaction = fullOrdinalTx;
                 txToSign.inputs[1].unlockingScriptTemplate = paymentUnlockFrame;
-                txToSign.inputs[1].sourceTransaction = paymentTX;
+                txToSign.inputs[1].sourceTransaction = Transaction.fromBEEF(paymentTX.tx);
 
                 // Sign the complete transaction
                 await txToSign.sign();
@@ -323,7 +329,10 @@ listingPurchaseRouter.post(
             await listingBeefsCollection.deleteOne({ listingId: marketItemId });
 
             // Update listing
-            const listingRes = await marketItemsCollection.updateOne({ _id: new ObjectId(marketItemId) }, { $set: { sold: true } }, { upsert: true });
+            const listingRes = await marketItemsCollection.updateOne(
+                { _id: new ObjectId(marketItemId) },
+                { $set: { sold: true }, $unset: { saleClaimedAt: '', saleClaimedBy: '' } },
+            );
             if (!listingRes.modifiedCount) {
                 throw new Error("Failed to update listing");
             }
@@ -341,6 +350,14 @@ listingPurchaseRouter.post(
             pushToOverlay();
         } catch (e) {
             logger.error(e);
+            if (transfer) {
+                // Broadcast already: the output is gone, so mark the listing sold even though a
+                // later write failed. Leaving the claim to expire would re-open a spent listing.
+                await marketItemsCollection.updateOne(
+                    { _id: new ObjectId(marketItemId) },
+                    { $set: { sold: true }, $unset: { saleClaimedAt: '', saleClaimedBy: '' } },
+                ).catch((e2) => logger.error(e2));
+            }
             res.status(500).json({ error: "Internal server error" });
             if (transfer) {
                 // signAction already broadcast this tx to chain; a post-enqueue
@@ -368,6 +385,10 @@ listingPurchaseRouter.post(
                     await locksCollection.deleteOne({ _id: lockId });
                 }
             } catch { }
+            // Nothing broadcast: the listing is still spendable, so free it.
+            if (claimed && !transfer) {
+                await releaseListingClaim(new ObjectId(marketItemId), buyerId).catch((e) => logger.error(e));
+            }
         }
     },
 );

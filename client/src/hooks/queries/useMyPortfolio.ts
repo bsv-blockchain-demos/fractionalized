@@ -47,7 +47,7 @@ export function myListingsOptions(identity: string, wallet: WalletInterface) {
     queryFn: async (): Promise<MyListing[]> => {
       const data = await postStepUp('/api/my-listings', wallet, AUTH_PROOF_PURPOSE.myListings);
       const items = Array.isArray(data?.items) ? data.items : [];
-      return items.map((i: any) => ({
+      return items.map((i: Record<string, unknown>) => ({
         _id: String(i?._id ?? ''),
         propertyId: String(i?.propertyId ?? ''),
         name: String(i?.name ?? 'Unknown Property'),
@@ -69,7 +69,7 @@ function mySharesOptions(identity: string, wallet: WalletInterface) {
     queryKey: qk.myShares(identity),
     queryFn: async (): Promise<OwnedShare[]> => {
       const data = await postStepUp('/api/my-shares', wallet, AUTH_PROOF_PURPOSE.myShares);
-      return ((data?.shares ?? []) as any[]).map((s) => ({
+      return ((data?.shares ?? []) as Record<string, unknown>[]).map((s) => ({
         _id: String(s?._id ?? ''),
         propertyId: String(s?.propertyId ?? ''),
         amount: Number(s?.amount ?? 0),

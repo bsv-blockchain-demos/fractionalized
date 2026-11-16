@@ -124,7 +124,7 @@ export function Admin() {
         }
     };
 
-    const handleSubmit = async (_data: any) => {
+    const handleSubmit = async (_data: Record<string, unknown> & { sell: { percentToSell: number } }) => {
         const nullFields = Object.entries(_data)
             .filter(([_, value]) => value === null)
             .map(([key]) => key);
@@ -308,8 +308,8 @@ export function Admin() {
     const [isSellOpen, setSellOpen] = useState(false);
     const [sellConfig, setSellConfig] = useState<SellSharesConfig>({ percentToSell: 80 });
 
-    const updateField = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }));
-    const updateIB = (key: keyof typeof form.investmentBreakdown, value: any) =>
+    const updateField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
+    const updateIB = (key: keyof typeof form.investmentBreakdown, value: string) =>
         setForm((f) => ({ ...f, investmentBreakdown: { ...f.investmentBreakdown, [key]: value } }));
     const updateWhy = (idx: number, key: 'title' | 'text', value: string) =>
         setForm((f) => ({

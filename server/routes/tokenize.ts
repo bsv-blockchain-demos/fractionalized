@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { ObjectId } from 'mongodb';
 import { Hash, Utils, LockingScript, OP, PublicKey, Transaction, SatoshisPerKilobyte } from '@bsv/sdk';
 import { connectToMongo, propertiesCollection, propertyDescriptionsCollection } from '../lib/mongo';
 import type { Properties } from '../lib/mongo';
@@ -15,6 +16,7 @@ import { getWalletQueue } from '../lib/walletQueue';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { parseCreateProperty } from '../lib/requestBodies';
 
 export const tokenizeRouter = Router();
 
@@ -43,7 +45,7 @@ tokenizeRouter.post(
         logger.debug('[TIMING] ===== TOKENIZE ROUTE START =====');
         const routeStart = Date.now();
         const userId = req.userId as string;
-        const { data, paymentTxAction, paymentNonce, seller } = req.body;
+        const { data, paymentTxAction, paymentNonce, seller } = parseCreateProperty(req.body);
 
         // Identity check: token user must match seller
         if (seller !== userId) {
@@ -59,7 +61,7 @@ tokenizeRouter.post(
         const MAX_LOCATION = 80;
         const MAX_PROOF_OF_OWNERSHIP = 10485760; // 10MB base64 limit
         try {
-            const { description, whyInvest, title, location, proofOfOwnership } = data || {};
+            const { description, whyInvest, title, location, proofOfOwnership } = data;
             const errors: string[] = [];
             // Title & Location
             const t = String(title ?? "").trim();
@@ -73,7 +75,7 @@ tokenizeRouter.post(
                 errors.push(`Description details too long (${detailsLen}/${MAX_DETAILS})`);
             }
             if (Array.isArray(whyInvest)) {
-                whyInvest.forEach((w: any, idx: number) => {
+                whyInvest.forEach((w, idx) => {
                     const tlen = String(w?.title || "").length;
                     const xlen = String(w?.text || "").length;
                     if (tlen > MAX_WHY_TITLE) errors.push(`whyInvest[${idx}].title too long (${tlen}/${MAX_WHY_TITLE})`);
@@ -98,22 +100,22 @@ tokenizeRouter.post(
             // Numeric sanity checks (avoid pathological values)
             const MAX_CURRENCY = 1e12; // USD cap ~ 1 trillion
             const MAX_INVESTORS = 1e7; // 10 million investors cap
-            const isValidCurrency = (n: any) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= MAX_CURRENCY;
-            const isValidInteger = (n: any) => Number.isInteger(n) && n >= 0;
+            const isValidCurrency = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= MAX_CURRENCY;
+            const isValidInteger = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
 
-            const currencyChecks: Array<[string, any]> = [
-                ["priceUSD", data?.priceUSD],
-                ["currentValuationUSD", data?.currentValuationUSD],
-                ["investmentBreakdown.purchaseCost", data?.investmentBreakdown?.purchaseCost],
-                ["investmentBreakdown.transactionCost", data?.investmentBreakdown?.transactionCost],
-                ["investmentBreakdown.runningCost", data?.investmentBreakdown?.runningCost],
+            const currencyChecks: Array<[string, unknown]> = [
+                ["priceUSD", data.priceUSD],
+                ["currentValuationUSD", data.currentValuationUSD],
+                ["investmentBreakdown.purchaseCost", data.investmentBreakdown.purchaseCost],
+                ["investmentBreakdown.transactionCost", data.investmentBreakdown.transactionCost],
+                ["investmentBreakdown.runningCost", data.investmentBreakdown.runningCost],
             ];
             currencyChecks.forEach(([name, value]) => {
                 if (value != null && !isValidCurrency(value)) {
                     errors.push(`${name} must be a finite, non-negative number <= ${MAX_CURRENCY}`);
                 }
             });
-            if (data?.investors != null) {
+            if (data.investors != null) {
                 if (!isValidInteger(data.investors) || data.investors > MAX_INVESTORS) {
                     errors.push(`investors must be a non-negative integer <= ${MAX_INVESTORS}`);
                 }
@@ -123,15 +125,6 @@ tokenizeRouter.post(
                 return;
             }
         } catch { }
-
-        const nullFields = Object.entries(data)
-            .filter(([_, value]) => value === null)
-            .map(([key]) => key);
-
-        if (nullFields.length > 0) {
-            res.status(400).json({ error: `Missing required fields: ${nullFields.join(', ')}` });
-            return;
-        }
 
         // Post-enqueue result, hoisted above the try so the catch block can tell
         // whether the mint already landed on-chain before a later step threw.
@@ -214,7 +207,7 @@ tokenizeRouter.post(
                 const propertyTokenTxid = toOutpoint(response.txid, 0);
 
                 // Mint shares for property token using server wallet
-                const tokensToMint = Number(data?.sell?.percentToSell || 0);
+                const tokensToMint = Number(data.sell?.percentToSell || 0);
                 if (tokensToMint <= 0) {
                     throw new Error("Invalid percentToSell");
                 } else if (tokensToMint > 100) {
@@ -421,10 +414,11 @@ tokenizeRouter.post(
             // Save property data to database
             logger.debug('[TIMING] Starting database operations...');
             const dbStart = Date.now();
-            const { description, whyInvest, ...rest } = data || {};
+            const { description, whyInvest, ...rest } = data;
 
             const mintOutpoint = toOutpoint(signedActionTxid, 0);
             const formattedPropertyData: Properties = {
+                _id: new ObjectId(),
                 ...rest,
                 txids: {
                     tokenTxid: propertyTokenTxid,
@@ -466,7 +460,7 @@ tokenizeRouter.post(
                             features: Array.isArray(description?.features) ? description.features : [],
                         },
                         whyInvest: Array.isArray(whyInvest)
-                            ? whyInvest.map((w: any) => ({ title: String(w?.title || ""), text: String(w?.text || "") }))
+                            ? whyInvest.map((w) => ({ title: String(w?.title || ""), text: String(w?.text || "") }))
                             : undefined,
                     });
                 }

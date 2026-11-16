@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
-import { ObjectId } from 'mongodb';
-import { Beef, Hash, PublicKey, SatoshisPerKilobyte, Transaction, UnlockingScript } from '@bsv/sdk';
+import { ObjectId, type Document } from 'mongodb';
+import { Beef, Hash, PublicKey, SatoshisPerKilobyte, Transaction } from '@bsv/sdk';
 import { connectToMongo, propertiesCollection, sharesCollection, locksCollection } from '../lib/mongo';
 import type { Shares } from '../lib/mongo';
 import { OrdinalsP2PKH } from '@shared/bsv/ordinalsP2PKH';
@@ -20,6 +20,7 @@ import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { parseSharePurchase } from '../lib/requestBodies';
 
 export const sharePurchaseRouter = Router();
 
@@ -37,9 +38,8 @@ export const sharePurchaseRouter = Router();
  * and must NOT hold the wallet lock, or every purchase would serialize
  * behind an overlay round-trip. Never call enqueue() (or getWalletQueue())
  * from inside the callback — that deadlocks the queue permanently; the
- * wallet arrives as the callback parameter. Key-derivation and preimage
- * signing (generateNonce/deriveMultisigPair/deriveRecipientKey/getIdentityKey
- * and the unlock-frame .sign() calls used to build the preimage) don't touch
+ * wallet arrives as the callback parameter. Key derivation
+ * (generateNonce/deriveMultisigPair/deriveRecipientKey/getIdentityKey) doesn't touch
  * the wallet's UTXO set, so they run outside the enqueue via the shared
  * getServerWallet() wallet — the same underlying wallet instance the queue
  * wraps.
@@ -55,7 +55,7 @@ sharePurchaseRouter.post(
     requireAuthProof(AUTH_PROOF_PURPOSE.sharePurchase),
     async (req: Request, res: Response) => {
         const userId = req.userId as string;
-        const { propertyId, investorId, amount } = req.body;
+        const { propertyId, investorId, amount } = parseSharePurchase(req.body);
         logger.debug("InvestorId", investorId)
 
         // Verify the investoryId (requester) is the logged in user
@@ -77,21 +77,6 @@ sharePurchaseRouter.post(
                 throw new Error("Failed to create wallet");
             }
             const propertyObjectId = new ObjectId(propertyId);
-            if (typeof investorId !== "string") {
-                res.status(400).json({ error: "Invalid investorId" });
-                return;
-            }
-
-            if (amount <= 0) {
-                res.status(400).json({ error: "Invalid amount" });
-                return;
-            } else if (amount > 100) {
-                res.status(400).json({ error: "Amount must be less than 100%" });
-                return;
-            } else if (typeof amount !== 'number') {
-                res.status(400).json({ error: "Invalid amount" });
-                return;
-            }
 
             // Acquire per-(propertyId, investorId) lock; unique index enforces single holder
             try {
@@ -102,9 +87,9 @@ sharePurchaseRouter.post(
                     createdAt: new Date(),
                 });
                 lockId = lockRes.insertedId;
-            } catch (e: any) {
+            } catch (e) {
                 // Duplicate key error => lock already held
-                if (e?.code === 11000) {
+                if ((e as { code?: number })?.code === 11000) {
                     res.status(409).json({ error: "Another transfer is in progress for this investor and property" });
                     return;
                 }
@@ -144,8 +129,6 @@ sharePurchaseRouter.post(
             // Get property token txid to put in the inscribed token (for indentification)
             const propertyTokenTxid = property.txids.tokenTxid;
 
-            // Payment unlocking will be signed against the preimage (frame-based)
-
             // Server's root identity key (counterparty value recipients/parties derive against)
             const serverIdentityKey = await getIdentityKey(wallet);
 
@@ -160,8 +143,8 @@ sharePurchaseRouter.post(
             const cur = property.currentDerivation;
             const ordinalUnlockingFrame = cur?.keyId
                 ? new OrdinalsP2MS().unlock(wallet, cur.keyId, cur.counterparty, cur.counterpartyDerivedKey,
-                    "single", true, undefined, undefined, cur.order === 'self-first', TOKEN_PROTOCOL)
-                : new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "single", true, undefined, undefined, false);
+                    "all", false, undefined, undefined, cur.order === 'self-first', TOKEN_PROTOCOL)
+                : new OrdinalsP2MS().unlock(wallet, "0", "self", property.seller, "all", false, undefined, undefined, false);
 
             // Payment unlock: recorded type-42 derivation, else legacy static key.
             // Legacy lock was [server, seller] (server first => firstPubkeyIsWallet=true).
@@ -172,8 +155,8 @@ sharePurchaseRouter.post(
                     /* keyID */ pd.keyId,
                     /* counterparty */ pd.counterparty,
                     /* otherPubkey */ pd.counterpartyDerivedKey,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* firstPubkeyIsWallet */ pd.order === 'self-first',
@@ -184,8 +167,8 @@ sharePurchaseRouter.post(
                     /* keyID */ "0",
                     /* counterparty */ "self",
                     /* otherPubkey */ property.seller,
-                    /* signOutputs */ "single",
-                    /* anyoneCanPay */ true,
+                    /* signOutputs */ "all",
+                    /* anyoneCanPay */ false,
                     /* sourceSatoshis */ undefined,
                     /* lockingScript */ undefined,
                     /* firstPubkeyIsWallet */ true,
@@ -245,7 +228,7 @@ sharePurchaseRouter.post(
 
             const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
 
-            // Build a preimage transaction mirroring the final spend for correct signatures
+            // Preimage mirroring the final spend, used only for fee and change sizing
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: fullParentTx,
@@ -276,18 +259,16 @@ sharePurchaseRouter.post(
             });
 
             await preimageTx.fee(new SatoshisPerKilobyte(100))
-            await preimageTx.sign()
 
             // fee() drops the payment change when the pool can't cover it (e.g. a final sale draining it).
             const paymentChangeOutput = preimageTx.outputs[paymentChangeIndex];
             const hasPaymentChange = !!paymentChangeOutput;
             const paymentChangeSats = (paymentChangeOutput?.satoshis as number) ?? 0;
 
-            // Get unlocking script lengths from preimage transaction
-            const ordinalUnlockingScript = preimageTx.inputs[0].unlockingScript as UnlockingScript;
-            const paymentUnlockingScript = preimageTx.inputs[1].unlockingScript as UnlockingScript;
-            const ordinalUnlockingScriptLength = ordinalUnlockingScript.toHex().length / 2;
-            const paymentUnlockingScriptLength = paymentUnlockingScript.toHex().length / 2;
+            // Upper bounds, not one measured signature: DER length varies, and the wallet rejects
+            // a final script longer than declared.
+            const ordinalUnlockingScriptLength = await ordinalUnlockingFrame.estimateLength();
+            const paymentUnlockingScriptLength = await paymentUnlockFrame.estimateLength();
 
             const outputs: { outputDescription: string; satoshis: number; lockingScript: string }[] = [
                 {
@@ -359,7 +340,7 @@ sharePurchaseRouter.post(
                 const reference = actionRes.signableTransaction.reference;
                 const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
-                // Add unlocking script templates to inputs (reuse frames from preimage)
+                // Unlock frames sign the final tx (SIGHASH_ALL)
                 txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockingFrame;
                 txToSign.inputs[0].sourceTransaction = fullParentTx;
                 txToSign.inputs[1].unlockingScriptTemplate = paymentUnlockFrame;
@@ -459,7 +440,7 @@ sharePurchaseRouter.post(
             // Atomically update remainingPercent, investor count, and check if fully funded
             if (percentToSell != null) {
                 const newRemainingPercent = (property?.sell?.remainingPercent ?? percentToSell) - amount;
-                const updateFields: any = {
+                const updateFields: Document = {
                     "sell.remainingPercent": newRemainingPercent
                 };
 
@@ -469,7 +450,7 @@ sharePurchaseRouter.post(
                 }
 
                 // Increment investor count only if this is a new investor
-                const updateOperation: any = { $set: updateFields };
+                const updateOperation: Document = { $set: updateFields };
                 if (isNewInvestor) {
                     updateOperation.$inc = { investors: 1 };
                 }

@@ -18,8 +18,13 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
       '@typescript-eslint/no-unused-expressions': 'warn',
-      '@typescript-eslint/no-explicit-any': 'off',
-      'prefer-const': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'prefer-const': 'warn',
     },
+  },
+  {
+    // Test fakes and debug scripts cross no trust boundary.
+    files: ['_test/**', 'scripts/**'],
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
   },
 ];

@@ -7,15 +7,54 @@ import { traceShareChain } from '../lib/shareChain';
 import { OrdinalsP2MS } from '@shared/bsv/ordinalsP2MS';
 import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys';
 import { decodeBeef } from '@shared/bsv/beefEncoding';
-import { parseOutpoint, toOutpoint } from '@shared/bsv/outpoints';
+import { parseOutpoint, toOutpoint, toTxid } from '@shared/bsv/outpoints';
 import { getIdentityKey } from '@shared/bsv/tokenDerivation';
 import { logger } from '@shared/logger';
 import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
+import { cancelInputsProblem, verifyCancelTx } from '../lib/cancelTxCheck';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
+import { parseCancelListing, parseCancelReserve, parseNewListing } from '../lib/requestBodies';
+import { reserveListingForCancel, takeListingForCancel } from '../lib/listingClaim';
 
 export const listingsRouter = Router();
+
+/**
+ * POST /api/cancel-listing/reserve — the seller claims their listing BEFORE signing and
+ * broadcasting a cancel. The cancel is broadcast client-side, so claiming at
+ * /cancel-listing would be too late: a purchase holding the claim would 409 a cancel that is
+ * already on chain. 409 here means a purchase or sale got there first; nothing was broadcast.
+ */
+listingsRouter.post(
+    '/cancel-listing/reserve',
+    requireSession,
+    requireAuthProof(AUTH_PROOF_PURPOSE.cancelListingReserve),
+    async (req: Request, res: Response) => {
+        const userIdFromToken = req.userId as string;
+        const { marketItemId } = parseCancelReserve(req.body);
+        try {
+            await connectToMongo();
+            const marketItem = await marketItemsCollection.findOne({ _id: new ObjectId(marketItemId) });
+            if (!marketItem) {
+                res.status(404).json({ error: "Market item not found" });
+                return;
+            }
+            if (marketItem.sellerId !== userIdFromToken) {
+                res.status(403).json({ error: "You can't cancel someone else's listing" });
+                return;
+            }
+            if (!(await reserveListingForCancel(marketItem._id, userIdFromToken))) {
+                res.status(409).json({ error: "Listing is sold or being purchased" });
+                return;
+            }
+            res.json({ status: "reserved" });
+        } catch (e) {
+            logger.error(e);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    },
+);
 
 /**
  * POST /api/cancel-listing — cancel a secondary-market listing and return the
@@ -42,20 +81,11 @@ listingsRouter.post(
     requireAuthProof(AUTH_PROOF_PURPOSE.cancelListing),
     async (req: Request, res: Response) => {
         const userIdFromToken = req.userId as string;
-        const { marketItemId, returnTxid, cancelBeef, cancelNonce } = req.body;
+        const { marketItemId, returnTxid, cancelBeef, cancelNonce } = parseCancelListing(req.body);
 
         let lockId: ObjectId | null = null;
         try {
             await connectToMongo();
-
-            if (!marketItemId || !ObjectId.isValid(marketItemId)) {
-                res.status(400).json({ error: "Invalid market item id" });
-                return;
-            }
-            if (!returnTxid || !cancelBeef || !cancelNonce) {
-                res.status(400).json({ error: "Missing cancel tx/derivation" });
-                return;
-            }
 
             const marketItem = await marketItemsCollection.findOne({ _id: new ObjectId(marketItemId) });
             if (!marketItem) {
@@ -93,14 +123,22 @@ listingsRouter.post(
                 res.status(400).json({ error: "Invalid cancel beef" });
                 return;
             }
-
-            const spendsListing = cancelTx.inputs.some(
-                (i) => (i.sourceTXID || i.sourceTransaction?.id('hex')) === listingTxid && i.sourceOutputIndex === listingVout
-            );
-            if (!spendsListing) {
-                res.status(400).json({ error: "Cancel tx does not spend the listing multisig" });
+            const inputsProblem = cancelInputsProblem(cancelTx, listingTxid, listingVout);
+            if (inputsProblem) {
+                res.status(400).json({ error: inputsProblem });
                 return;
             }
+            // The multisig already limits who can spend; this only keeps a junk cancel out of the DB.
+            if (!(await verifyCancelTx(cancelTx))) {
+                res.status(400).json({ error: "Cancel tx does not verify" });
+                return;
+            }
+            const cancelTxid = cancelTx.id('hex');
+            if (toTxid(returnTxid) !== cancelTxid) {
+                res.status(400).json({ error: "returnTxid is not the cancel tx" });
+                return;
+            }
+
             if (cancelTx.outputs[0]?.satoshis !== 1) {
                 res.status(400).json({ error: "Cancel tx output 0 must be a 1-sat ordinal" });
                 return;
@@ -108,9 +146,8 @@ listingsRouter.post(
 
             // Server identity key the reclaimed P2PKH was locked toward (counterparty for the seller's
             // forSelf:true derivation). Derive server-side for trust; matches what share-purchase stores.
-            let serverIdentityKey: string;
             const wallet = await getServerWallet();
-            serverIdentityKey = await getIdentityKey(wallet);
+            const serverIdentityKey = await getIdentityKey(wallet);
 
             // Acquire lock per (property, seller)
             const propertyObjectId = new ObjectId(marketItem.propertyId);
@@ -122,8 +159,8 @@ listingsRouter.post(
                     createdAt: new Date(),
                 });
                 lockId = lockRes.insertedId;
-            } catch (e: any) {
-                if (e?.code === 11000) {
+            } catch (e) {
+                if ((e as { code?: number })?.code === 11000) {
                     res.status(409).json({ error: "Another transfer is in progress for this seller and property" });
                     return;
                 }
@@ -138,19 +175,28 @@ listingsRouter.post(
                 investorId: marketItem.sellerId,
                 amount: marketItem.sellAmount,
                 parentTxid: listingOutpoint,
-                transferTxid: toOutpoint(returnTxid as string, 0),
+                transferTxid: toOutpoint(cancelTxid, 0),
                 createdAt: new Date(),
                 keyId: cancelNonce,
                 counterparty: serverIdentityKey,
             };
-            const shareRes = await sharesCollection.insertOne(reclaimedShare);
-            if (!shareRes.insertedId) {
-                throw new Error("Failed to record reclaimed share");
+            // Take the listing atomically first, so a concurrent purchase can't also claim it.
+            const taken = await takeListingForCancel(marketItem._id, userIdFromToken);
+            if (!taken) {
+                res.status(409).json({ error: "Listing is sold or being purchased" });
+                return;
+            }
+            try {
+                const shareRes = await sharesCollection.insertOne(reclaimedShare);
+                if (!shareRes.insertedId) {
+                    throw new Error("Failed to record reclaimed share");
+                }
+            } catch (e) {
+                await marketItemsCollection.insertOne(taken);
+                throw e;
             }
 
-            // Remove the listing from the active marketplace (listings/my-listings filter sold=false|missing).
             await listingBeefsCollection.deleteOne({ listingId: marketItemId });
-            await marketItemsCollection.deleteOne({ _id: new ObjectId(marketItemId) });
 
             res.status(200).json({
                 status: "success",
@@ -198,7 +244,7 @@ listingsRouter.post(
     requireAuthProof(AUTH_PROOF_PURPOSE.newListing),
     async (req: Request, res: Response) => {
         const userIdFromToken = req.userId as string;
-        const { propertyId, sellerId, amount, parentTxid, transferTxid, pricePerShare, listingBeef, listingNonce, sellerChild, serverChild } = req.body;
+        const { propertyId, sellerId, amount, parentTxid, transferTxid, pricePerShare, listingBeef, listingNonce, sellerChild, serverChild } = parseNewListing(req.body);
 
         // Identity check: a user can only create listings for themselves
         if (sellerId !== userIdFromToken) {
@@ -209,15 +255,6 @@ listingsRouter.post(
         let lockId: ObjectId | null = null;
         try {
             await connectToMongo();
-
-            if (!ObjectId.isValid(propertyId)) {
-                res.status(400).json({ error: "Invalid ids" });
-                return;
-            }
-            if (typeof amount !== 'number' || amount <= 0) {
-                res.status(400).json({ error: "Invalid amount" });
-                return;
-            }
 
             const propertyObjectId = new ObjectId(propertyId);
 
@@ -230,11 +267,6 @@ listingsRouter.post(
             }
 
             // Validate the client-built listing tx and back up its BEEF (overlay-independent buy/cancel).
-            if (!listingBeef || !listingNonce || !sellerChild || !serverChild) {
-                res.status(400).json({ error: "Missing listing derivation/beef" });
-                return;
-            }
-
             let listingTx: Transaction;
             try {
                 listingTx = Transaction.fromBEEF(decodeBeef(listingBeef));
@@ -268,7 +300,7 @@ listingsRouter.post(
                 return;
             }
 
-            // DB-integrity gate (H-3): the seller must actually own the share being listed.
+            // DB-integrity gate: the seller must actually own the share being listed.
             const parentShare = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: parentTxid });
             if (!parentShare) {
                 res.status(400).json({ error: "Parent share not found" });
@@ -298,8 +330,8 @@ listingsRouter.post(
                     createdAt: new Date(),
                 });
                 lockId = lockRes.insertedId;
-            } catch (e: any) {
-                if (e?.code === 11000) {
+            } catch (e) {
+                if ((e as { code?: number })?.code === 11000) {
                     res.status(409).json({ error: "Another transfer is in progress for this seller and property" });
                     return;
                 }

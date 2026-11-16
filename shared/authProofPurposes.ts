@@ -7,6 +7,7 @@ export const AUTH_PROOF_PURPOSE = {
   newListing: "new-listing",
   listingPurchase: "listing-purchase",
   cancelListing: "cancel-listing",
+  cancelListingReserve: "cancel-listing-reserve",
 } as const;
 
 export type AuthProofPurpose = (typeof AUTH_PROOF_PURPOSE)[keyof typeof AUTH_PROOF_PURPOSE];

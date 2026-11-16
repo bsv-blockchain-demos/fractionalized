@@ -1,0 +1,292 @@
+import request from 'supertest';
+import { ObjectId } from 'mongodb';
+import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey, MerklePath, P2PKH } from '@bsv/sdk';
+import type { TransactionInput } from '@bsv/sdk';
+import type { Request, Response, NextFunction } from 'express';
+
+// Sale vs cancel on the same listing. Auth and wallet are stubbed; Mongo is real,
+// because the fix rests on Mongo's single-document atomicity.
+const asUser = (req: Request, _res: Response, next: NextFunction) => {
+  req.userId = req.header('x-test-user') as string;
+  next();
+};
+jest.mock('@server/middleware/requireSession', () => ({
+  ...jest.requireActual('@server/middleware/requireSession'),
+  requireSession: asUser,
+}));
+jest.mock('@server/middleware/requireAuthProof', () => ({ requireAuthProof: () => asUser }));
+jest.mock('@server/lib/serverWallet', () => ({ getServerWallet: async () => ({}) }));
+jest.mock('@shared/bsv/tokenDerivation', () => ({
+  ...jest.requireActual('@shared/bsv/tokenDerivation'),
+  getIdentityKey: async () => 'server-identity',
+}));
+
+import { buildApp } from '@server/app';
+import { startMongo, stopMongo, clearMongo } from './mongoHarness';
+import { claimListingForSale, takeListingForCancel, reserveListingForCancel, cancelReservation, CLAIM_TTL_MS } from '@server/lib/listingClaim';
+import { encodeBeef } from '@shared/bsv/beefEncoding';
+import { MAX_FEE_INPUTS, ANCESTRY_SIG_CHECK_BUDGET } from '@server/lib/cancelTxCheck';
+
+const SELLER = PrivateKey.fromRandom().toPublicKey().toString();
+const BUYER = PrivateKey.fromRandom().toPublicKey().toString();
+const OP_TRUE = () => LockingScript.fromHex('51');
+
+let db: Awaited<ReturnType<typeof startMongo>>;
+beforeAll(async () => { db = await startMongo(); }, 120000);
+afterAll(stopMongo);
+beforeEach(() => clearMongo(db));
+
+const FEE_KEY = PrivateKey.fromRandom();
+let fundingSeq = 0;
+function minedOutput(lock: LockingScript) {
+  const tx = new Transaction(1, [{
+    sourceTXID: '00'.repeat(32), sourceOutputIndex: ++fundingSeq, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
+  }], [{ satoshis: 1, lockingScript: lock }], 0);
+  tx.merklePath = MerklePath.fromCoinbaseTxidAndHeight(tx.id('hex'), 1);
+  return tx;
+}
+
+// A wallet fee input: spends an unmined P2PKH change output whose parent spends `ancestorLock`
+// (unlocked with OP_1), so the test sets the ancestry's cost.
+function feeInput(ancestorLock = LockingScript.fromHex('5187'), signWith = FEE_KEY): TransactionInput {
+  const change = new Transaction(1, [{
+    sourceTransaction: minedOutput(ancestorLock), sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
+  }], [{ satoshis: 1, lockingScript: new P2PKH().lock(FEE_KEY.toAddress()) }], 0);
+  return { sourceTransaction: change, sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScriptTemplate: new P2PKH().unlock(signWith) };
+}
+
+// An input spending a non-P2PKH output, which the wallet never adds.
+function otherInput(): TransactionInput {
+  return {
+    sourceTransaction: minedOutput(LockingScript.fromHex('5187')), sourceOutputIndex: 0, sequence: 0xffffffff,
+    unlockingScript: UnlockingScript.fromHex('51'),
+  };
+}
+
+// Seeds a listing whose output is spent by a well-formed cancel tx. The property has no
+// txids, so a purchase that gets past the claim fails before any wallet/chain work.
+async function seedListing(state: Record<string, unknown> = {}, cancelUnlockHex = '51', extraInputs: TransactionInput[] = []) {
+  // Mined listing tx, carried in the cancel BEEF the way the wallet's signAction returns it.
+  const listingTx = new Transaction(1, [{
+    sourceTXID: '00'.repeat(32), sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
+  }], [{ satoshis: 1, lockingScript: LockingScript.fromHex('5187') }], 0); // OP_1 OP_EQUAL
+  listingTx.merklePath = MerklePath.fromCoinbaseTxidAndHeight(listingTx.id('hex'), 1);
+  const listingOutpoint = `${listingTx.id('hex')}.0`;
+  const cancelTx = new Transaction(1, [{
+    sourceTransaction: listingTx, sourceOutputIndex: 0, sequence: 0xffffffff,
+    unlockingScript: UnlockingScript.fromHex(cancelUnlockHex),
+  }, ...extraInputs], [{ satoshis: 1, lockingScript: OP_TRUE() }], 0);
+  await cancelTx.sign();
+  const beef = Beef.fromBinary(cancelTx.toBEEF());
+
+  const propertyId = new ObjectId();
+  await db.propertiesCollection.insertOne({ _id: propertyId, seller: SELLER, txids: {} } as never);
+  const shareId = new ObjectId();
+  await db.sharesCollection.insertOne({
+    _id: shareId, propertyId, investorId: SELLER, amount: 10,
+    parentTxid: `${'a'.repeat(64)}.0`, transferTxid: listingOutpoint, createdAt: new Date(),
+  });
+  const marketItemId = new ObjectId();
+  await db.marketItemsCollection.insertOne({
+    _id: marketItemId, propertyId, sellerId: SELLER, shareId,
+    sellAmount: 10, pricePerShare: 1, createdAt: new Date(), ...state,
+  });
+
+  return {
+    marketItemId: marketItemId.toString(),
+    cancelBody: {
+      marketItemId: marketItemId.toString(),
+      returnTxid: cancelTx.id('hex'),
+      cancelBeef: encodeBeef(beef.toBinary()),
+      cancelNonce: 'nonce',
+    },
+    cancelTxid: cancelTx.id('hex'),
+    reclaimedShares: () => db.sharesCollection.countDocuments({ parentTxid: listingOutpoint }),
+    reclaimedShare: () => db.sharesCollection.findOne({ parentTxid: listingOutpoint }),
+    marketItem: () => db.marketItemsCollection.findOne({ _id: marketItemId }),
+  };
+}
+
+const cancel = (body: object) =>
+  request(buildApp()).post('/api/cancel-listing').set('x-test-user', SELLER).send(body);
+const reserve = (marketItemId: string, user = SELLER) =>
+  request(buildApp()).post('/api/cancel-listing/reserve').set('x-test-user', user).send({ marketItemId });
+const purchase = (marketItemId: string, buyer = BUYER) =>
+  request(buildApp()).post('/api/listing-purchase').set('x-test-user', buyer)
+    .send({ marketItemId, buyerId: buyer, paymentNonce: 'n', paymentTX: { txid: 'ab'.repeat(32), tx: [1] } });
+
+describe('cancel-listing', () => {
+  test('rejects cancelling a sold listing and records no reclaimed share', async () => {
+    const l = await seedListing({ sold: true });
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(409);
+    expect(await l.reclaimedShares()).toBe(0);
+    expect(await l.marketItem()).not.toBeNull();
+  });
+
+  test('rejects cancelling while a purchase holds the claim', async () => {
+    const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: 'someone' });
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(409);
+    expect(await l.reclaimedShares()).toBe(0);
+    expect(await l.marketItem()).not.toBeNull();
+  });
+
+  test('accepts wallet P2PKH fee inputs and verifies the ancestry', async () => {
+    const l = await seedListing({}, '51', [feeInput(), feeInput()]);
+    const verify = jest.spyOn(Transaction.prototype, 'verify');
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(200);
+    expect(verify).toHaveBeenCalled();
+    verify.mockRestore();
+  });
+
+  test('rejects an input that is neither the listing nor a P2PKH', async () => {
+    const l = await seedListing({}, '51', [feeInput(), otherInput()]);
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/input/i);
+    expect(await l.reclaimedShares()).toBe(0);
+  });
+
+  test('rejects more fee inputs than the wallet would add', async () => {
+    const l = await seedListing({}, '51', Array.from({ length: MAX_FEE_INPUTS + 1 }, () => feeInput()));
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/input/i);
+  });
+
+  test('rejects an unlocking script that is not a short push-only script', async () => {
+    const notPushOnly = await seedListing({}, '5175'); // OP_1 OP_DROP
+    expect((await cancel(notPushOnly.cancelBody)).body.error).toMatch(/unlocking/i);
+    const long = await seedListing({}, '4cff' + '00'.repeat(255) + '51'); // 255-byte push, then OP_1
+    expect((await cancel(long.cancelBody)).body.error).toMatch(/unlocking/i);
+  });
+
+  test('over the ancestry budget, verifies only the cancel inputs instead of walking the ancestry', async () => {
+    const heavy = LockingScript.fromHex('6ead'.repeat(ANCESTRY_SIG_CHECK_BUDGET) + 'ac'); // OP_1 never satisfies it
+    const l = await seedListing({}, '51', [feeInput(heavy)]);
+    const verify = jest.spyOn(Transaction.prototype, 'verify');
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(200);
+    expect(verify).not.toHaveBeenCalled();
+    verify.mockRestore();
+  });
+
+  test('over the ancestry budget, still rejects a cancel input that does not verify', async () => {
+    const heavy = LockingScript.fromHex('6ead'.repeat(ANCESTRY_SIG_CHECK_BUDGET) + 'ac');
+    const l = await seedListing({}, '51', [feeInput(heavy, PrivateKey.fromRandom())]); // wrong key
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(await l.reclaimedShares()).toBe(0);
+  });
+
+  test("rejects a cancel tx whose spend doesn't verify", async () => {
+    const l = await seedListing({}, '52'); // pushes 2 against an OP_1 OP_EQUAL lock
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(await l.reclaimedShares()).toBe(0);
+    expect(await l.marketItem()).not.toBeNull();
+  });
+
+  test('cancels an available listing', async () => {
+    const l = await seedListing();
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(200);
+    expect(await l.reclaimedShares()).toBe(1);
+    expect(await l.marketItem()).toBeNull();
+  });
+
+  test('records the reclaimed outpoint from the verified cancel tx', async () => {
+    const l = await seedListing();
+    expect((await cancel({ ...l.cancelBody, returnTxid: `${l.cancelTxid}.0` })).status).toBe(200);
+    expect((await l.reclaimedShare())?.transferTxid).toBe(`${l.cancelTxid}.0`);
+  });
+
+  test('rejects a returnTxid that is not the cancel tx', async () => {
+    const l = await seedListing();
+    const res = await cancel({ ...l.cancelBody, returnTxid: 'ab'.repeat(32) });
+    expect(res.status).toBe(400);
+    expect(await l.reclaimedShares()).toBe(0);
+    expect(await l.marketItem()).not.toBeNull();
+  });
+});
+
+// The seller broadcasts the cancel before POSTing it, so the claim has to be taken BEFORE the
+// broadcast: reserve -> sign + broadcast -> cancel. Otherwise a purchase holding the claim makes
+// the cancel 409 after it is already on chain, and releases the claim onto a spent outpoint.
+describe('cancel reservation', () => {
+  test('a reservation blocks a purchase', async () => {
+    const l = await seedListing();
+    expect((await reserve(l.marketItemId)).status).toBe(200);
+    expect((await purchase(l.marketItemId)).status).toBe(409);
+  });
+
+  test('cannot reserve a listing a purchase holds', async () => {
+    const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: 'other-buyer' });
+    expect((await reserve(l.marketItemId)).status).toBe(409);
+  });
+
+  test('cannot reserve a sold listing', async () => {
+    const l = await seedListing({ sold: true });
+    expect((await reserve(l.marketItemId)).status).toBe(409);
+  });
+
+  test('the seller can cancel while holding the reservation', async () => {
+    const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: cancelReservation(SELLER) });
+    expect((await cancel(l.cancelBody)).status).toBe(200);
+    expect(await l.reclaimedShares()).toBe(1);
+    expect(await l.marketItem()).toBeNull();
+  });
+
+  test('an expired reservation still lets its seller confirm an already-broadcast cancel', async () => {
+    const l = await seedListing({
+      saleClaimedAt: new Date(Date.now() - CLAIM_TTL_MS - 1000), saleClaimedBy: cancelReservation(SELLER),
+    });
+    expect((await cancel(l.cancelBody)).status).toBe(200);
+  });
+});
+
+describe('listing-purchase', () => {
+  test('rejects buying a sold listing', async () => {
+    const l = await seedListing({ sold: true });
+    const res = await purchase(l.marketItemId);
+    expect(res.status).toBe(409);
+  });
+
+  test('rejects buying a listing another buyer has claimed', async () => {
+    const l = await seedListing({ saleClaimedAt: new Date(), saleClaimedBy: 'other-buyer' });
+    const res = await purchase(l.marketItemId);
+    expect(res.status).toBe(409);
+  });
+
+  test('releases its claim when it fails before broadcasting', async () => {
+    const l = await seedListing();
+    const res = await purchase(l.marketItemId);
+    expect(res.status).toBe(500); // property has no txids
+    const item = await l.marketItem();
+    expect(item?.saleClaimedAt).toBeUndefined();
+    expect(item?.sold).toBeUndefined();
+  });
+
+  test('a stale claim from a crashed purchase does not block the listing', async () => {
+    const l = await seedListing({
+      saleClaimedAt: new Date(Date.now() - CLAIM_TTL_MS - 1000), saleClaimedBy: 'crashed-buyer',
+    });
+    const res = await purchase(l.marketItemId);
+    expect(res.status).toBe(500); // got past the claim, failed on the property
+  });
+});
+
+test.each([
+  ['a cancel reservation', (id: ObjectId) => reserveListingForCancel(id, SELLER)],
+  ['a direct cancel', (id: ObjectId) => takeListingForCancel(id, SELLER).then(Boolean)],
+])('concurrent buyers and %s — exactly one wins', async (_name, seller) => {
+  const l = await seedListing();
+  const id = new ObjectId(l.marketItemId);
+  const results = await Promise.all([
+    ...['b1', 'b2', 'b3', 'b4'].map((b) => claimListingForSale(id, b)),
+    seller(id),
+  ]);
+  expect(results.filter(Boolean)).toHaveLength(1);
+});

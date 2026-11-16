@@ -1,4 +1,4 @@
-import type { Collection } from 'mongodb';
+import type { Collection, Document } from 'mongodb';
 
 export interface TokenDerivationRecord {
   keyId: string;
@@ -9,7 +9,7 @@ export interface TokenDerivationRecord {
 
 /** Persist a token's derivation on its DB record. `filter` must match one document. */
 export async function recordTokenDerivation(
-  collection: Collection<any>,
+  collection: Collection<Document>,
   filter: Record<string, unknown>,
   d: TokenDerivationRecord,
 ): Promise<void> {
@@ -20,7 +20,7 @@ export async function recordTokenDerivation(
 
 /** Read a token's derivation by an outpoint field; null when no nonce recorded (legacy → caller uses legacy unlock). */
 export async function getTokenDerivation(
-  collection: Collection<any>,
+  collection: Collection<Document>,
   outpointField: string,
   outpoint: string,
 ): Promise<TokenDerivationRecord | null> {
