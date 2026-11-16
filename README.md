@@ -121,6 +121,7 @@ Two files, copied from their examples. Nothing reads a root `.env`.
 - `MIN_BALANCE` (output count for the `/api/ready` probe)
 - `PORT` (default 3001)
 - `ALLOWED_ORIGINS` (credentialed CORS allowlist, comma-separated; dev: `http://localhost:5173`)
+- `CLIENT_IP_HEADER` (optional; header with the real client IP behind a trusted proxy, e.g. `cf-connecting-ip` behind Cloudflare; must hold a single IP; unset = socket IP)
 
 **`client/.env`** (see `client/.env.example`) — public, inlined into the browser bundle:
 
@@ -194,6 +195,12 @@ Two origins on one registrable domain (required for the `SameSite=Strict` sessio
 - **API** — `npm run server:start` at `api.<domain>`. Env: `MONGODB_URI`,
   `SERVER_PRIVATE_KEY`, `WALLET_STORAGE_URL`, `JWT_SECRET`, `MIN_BALANCE`,
   `PORT`, `ALLOWED_ORIGINS=https://app.<domain>`.
+
+Rate limits are per client per minute, in memory (`server/middleware/rateLimit.ts`): 120 for
+`/api` overall, 10 for login, and 10 shared by the routes called before anything is spent
+(cancel-listing/reserve, share-purchase, test-chain). Routes that record an already-broadcast tx
+only get the general limit. Behind a proxy, set `CLIENT_IP_HEADER` or every client shares the
+proxy's limit; its value must be a single IP, so `x-forwarded-for` doesn't work.
 
 **The API MUST run as exactly ONE instance with autoscale OFF.** This is a
 correctness requirement, not a cost setting: the serialized wallet queue only
