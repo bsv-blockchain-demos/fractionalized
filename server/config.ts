@@ -46,6 +46,11 @@ export function getPort(): number {
   return Number(process.env.PORT) || 3001;
 }
 
+/** Header holding the real client IP behind a trusted proxy (e.g. cf-connecting-ip); unset = socket IP. */
+export function getClientIpHeader(): string | undefined {
+  return process.env.CLIENT_IP_HEADER?.trim() || undefined;
+}
+
 /** Credentialed cross-origin allowlist. Empty = same-origin only. */
 export function getAllowedOrigins(): string[] {
   return (process.env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
