@@ -33,7 +33,7 @@ export function Login() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                toast.error(data?.message || "Login failed", {
+                toast.error(data?.error || data?.message || "Login failed", {
                     duration: 4000,
                     position: "top-center",
                     id: "login-failed",
