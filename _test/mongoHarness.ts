@@ -1,4 +1,4 @@
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryServer } from 'mongodb-memory-server-core';
 import { connectRaw, ensureSchema } from '@server/lib/mongo';
 
 /** Real in-memory Mongo for route tests. Call from beforeAll/afterAll/beforeEach. */
