@@ -5,7 +5,7 @@ COPY package.json package-lock.json tsconfig.json ./
 COPY client/package.json client/
 COPY server/package.json server/
 COPY shared/package.json shared/
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev -w @fraction/server -w @fraction/shared
 COPY shared/ shared/
 COPY server/ server/
 COPY scripts/db-migrate.ts scripts/
