@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import { mountRoutes } from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getAllowedOrigins } from './config';
-import { rateLimiters, VALUE_ROUTES } from './middleware/rateLimit';
+import { rateLimiters, SPEND_ROUTES } from './middleware/rateLimit';
 
 /**
  * Build the Express app: logging, credentialed CORS, JSON + cookies, routes,
@@ -45,7 +45,7 @@ export function buildApp(): Express {
   const limiters = rateLimiters();
   app.use('/api', limiters.api);
   app.use('/api/auth/login', limiters.login);
-  app.use(VALUE_ROUTES, limiters.value);
+  app.use(SPEND_ROUTES, limiters.spend);
 
   // 10mb: create-property carries a base64 PDF + images; the 100kb default would 413.
   app.use(express.json({ limit: '10mb' }));
