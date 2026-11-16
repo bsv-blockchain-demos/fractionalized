@@ -13,6 +13,7 @@ import { logger } from '@shared/logger';
 import { getServerWallet } from '../lib/serverWallet';
 import { requireSession } from '../middleware/requireSession';
 import { requireAuthProof } from '../middleware/requireAuthProof';
+import { cancelInputsProblem, verifyCancelTx } from '../lib/cancelTxCheck';
 import { AUTH_PROOF_PURPOSE } from '@shared/authProofPurposes';
 import { parseCancelListing, parseCancelReserve, parseNewListing } from '../lib/requestBodies';
 import { reserveListingForCancel, takeListingForCancel } from '../lib/listingClaim';
@@ -122,8 +123,13 @@ listingsRouter.post(
                 res.status(400).json({ error: "Invalid cancel beef" });
                 return;
             }
+            const inputsProblem = cancelInputsProblem(cancelTx, listingTxid, listingVout);
+            if (inputsProblem) {
+                res.status(400).json({ error: inputsProblem });
+                return;
+            }
             // The multisig already limits who can spend; this only keeps a junk cancel out of the DB.
-            if (!(await cancelTx.verify('scripts only').catch(() => false))) {
+            if (!(await verifyCancelTx(cancelTx))) {
                 res.status(400).json({ error: "Cancel tx does not verify" });
                 return;
             }
@@ -133,13 +139,6 @@ listingsRouter.post(
                 return;
             }
 
-            const spendsListing = cancelTx.inputs.some(
-                (i) => (i.sourceTXID || i.sourceTransaction?.id('hex')) === listingTxid && i.sourceOutputIndex === listingVout
-            );
-            if (!spendsListing) {
-                res.status(400).json({ error: "Cancel tx does not spend the listing multisig" });
-                return;
-            }
             if (cancelTx.outputs[0]?.satoshis !== 1) {
                 res.status(400).json({ error: "Cancel tx output 0 must be a 1-sat ordinal" });
                 return;

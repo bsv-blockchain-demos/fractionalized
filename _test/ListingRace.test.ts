@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { ObjectId } from 'mongodb';
-import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey, MerklePath } from '@bsv/sdk';
+import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey, MerklePath, P2PKH } from '@bsv/sdk';
+import type { TransactionInput } from '@bsv/sdk';
 import type { Request, Response, NextFunction } from 'express';
 
 // M-2: sale vs cancel on the same listing. Auth and wallet are stubbed; Mongo is real,
@@ -24,6 +25,7 @@ import { buildApp } from '@server/app';
 import { startMongo, stopMongo, clearMongo } from './mongoHarness';
 import { claimListingForSale, takeListingForCancel, reserveListingForCancel, cancelReservation, CLAIM_TTL_MS } from '@server/lib/listingClaim';
 import { encodeBeef } from '@shared/bsv/beefEncoding';
+import { MAX_FEE_INPUTS, ANCESTRY_SIG_CHECK_BUDGET } from '@server/lib/cancelTxCheck';
 
 const SELLER = PrivateKey.fromRandom().toPublicKey().toString();
 const BUYER = PrivateKey.fromRandom().toPublicKey().toString();
@@ -34,9 +36,36 @@ beforeAll(async () => { db = await startMongo(); }, 120000);
 afterAll(stopMongo);
 beforeEach(() => clearMongo(db));
 
+const FEE_KEY = PrivateKey.fromRandom();
+let fundingSeq = 0;
+function minedOutput(lock: LockingScript) {
+  const tx = new Transaction(1, [{
+    sourceTXID: '00'.repeat(32), sourceOutputIndex: ++fundingSeq, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
+  }], [{ satoshis: 1, lockingScript: lock }], 0);
+  tx.merklePath = MerklePath.fromCoinbaseTxidAndHeight(tx.id('hex'), 1);
+  return tx;
+}
+
+// A wallet fee input: spends an unmined P2PKH change output whose parent spends `ancestorLock`
+// (unlocked with OP_1), so the test sets the ancestry's cost.
+function feeInput(ancestorLock = LockingScript.fromHex('5187'), signWith = FEE_KEY): TransactionInput {
+  const change = new Transaction(1, [{
+    sourceTransaction: minedOutput(ancestorLock), sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
+  }], [{ satoshis: 1, lockingScript: new P2PKH().lock(FEE_KEY.toAddress()) }], 0);
+  return { sourceTransaction: change, sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScriptTemplate: new P2PKH().unlock(signWith) };
+}
+
+// An input spending a non-P2PKH output, which the wallet never adds.
+function otherInput(): TransactionInput {
+  return {
+    sourceTransaction: minedOutput(LockingScript.fromHex('5187')), sourceOutputIndex: 0, sequence: 0xffffffff,
+    unlockingScript: UnlockingScript.fromHex('51'),
+  };
+}
+
 // Seeds a listing whose output is spent by a well-formed cancel tx. The property has no
 // txids, so a purchase that gets past the claim fails before any wallet/chain work.
-async function seedListing(state: Record<string, unknown> = {}, cancelUnlockHex = '51') {
+async function seedListing(state: Record<string, unknown> = {}, cancelUnlockHex = '51', extraInputs: TransactionInput[] = []) {
   // Mined listing tx, carried in the cancel BEEF the way the wallet's signAction returns it.
   const listingTx = new Transaction(1, [{
     sourceTXID: '00'.repeat(32), sourceOutputIndex: 0, sequence: 0xffffffff, unlockingScript: UnlockingScript.fromHex('51'),
@@ -46,7 +75,8 @@ async function seedListing(state: Record<string, unknown> = {}, cancelUnlockHex 
   const cancelTx = new Transaction(1, [{
     sourceTransaction: listingTx, sourceOutputIndex: 0, sequence: 0xffffffff,
     unlockingScript: UnlockingScript.fromHex(cancelUnlockHex),
-  }], [{ satoshis: 1, lockingScript: OP_TRUE() }], 0);
+  }, ...extraInputs], [{ satoshis: 1, lockingScript: OP_TRUE() }], 0);
+  await cancelTx.sign();
   const beef = Beef.fromBinary(cancelTx.toBEEF());
 
   const propertyId = new ObjectId();
@@ -100,6 +130,55 @@ describe('M-2: cancel-listing', () => {
     expect(res.status).toBe(409);
     expect(await l.reclaimedShares()).toBe(0);
     expect(await l.marketItem()).not.toBeNull();
+  });
+
+  test('accepts wallet P2PKH fee inputs and verifies the ancestry', async () => {
+    const l = await seedListing({}, '51', [feeInput(), feeInput()]);
+    const verify = jest.spyOn(Transaction.prototype, 'verify');
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(200);
+    expect(verify).toHaveBeenCalled();
+    verify.mockRestore();
+  });
+
+  test('rejects an input that is neither the listing nor a P2PKH', async () => {
+    const l = await seedListing({}, '51', [feeInput(), otherInput()]);
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/input/i);
+    expect(await l.reclaimedShares()).toBe(0);
+  });
+
+  test('rejects more fee inputs than the wallet would add', async () => {
+    const l = await seedListing({}, '51', Array.from({ length: MAX_FEE_INPUTS + 1 }, () => feeInput()));
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/input/i);
+  });
+
+  test('rejects an unlocking script that is not a short push-only script', async () => {
+    const notPushOnly = await seedListing({}, '5175'); // OP_1 OP_DROP
+    expect((await cancel(notPushOnly.cancelBody)).body.error).toMatch(/unlocking/i);
+    const long = await seedListing({}, '4cff' + '00'.repeat(255) + '51'); // 255-byte push, then OP_1
+    expect((await cancel(long.cancelBody)).body.error).toMatch(/unlocking/i);
+  });
+
+  test('over the ancestry budget, verifies only the cancel inputs instead of walking the ancestry', async () => {
+    const heavy = LockingScript.fromHex('6ead'.repeat(ANCESTRY_SIG_CHECK_BUDGET) + 'ac'); // OP_1 never satisfies it
+    const l = await seedListing({}, '51', [feeInput(heavy)]);
+    const verify = jest.spyOn(Transaction.prototype, 'verify');
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(200);
+    expect(verify).not.toHaveBeenCalled();
+    verify.mockRestore();
+  });
+
+  test('over the ancestry budget, still rejects a cancel input that does not verify', async () => {
+    const heavy = LockingScript.fromHex('6ead'.repeat(ANCESTRY_SIG_CHECK_BUDGET) + 'ac');
+    const l = await seedListing({}, '51', [feeInput(heavy, PrivateKey.fromRandom())]); // wrong key
+    const res = await cancel(l.cancelBody);
+    expect(res.status).toBe(400);
+    expect(await l.reclaimedShares()).toBe(0);
   });
 
   test("rejects a cancel tx whose spend doesn't verify", async () => {
