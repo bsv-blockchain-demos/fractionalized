@@ -248,7 +248,7 @@ export function Marketplace() {
             const reference = actionRes.signableTransaction.reference;
             const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
-            // Add unlocking script template to input (reuse frame from preimage)
+            // Unlock frame signs the final tx (SIGHASH_ALL)
             txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockFrame;
             txToSign.inputs[0].sourceTransaction = fullTx;
 

@@ -38,9 +38,8 @@ export const sharePurchaseRouter = Router();
  * and must NOT hold the wallet lock, or every purchase would serialize
  * behind an overlay round-trip. Never call enqueue() (or getWalletQueue())
  * from inside the callback — that deadlocks the queue permanently; the
- * wallet arrives as the callback parameter. Key-derivation and preimage
- * signing (generateNonce/deriveMultisigPair/deriveRecipientKey/getIdentityKey
- * and the unlock-frame .sign() calls used to build the preimage) don't touch
+ * wallet arrives as the callback parameter. Key derivation
+ * (generateNonce/deriveMultisigPair/deriveRecipientKey/getIdentityKey) doesn't touch
  * the wallet's UTXO set, so they run outside the enqueue via the shared
  * getServerWallet() wallet — the same underlying wallet instance the queue
  * wraps.
@@ -129,8 +128,6 @@ sharePurchaseRouter.post(
 
             // Get property token txid to put in the inscribed token (for indentification)
             const propertyTokenTxid = property.txids.tokenTxid;
-
-            // Payment unlocking will be signed against the preimage (frame-based)
 
             // Server's root identity key (counterparty value recipients/parties derive against)
             const serverIdentityKey = await getIdentityKey(wallet);
@@ -231,7 +228,7 @@ sharePurchaseRouter.post(
 
             const paymentSourceTX = Transaction.fromBEEF(paymentTx.outputs[0].beef as number[]);
 
-            // Build a preimage transaction mirroring the final spend for correct signatures
+            // Preimage mirroring the final spend, used only for fee and change sizing
             const preimageTx = new Transaction();
             preimageTx.addInput({
                 sourceTransaction: fullParentTx,
@@ -343,7 +340,7 @@ sharePurchaseRouter.post(
                 const reference = actionRes.signableTransaction.reference;
                 const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
-                // Add unlocking script templates to inputs (reuse frames from preimage)
+                // Unlock frames sign the final tx (SIGHASH_ALL)
                 txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockingFrame;
                 txToSign.inputs[0].sourceTransaction = fullParentTx;
                 txToSign.inputs[1].unlockingScriptTemplate = paymentUnlockFrame;

@@ -53,6 +53,11 @@ beforeEach(async () => {
   fakeAction.signAction.mockReset();
 });
 
+/** Sighash byte of each DER signature pushed by an unlocking script. */
+const sighashTypes = (script: UnlockingScript) =>
+  script.chunks.filter((c) => c.data && c.data[0] === 0x30 && c.data.length >= 9 && c.data.length <= 73)
+    .map((c) => c.data![c.data!.length - 1]);
+
 /** A mined (merkle-pathed) tx with one output, so BEEF/verify can resolve it. */
 function minedTx(lockingScript: LockingScript, satoshis: number): Transaction {
   const tx = new Transaction();
@@ -62,14 +67,30 @@ function minedTx(lockingScript: LockingScript, satoshis: number): Transaction {
   return tx;
 }
 
-async function seed() {
-  // Legacy listing lock: [server(keyID "0", self), seller] — the route's no-keyId branch.
+const LISTING_NONCE = 'listing-nonce';
+
+// Listing lock pubkeys and the market-item fields that tell the route how to unlock it.
+async function listingKeys(kind: 'derived' | 'legacy') {
+  if (kind === 'derived') {
+    // As new-listing stores it: [sellerChild, serverChild] at the listing nonce, server self-second.
+    const { selfKey: serverChild, counterpartyKey: sellerChild } = await deriveMultisigPair(serverWallet as never, SELLER, LISTING_NONCE);
+    return {
+      pubkeys: [sellerChild, serverChild],
+      fields: { keyId: LISTING_NONCE, counterparty: SELLER, counterpartyDerivedKey: sellerChild, order: 'self-second' as const },
+    };
+  }
+  // Legacy: [server(keyID "0", self), seller], no keyId on the market item.
   const { publicKey: serverLegacy } = await serverWallet.getPublicKey({
     protocolID: [0, 'fractionalized'], keyID: '0', counterparty: 'self', forSelf: true,
   });
+  return { pubkeys: [serverLegacy, SELLER], fields: {} };
+}
+
+async function seed(kind: 'derived' | 'legacy' = 'derived') {
+  const { pubkeys, fields } = await listingKeys(kind);
   const tokenTxid = `${'cd'.repeat(32)}.0`;
   ordinalSource = minedTx(
-    new OrdinalsP2MS().lock(hashFromPubkeys([PublicKey.fromString(serverLegacy), PublicKey.fromString(SELLER)]),
+    new OrdinalsP2MS().lock(hashFromPubkeys(pubkeys.map((k) => PublicKey.fromString(k))),
       tokenTxid.replace('.', '_'), tokenTxid, 10, 'transfer'),
     1,
   );
@@ -93,7 +114,7 @@ async function seed() {
   });
   const marketItemId = new ObjectId();
   await db.marketItemsCollection.insertOne({
-    _id: marketItemId, propertyId, sellerId: SELLER, shareId, sellAmount: 10, pricePerShare: 1, createdAt: new Date(),
+    _id: marketItemId, propertyId, sellerId: SELLER, shareId, sellAmount: 10, pricePerShare: 1, createdAt: new Date(), ...fields,
   });
 
   // The client sends its createAction result: { txid, tx: AtomicBEEF bytes }.
@@ -101,8 +122,8 @@ async function seed() {
   return { marketItemId, paymentTx, paymentTX };
 }
 
-test('listing-purchase signs both inputs with valid unlocking scripts and records the sale', async () => {
-  const { marketItemId, paymentTx, paymentTX } = await seed();
+test.each(['derived', 'legacy'] as const)('listing-purchase (%s listing) signs both inputs with valid unlocking scripts and records the sale', async (kind) => {
+  const { marketItemId, paymentTx, paymentTX } = await seed(kind);
 
   let signable: Transaction | undefined;
   fakeAction.createAction.mockImplementation(async (args: { inputs: { outpoint: string }[]; outputs: { lockingScript: string; satoshis: number }[] }) => {
@@ -135,6 +156,8 @@ test('listing-purchase signs both inputs with valid unlocking scripts and record
   final.inputs[1].sourceTransaction = paymentTx;
   final.inputs[1].unlockingScript = UnlockingScript.fromHex(spends['1'].unlockingScript);
   expect(await final.verify('scripts only')).toBe(true);
+  // M-3: every signature commits to all inputs and outputs (SIGHASH_ALL | FORKID).
+  expect([0, 1].map((i) => sighashTypes(final.inputs[i].unlockingScript!))).toEqual([[0x41], [0x41]]);
 
   expect((await db.marketItemsCollection.findOne({ _id: marketItemId }))?.sold).toBe(true);
   expect(await db.sharesCollection.countDocuments({ investorId: BUYER })).toBe(1);

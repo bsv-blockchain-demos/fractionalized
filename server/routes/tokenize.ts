@@ -61,7 +61,7 @@ tokenizeRouter.post(
         const MAX_LOCATION = 80;
         const MAX_PROOF_OF_OWNERSHIP = 10485760; // 10MB base64 limit
         try {
-            const { description, whyInvest, title, location, proofOfOwnership } = data || {};
+            const { description, whyInvest, title, location, proofOfOwnership } = data;
             const errors: string[] = [];
             // Title & Location
             const t = String(title ?? "").trim();
@@ -104,18 +104,18 @@ tokenizeRouter.post(
             const isValidInteger = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
 
             const currencyChecks: Array<[string, unknown]> = [
-                ["priceUSD", data?.priceUSD],
-                ["currentValuationUSD", data?.currentValuationUSD],
-                ["investmentBreakdown.purchaseCost", data?.investmentBreakdown?.purchaseCost],
-                ["investmentBreakdown.transactionCost", data?.investmentBreakdown?.transactionCost],
-                ["investmentBreakdown.runningCost", data?.investmentBreakdown?.runningCost],
+                ["priceUSD", data.priceUSD],
+                ["currentValuationUSD", data.currentValuationUSD],
+                ["investmentBreakdown.purchaseCost", data.investmentBreakdown.purchaseCost],
+                ["investmentBreakdown.transactionCost", data.investmentBreakdown.transactionCost],
+                ["investmentBreakdown.runningCost", data.investmentBreakdown.runningCost],
             ];
             currencyChecks.forEach(([name, value]) => {
                 if (value != null && !isValidCurrency(value)) {
                     errors.push(`${name} must be a finite, non-negative number <= ${MAX_CURRENCY}`);
                 }
             });
-            if (data?.investors != null) {
+            if (data.investors != null) {
                 if (!isValidInteger(data.investors) || data.investors > MAX_INVESTORS) {
                     errors.push(`investors must be a non-negative integer <= ${MAX_INVESTORS}`);
                 }
@@ -125,15 +125,6 @@ tokenizeRouter.post(
                 return;
             }
         } catch { }
-
-        const nullFields = Object.entries(data)
-            .filter(([_, value]) => value === null)
-            .map(([key]) => key);
-
-        if (nullFields.length > 0) {
-            res.status(400).json({ error: `Missing required fields: ${nullFields.join(', ')}` });
-            return;
-        }
 
         // Post-enqueue result, hoisted above the try so the catch block can tell
         // whether the mint already landed on-chain before a later step threw.
@@ -216,7 +207,7 @@ tokenizeRouter.post(
                 const propertyTokenTxid = toOutpoint(response.txid, 0);
 
                 // Mint shares for property token using server wallet
-                const tokensToMint = Number(data?.sell?.percentToSell || 0);
+                const tokensToMint = Number(data.sell?.percentToSell || 0);
                 if (tokensToMint <= 0) {
                     throw new Error("Invalid percentToSell");
                 } else if (tokensToMint > 100) {

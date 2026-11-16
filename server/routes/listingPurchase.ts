@@ -150,8 +150,6 @@ listingPurchaseRouter.post(
                 /* type */ "transfer"
             );
 
-            // Payment unlocking will be signed against a preimage (frame-based)
-
             // Server spends the listing multisig by deriving against the seller; legacy listings use the self/0 form.
             const ordinalUnlockingFrame = marketItem.keyId
                 ? new OrdinalsP2MS().unlock(
@@ -244,7 +242,7 @@ listingPurchaseRouter.post(
                 const reference = actionRes.signableTransaction.reference;
                 const txToSign = Transaction.fromBEEF(actionRes.signableTransaction.tx);
 
-                // Add unlocking script templates to inputs (reuse frames from preimage)
+                // Unlock frames sign the final tx (SIGHASH_ALL)
                 txToSign.inputs[0].unlockingScriptTemplate = ordinalUnlockingFrame;
                 txToSign.inputs[0].sourceTransaction = fullOrdinalTx;
                 txToSign.inputs[1].unlockingScriptTemplate = paymentUnlockFrame;
