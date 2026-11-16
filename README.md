@@ -195,6 +195,18 @@ Two origins on one registrable domain (required for the `SameSite=Strict` sessio
   `SERVER_PRIVATE_KEY`, `WALLET_STORAGE_URL`, `JWT_SECRET`, `MIN_BALANCE`,
   `PORT`, `ALLOWED_ORIGINS=https://app.<domain>`.
 
+**Container images.** Pushing a version tag (`git tag v1.2.3 && git push origin v1.2.3`) runs
+`.github/workflows/build.yml`, which builds and pushes (linux/amd64 + arm64):
+
+- `ghcr.io/bsv-blockchain-demos/fractionalized-frontend:<tag>`: `client/Dockerfile`, the SPA served
+  by `serve -s` on port 3000. Build args come from the repo secrets `VITE_SERVER_IDENTITY_KEY` and
+  `VITE_API_BASE`. Leave `VITE_API_BASE` empty to serve the API on the same origin, with the ingress
+  routing `/api` to the backend.
+- `ghcr.io/bsv-blockchain-demos/fractionalized-backend:<tag>`: `server/Dockerfile`, on port 3001. It
+  runs `db:migrate` (idempotent) and then starts the API. Server env as listed above.
+
+Both build from the repo root. PRs and branch pushes don't build images.
+
 **The API MUST run as exactly ONE instance with autoscale OFF.** This is a
 correctness requirement, not a cost setting: the serialized wallet queue only
 prevents UTXO double-spends within a single process. A second instance

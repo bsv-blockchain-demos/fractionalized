@@ -1,0 +1,67 @@
+name: Build and Push to GHCR
+
+# Deliberate releases only: runs on a pushed version tag (v1.2.3), never on PRs or branch pushes.
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./client/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/bsv-blockchain-demos/fractionalized-frontend:${{ github.sha }}
+            ghcr.io/bsv-blockchain-demos/fractionalized-frontend:${{ github.ref_name }}
+          build-args: |
+            VITE_API_BASE=${{ secrets.VITE_API_BASE }}
+            VITE_SERVER_IDENTITY_KEY=${{ secrets.VITE_SERVER_IDENTITY_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/bsv-blockchain-demos/fractionalized-backend:${{ github.sha }}
+            ghcr.io/bsv-blockchain-demos/fractionalized-backend:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "**Frontend:** \`ghcr.io/bsv-blockchain-demos/fractionalized-frontend:${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Backend:** \`ghcr.io/bsv-blockchain-demos/fractionalized-backend:${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
