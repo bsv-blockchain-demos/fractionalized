@@ -3,7 +3,7 @@ import { marketItemsCollection } from './mongo';
 import type { MarketItem } from './mongo';
 
 // Whoever spends a listing claims it BEFORE broadcasting, so a concurrent cancel or second buyer
-// is refused by Mongo instead of racing on-chain (M-2). The server-built purchase claims inside
+// is refused by Mongo instead of racing on-chain. The server-built purchase claims inside
 // its route; the seller broadcasts the cancel client-side, so it reserves first via
 // /cancel-listing/reserve. Claims expire so a crashed spender can't freeze a listing.
 export const CLAIM_TTL_MS = 10 * 60 * 1000;

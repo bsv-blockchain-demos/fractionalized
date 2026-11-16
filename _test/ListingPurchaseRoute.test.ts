@@ -156,7 +156,7 @@ test.each(['derived', 'legacy'] as const)('listing-purchase (%s listing) signs b
   final.inputs[1].sourceTransaction = paymentTx;
   final.inputs[1].unlockingScript = UnlockingScript.fromHex(spends['1'].unlockingScript);
   expect(await final.verify('scripts only')).toBe(true);
-  // M-3: every signature commits to all inputs and outputs (SIGHASH_ALL | FORKID).
+  // Every signature commits to all inputs and outputs (SIGHASH_ALL | FORKID).
   expect([0, 1].map((i) => sighashTypes(final.inputs[i].unlockingScript!))).toEqual([[0x41], [0x41]]);
 
   expect((await db.marketItemsCollection.findOne({ _id: marketItemId }))?.sold).toBe(true);

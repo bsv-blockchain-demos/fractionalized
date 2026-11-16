@@ -67,7 +67,7 @@ describe('apiFetch', () => {
 
 describe('apiFetchStepUp', () => {
   // The paired direction of the apiFetch 401 test above: a step-up caller may already
-  // have broadcast an output whose nonce lives only in this page (finding C-5), so it
+  // have broadcast an output whose nonce lives only in this page, so it
   // must get the 401 back instead of being teleported to /login.
   test('does NOT redirect on 401 and hands the response to the caller', async () => {
     stubFetch(401);

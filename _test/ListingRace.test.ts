@@ -4,7 +4,7 @@ import { Transaction, LockingScript, UnlockingScript, Beef, PrivateKey, MerklePa
 import type { TransactionInput } from '@bsv/sdk';
 import type { Request, Response, NextFunction } from 'express';
 
-// M-2: sale vs cancel on the same listing. Auth and wallet are stubbed; Mongo is real,
+// Sale vs cancel on the same listing. Auth and wallet are stubbed; Mongo is real,
 // because the fix rests on Mongo's single-document atomicity.
 const asUser = (req: Request, _res: Response, next: NextFunction) => {
   req.userId = req.header('x-test-user') as string;
@@ -115,7 +115,7 @@ const purchase = (marketItemId: string, buyer = BUYER) =>
   request(buildApp()).post('/api/listing-purchase').set('x-test-user', buyer)
     .send({ marketItemId, buyerId: buyer, paymentNonce: 'n', paymentTX: { txid: 'ab'.repeat(32), tx: [1] } });
 
-describe('M-2: cancel-listing', () => {
+describe('cancel-listing', () => {
   test('rejects cancelling a sold listing and records no reclaimed share', async () => {
     const l = await seedListing({ sold: true });
     const res = await cancel(l.cancelBody);
@@ -215,7 +215,7 @@ describe('M-2: cancel-listing', () => {
 // The seller broadcasts the cancel before POSTing it, so the claim has to be taken BEFORE the
 // broadcast: reserve -> sign + broadcast -> cancel. Otherwise a purchase holding the claim makes
 // the cancel 409 after it is already on chain, and releases the claim onto a spent outpoint.
-describe('M-2: cancel reservation', () => {
+describe('cancel reservation', () => {
   test('a reservation blocks a purchase', async () => {
     const l = await seedListing();
     expect((await reserve(l.marketItemId)).status).toBe(200);
@@ -247,7 +247,7 @@ describe('M-2: cancel reservation', () => {
   });
 });
 
-describe('M-2: listing-purchase', () => {
+describe('listing-purchase', () => {
   test('rejects buying a sold listing', async () => {
     const l = await seedListing({ sold: true });
     const res = await purchase(l.marketItemId);
@@ -281,7 +281,7 @@ describe('M-2: listing-purchase', () => {
 test.each([
   ['a cancel reservation', (id: ObjectId) => reserveListingForCancel(id, SELLER)],
   ['a direct cancel', (id: ObjectId) => takeListingForCancel(id, SELLER).then(Boolean)],
-])('M-2: concurrent buyers and %s — exactly one wins', async (_name, seller) => {
+])('concurrent buyers and %s — exactly one wins', async (_name, seller) => {
   const l = await seedListing();
   const id = new ObjectId(l.marketItemId);
   const results = await Promise.all([

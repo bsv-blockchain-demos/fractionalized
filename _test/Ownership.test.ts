@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { Beef, PrivateKey, ProtoWallet, PublicKey, Transaction, UnlockingScript } from '@bsv/sdk';
 import type { Request, Response, NextFunction } from 'express';
 
-// M-10: ownership enforcement on the value-moving routes. The session user comes from a
+// Ownership enforcement on the value-moving routes. The session user comes from a
 // test header; Mongo is real. Each test asserts the refusal AND that nothing was written.
 const asUser = (req: Request, _res: Response, next: NextFunction) => {
   req.userId = req.header('x-test-user') as string;
@@ -44,7 +44,7 @@ async function seedProperty() {
   return _id;
 }
 
-describe('new-listing: the seller must own an unspent share with enough balance (H-3)', () => {
+describe('new-listing: the seller must own an unspent share with enough balance', () => {
   // A listing tx that passes the on-chain shape checks, so the request reaches the DB gate.
   async function setup(share: { investorId: string; amount: number }, listAmount: number) {
     const propertyId = await seedProperty();

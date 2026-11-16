@@ -22,7 +22,7 @@ export const listingsRouter = Router();
 
 /**
  * POST /api/cancel-listing/reserve — the seller claims their listing BEFORE signing and
- * broadcasting a cancel (M-2). The cancel is broadcast client-side, so claiming at
+ * broadcasting a cancel. The cancel is broadcast client-side, so claiming at
  * /cancel-listing would be too late: a purchase holding the claim would 409 a cancel that is
  * already on chain. 409 here means a purchase or sale got there first; nothing was broadcast.
  */
@@ -180,7 +180,7 @@ listingsRouter.post(
                 keyId: cancelNonce,
                 counterparty: serverIdentityKey,
             };
-            // Take the listing atomically first, so a concurrent purchase can't also claim it (M-2).
+            // Take the listing atomically first, so a concurrent purchase can't also claim it.
             const taken = await takeListingForCancel(marketItem._id, userIdFromToken);
             if (!taken) {
                 res.status(409).json({ error: "Listing is sold or being purchased" });
@@ -300,7 +300,7 @@ listingsRouter.post(
                 return;
             }
 
-            // DB-integrity gate (H-3): the seller must actually own the share being listed.
+            // DB-integrity gate: the seller must actually own the share being listed.
             const parentShare = await sharesCollection.findOne({ propertyId: propertyObjectId, transferTxid: parentTxid });
             if (!parentShare) {
                 res.status(400).json({ error: "Parent share not found" });

@@ -5,7 +5,7 @@ import { PaymentUtxo } from '@shared/bsv/paymentUtxo';
 import { hashFromPubkeys } from '@shared/bsv/hashFromPubkeys';
 
 /**
- * M-3: our templates sign after createAction returns the complete tx, so they must use
+ * Our templates sign after createAction returns the complete tx, so they must use
  * SIGHASH_ALL. SINGLE|ANYONECANPAY dates from when scripts were pre-signed before the wallet
  * added inputs/outputs (replaced by createAction -> signAction in 29e1c63); left in place it
  * leaves outputs no signature commits to whenever the wallet adds no funding input.
@@ -37,7 +37,7 @@ async function signAndTamper(signOutputs: 'all' | 'single', anyoneCanPay: boolea
   return tx.verify('scripts only').catch(() => false);
 }
 
-describe('M-3: signature scope', () => {
+describe('signature scope', () => {
   test('SINGLE|ANYONECANPAY leaves a later output uncommitted', async () => {
     expect(await signAndTamper('single', true)).toBe(true);
   });
@@ -62,7 +62,7 @@ function walk(dir: string): string[] {
 const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
 
-test('M-3: no unlock call site signs with SIGHASH_SINGLE', () => {
+test('no unlock call site signs with SIGHASH_SINGLE', () => {
   const files = SCAN.flatMap(walk);
   expect(files.length).toBeGreaterThan(40); // guards against a vacuous scan
 

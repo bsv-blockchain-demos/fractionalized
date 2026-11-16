@@ -62,7 +62,7 @@ export function useCancelListing() {
       if (!(await ensureSessionAlive())) return false;
 
       // Claim the listing before broadcasting: a 409 here means a purchase got there first and
-      // nothing has been spent yet (M-2).
+      // nothing has been spent yet.
       const reserve = await apiFetchStepUp(
         "/api/cancel-listing/reserve",
         userWallet!,

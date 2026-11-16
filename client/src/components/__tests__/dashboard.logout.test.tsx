@@ -1,5 +1,5 @@
 /**
- * M-11 regression: logging out must not fire authenticated requests.
+ * Regression: logging out must not fire authenticated requests.
  *
  * The dashboard's three effects key on [userWallet, userPubKey, ensureWallet], and none of
  * them guards on userPubKey — each awaits ensureWallet(), which still resolves after logout
@@ -69,7 +69,7 @@ beforeEach(() => {
   apiFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
 });
 
-describe('logout does not fire authenticated requests (M-11)', () => {
+describe('logout does not fire authenticated requests', () => {
   it('makes no further step-up calls once status flips to idle', async () => {
     useAuthContext.mockReturnValue(ctx('authenticated', '02deadbeef'));
     const { rerender } = renderDashboard();

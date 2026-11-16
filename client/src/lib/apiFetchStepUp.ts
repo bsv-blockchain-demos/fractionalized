@@ -8,7 +8,7 @@ import { apiFetchNoRedirect } from "./apiFetch";
  *
  * Deliberately uses apiFetchNoRedirect: these are the value-moving calls, so the caller
  * may already have broadcast an output whose nonce lives only in this page. A 401
- * hard-navigate would take the recovery data with it (finding C-5) — return the response
+ * hard-navigate would take the recovery data with it — return the response
  * and let the caller surface it.
  */
 export async function apiFetchStepUp(

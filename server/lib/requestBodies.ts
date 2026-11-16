@@ -5,7 +5,7 @@ import { PROPERTY_STATUSES } from './propertiesPipeline';
 import type { Properties } from './mongo';
 
 // Per-route request-body parsers. Each throws ValidationError (-> 400 via errorHandler)
-// so handlers only ever see typed, shape-checked input (M-9).
+// so handlers only ever see typed, shape-checked input.
 
 const PUBKEY = /^0[23][0-9a-fA-F]{64}$/;
 const TXID = /^[0-9a-fA-F]{64}$/;
